@@ -53,6 +53,11 @@ class BrowserSourceConfig:
         return f"http://{self.host}:{self.port}"
 
     def describe(self) -> dict:
+        diagnostics = []
+        for note in self.diagnostics:
+            if self.user_data_dir:
+                note = note.replace(self.user_data_dir, "<dedicated-profile>")
+            diagnostics.append(note)
         return {
             "source": self.name,
             "enabled": self.enabled,
@@ -64,7 +69,7 @@ class BrowserSourceConfig:
             "real_contract_verified": False,
             "real_pii_storage_ready": False,
             "channel": self.channel,
-            "diagnostics": list(self.diagnostics),
+            "diagnostics": diagnostics,
         }
 
 

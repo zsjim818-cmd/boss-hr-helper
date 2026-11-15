@@ -17,9 +17,9 @@
 | T10 | 批次途中发布新 Policy | PASS | `test_batch_policy_binding`（v1 批次 → v2 新批次、旧结果复用隔离）；UI 显示 `batch.policy_version` |
 | T11 | 重扫幂等 / 新详情补全 | PARTIAL | 重扫幂等 PASS；新 sealed 输入版本受不可变触发器限制，显式 `INPUT_VERSIONING_REQUIRES_012`（BLOCKED） |
 | T12 | 同 actor/batch 并发扫描 | PASS | `test_capture_workflow::test_concurrent_scans_are_rejected_not_overwritten`：409 `SCAN_ALREADY_RUNNING` |
-| T13 | 计数/时限/无新增/取消/异常 | PASS（取消/上限） | max_details 停止原因、取消接口 → `CANCELLED`、EMPTY_UNVERIFIED；暂停/恢复 BLOCKED |
+| T13 | 计数/时限/无新增/取消/异常 | PASS（取消/上限） | max_details、max_duration 停止原因、取消接口 → `CANCELLED`、EMPTY_UNVERIFIED；暂停/恢复 BLOCKED |
 | T14 | 审核/联系状态 | PASS | `test_contact_summary` + UI 徽章；联系不自动发送；NEEDS_RELOCATE 提醒已加入 |
-| T15 | PII/期限/日志 | PARTIAL / BLOCKED | `security_id` 解析与入库剥离；真实 PII 加密/到期需 012，真实采集关闭 |
+| T15 | PII/期限/日志 | PARTIAL / BLOCKED | `security_id` 解析与入库剥离；runtime-mode 诊断中的本地 Profile 路径已脱敏；真实 PII 加密/到期需 012，真实采集关闭 |
 | T16 | 无账号本地全链路 | PASS（本地） | 后端 700/700、UI E2E 31/31、采集/预筛/评分测试；真实账号 BLOCKED |
 | T17 | 真实 BOSS 兼容性 | BLOCKED | 无授权 HR 账号、无真机 DOM/API 证据；代码硬门禁 |
 

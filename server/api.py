@@ -323,7 +323,7 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
     if body and body.batch_id and body.batch_id != batch["batch_id"]:
         raise HTTPException(status_code=400,
                             detail="body batch_id conflicts with the request path")
-    if body is not None and not body.filters_confirmed:
+    if body is None or not body.filters_confirmed:
         raise HTTPException(
             status_code=409,
             detail="FILTERS_UNCONFIRMED: confirm the recommended-page job/filters "
@@ -332,6 +332,8 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
     account = None
     if registry is not None and request.app.state.browser_source.name != "boss_readonly":
         account = registry.binding_for(ctx).browser_account_id
+    cancel_key = (ctx.org_id, job_id, batch["batch_id"], ctx.user_id)
+    request.app.state.browser_scan_cancel.discard(cancel_key)
     run = repo.start_browser_scan(
         ctx, job_id, batch["batch_id"],
         source=request.app.state.browser_source.name, browser_account_id=account)
@@ -344,14 +346,14 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
         preview_requirements = policy_preview_requirements(
             json.loads(policy_row["policy_json"]))
         preview = (lambda card: decide_preview(card, **preview_requirements))
-        cancel_key = (ctx.org_id, job_id, batch["batch_id"], ctx.user_id)
         report = CandidateListCollector(repo, adapter).collect(
             ctx, job_id, batch["batch_id"], pages=(body.pages if body else 3),
             page_size=(body.page_size if body else 20),
             expected_platform_job_id=(body.platform_job_id if body else None),
             preview=preview,
             max_details=(body.max_details if body else 50),
-            cancel_check=(lambda: cancel_key in request.app.state.browser_scan_cancel))
+            cancel_check=(lambda: cancel_key in request.app.state.browser_scan_cancel),
+            max_duration_seconds=(body.max_duration_seconds if body else 300))
     except BrowserError as exc:
         repo.finish_browser_scan(
             ctx, job_id, batch["batch_id"], status="FAILED", collected=0,
@@ -403,12 +405,20 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
             "EMPTY_UNVERIFIED",
             "no candidates were read; empty result is not verified",
             recoverable=True)
+    final_status = "COMPLETED" if not report.issues else "COMPLETED_WITH_ERRORS"
+    final_code = None
+    final_message = None
+    if report.stop_reason == "MAX_DURATION":
+        final_status = "COMPLETED_WITH_ERRORS"
+        final_code = "MAX_DURATION"
+        final_message = "scan stopped at the configured duration limit"
     repo.finish_browser_scan(
         ctx, job_id, batch["batch_id"],
-        status="COMPLETED" if not report.issues else "COMPLETED_WITH_ERRORS",
+        status=final_status,
         collected=report.collected, imported=report.imported,
         reused=report.reused, failed=report.failed,
         issues=[issue.model_dump(mode="json") for issue in report.issues],
+        error_code=final_code, error_message=final_message,
         browser_account_id=payload["browser_account_id"])
     return payload
 

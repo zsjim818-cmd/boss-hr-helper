@@ -85,6 +85,25 @@ class RuntimeModePrivacyTests(PipelineCase):
         self.assertNotIn(self.owner_binding.browser_account_id, hr2.text)
         self.assertNotIn(self.directory.name, hr2.text)
 
+    def test_diagnostics_do_not_expose_local_profile_path(self):
+        from fastapi.testclient import TestClient
+        directory = tempfile.TemporaryDirectory(prefix="privacy_path_")
+        self.addCleanup(directory.cleanup)
+        profile = str(Path(directory.name) / "profile")
+        source = BrowserSourceConfig(
+            name="cdp_mock", enabled=True, port=9339, user_data_dir=profile,
+            diagnostics=(f"CDP endpoint 127.0.0.1:9339; profile {profile}",))
+        app = create_app(self.repo, browser_source=source)
+        try:
+            with TestClient(app) as client:
+                response = client.get("/api/runtime-mode")
+                self.assertEqual(response.status_code, 200)
+                self.assertNotIn(directory.name, response.text)
+                self.assertNotIn(profile, response.text)
+                self.assertIn("<dedicated-profile>", response.text)
+        finally:
+            app.state.executor.shutdown(wait=True)
+
     def test_unknown_identity_gets_no_session_details(self):
         response = self.client.get("/api/runtime-mode",
                                    headers={"X-Org-Id": "org", "X-User-Id": "ghost"})

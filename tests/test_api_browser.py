@@ -20,7 +20,8 @@ class ApiBrowserCase(ApiCase):
     def scan(self, batch_id, *, job_id="job", pages=2, page_size=5):
         return self.client.post(
             f"/api/jobs/{job_id}/batches/{batch_id}/browser/scan", headers=self.headers,
-            json={"pages": pages, "page_size": page_size})
+            json={"pages": pages, "page_size": page_size,
+                  "filters_confirmed": True})
 
     def scan_status(self, batch_id, *, job_id="job", headers=None):
         return self.client.get(
@@ -104,7 +105,7 @@ class ApiBrowserScanTests(ApiBrowserCase):
         hr_headers = {"X-Org-Id": "org", "X-User-Id": "hr2"}
         hr_scan = self.client.post(
             f"/api/jobs/job/batches/{batch_id}/browser/scan", headers=hr_headers,
-            json={"pages": 1, "page_size": 5})
+            json={"pages": 1, "page_size": 5, "filters_confirmed": True})
         self.assertEqual(hr_scan.status_code, 200, hr_scan.text)
         self.assertEqual(hr_scan.json()["collected"], 3)
 
@@ -348,7 +349,8 @@ class ApiGreetingDryRunTests(ApiBrowserCase):
             batch = client.post("/api/jobs/job/batches", headers=self.headers).json()
             response = client.post(
                 f"/api/jobs/job/batches/{batch['batch_id']}/browser/scan",
-                headers=self.headers, json={"pages": 1})
+                headers=self.headers,
+                json={"pages": 1, "filters_confirmed": True})
             self.assertEqual(response.status_code, 503, response.text)
             self.assertEqual(response.json()["error_type"], "BrowserError")
             self.assertEqual(response.json()["code"], "UNEXPECTED_STATE")

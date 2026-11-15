@@ -1,7 +1,7 @@
 # 夜间源码审计与修复对照（2026-11-15，UTC+8）
 
 基线：Git HEAD `2b1a373`（工作树含本次未提交修改）；后端基线 681 项通过、UI E2E 30/30。
-本次结果：后端 **700/700 PASS**，UI E2E **31/31 PASS**，前端 Node 7/7，`vue-tsc`/`vite build` 通过；真实 BOSS 仍 BLOCKED。
+本次结果：后端 **701/701 PASS**，UI E2E **31/31 PASS**，前端 Node 7/7，`vue-tsc`/`vite build` 通过；真实 BOSS 仍 BLOCKED。
 证据等级：**【已证实】**=本地代码/测试可复现；**【推断】**=源码一致但缺少真机；**【未知】**=需真实 BOSS 授权采样。
 
 ## 1. 初始事实核查（不以提示词假设为准）
@@ -24,7 +24,8 @@
 - **连接责任**：工厂只构造适配器；HTTP 路由仅 `connect()` 一次；重复 `connect()` 不导航、不清除人工筛选。`browser/runtime.py::_open_page_impl(navigate=False)`。
 - **真实源硬门禁**：`boss_readonly` 即使 `BROWSER_ALLOW_REAL_BOSS=1` 也返回 `REAL_CONTRACT_UNVERIFIED`，不访问真实站点、不写候选人；诊断仍可看配置。
 - **空列表语义**：读取 0 张卡不再算成功，扫描状态记 `FAILED/EMPTY_UNVERIFIED`。
-- **筛选确认**：扫描请求新增 `filters_confirmed/platform_job_id/filter_summary/max_details`；未确认返回 409 `FILTERS_UNCONFIRMED`；前端扫描前必须勾选人工确认。
+- **筛选确认**：扫描请求新增 `filters_confirmed/platform_job_id/filter_summary/max_details/max_duration_seconds`；未确认（含空 body）返回 409 `FILTERS_UNCONFIRMED`；前端扫描前必须勾选人工确认。
+- **隐私脱敏**：`/api/runtime-mode` 的浏览器诊断移除本地 Profile 绝对路径（替换为 `<dedicated-profile>`），并有测试断言。
 - **ID 分层**：`CandidateCard/CandidateDetail.platform_job_id` 与内部 `job_id` 分离；解析器 `encrypt_job_id` 只接受平台值（未知为空），不再塞内部 ID；仓储不再要求两者相等。
 - **列表预筛**：新增 `browser/preview.py`，仅当列表明确学历/年限不符时 `SKIP_CONFIRMED`，缺失一律 `FETCH_DETAIL`；Collector 增加 listed/deduplicated/preview_skipped/detail_* /sealed/review_pending/stop_reason 指标。
 - **被动响应解析**：新增 `browser/response_parser.py`（主机/路径/状态/JSON shape 检查、401/403 分类、列表/详情解析），仅用独立合成 JSON；真实响应接线未启用。

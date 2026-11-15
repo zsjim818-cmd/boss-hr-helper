@@ -1,6 +1,8 @@
 """Collect recommendation cards through a browser adapter into the repository."""
 from __future__ import annotations
 
+import time
+
 from browser.adapter import BrowserAdapter
 from browser.contracts import (BrowserError, CollectionIssue, CollectionReport)
 from browser.identity import (CandidateDetailParser, CandidateIdentityResolver)
@@ -27,13 +29,21 @@ class CandidateListCollector:
                 pages: int = 3, page_size: int = 20,
                 expected_platform_job_id: str | None = None,
                 preview=None, max_details: int | None = None,
-                cancel_check=None) -> CollectionReport:
+                cancel_check=None, max_duration_seconds: float | None = None) -> CollectionReport:
         report = CollectionReport(job_id=job_id, batch_id=batch_id)
         seen: set[str] = set()
+        started = time.monotonic()
         expected_platform = (expected_platform_job_id or "").strip() or None
+
+        def timed_out() -> bool:
+            return (max_duration_seconds is not None
+                    and time.monotonic() - started >= max_duration_seconds)
         for page in range(pages):
             if cancel_check is not None and cancel_check():
                 report.stop_reason = "CANCELLED"
+                break
+            if timed_out():
+                report.stop_reason = "MAX_DURATION"
                 break
             try:
                 cards = self.adapter.list_cards(page, page_size)
@@ -61,6 +71,10 @@ class CandidateListCollector:
                     report.stop_reason = "CANCELLED"
                     stopped = True
                     break
+                if timed_out():
+                    report.stop_reason = "MAX_DURATION"
+                    stopped = True
+                    break
                 try:
                     identity = self.resolver.resolve_card(card)
                 except BrowserError as exc:
@@ -83,11 +97,18 @@ class CandidateListCollector:
                         recoverable=False, identity=identity))
                     continue
                 if preview is not None:
-                    decision = preview(card)
-                    if decision.decision == "SKIP_CONFIRMED":
+                    try:
+                        decision = preview(card)
+                    except Exception as exc:  # noqa: BLE001 - preview must never abort a scan
+                        report.issues.append(CollectionIssue(
+                            code="PREVIEW_FAILED",
+                            message=f"list preview failed; fetching detail: {exc}"[:2000],
+                            recoverable=True, identity=identity))
+                        decision = None
+                    if decision is not None and decision.decision == "SKIP_CONFIRMED":
                         report.preview_skipped += 1
                         continue
-                    if decision.decision == "NEEDS_VERIFICATION":
+                    if decision is not None and decision.decision == "NEEDS_VERIFICATION":
                         report.review_pending += 1
                 if max_details is not None and report.detail_attempted >= max_details:
                     report.stop_reason = "MAX_DETAILS"

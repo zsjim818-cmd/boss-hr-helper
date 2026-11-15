@@ -301,6 +301,7 @@ async function createBatch() {
     const created = await api.createBatch(scope.jobId)
     if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
     batch.value = created
+    filtersConfirmed.value = false
     ElMessage.success('批次已创建（Policy 版本已锁定）')
   } catch (error) {
     if (scopeValid(scope, store.activeJobId, store.dataEpoch)) {

@@ -36,7 +36,7 @@
 
 ## 测试结果
 
-- 后端全量：**700 / 700 OK**（0 失败 / 0 error / 0 skip）
+- 后端全量：**701 / 701 OK**（0 失败 / 0 error / 0 skip）
 - 前端 UI E2E：**31 / 31，退出码 0**
 - 前端 Node：7 / 7；`vue-tsc` 0 错误；`vite build` 成功
 - `db-check`：ok / v11 / pending=[]

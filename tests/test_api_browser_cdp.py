@@ -71,7 +71,7 @@ class ApiCdpCase(PipelineCase):
     def scan(self, batch_id):
         return self.client.post(
             f"/api/jobs/job/batches/{batch_id}/browser/scan", headers=self.headers,
-            json={"pages": 2, "page_size": 5})
+            json={"pages": 2, "page_size": 5, "filters_confirmed": True})
 
     def score(self, jcid):
         started = self.client.post(
@@ -203,7 +203,7 @@ class ApiCdpUnavailableTests(PipelineCase):
         batch = self.client.post("/api/jobs/job/batches", headers=self.headers).json()
         response = self.client.post(
             f"/api/jobs/job/batches/{batch['batch_id']}/browser/scan",
-            headers=self.headers, json={"pages": 1})
+            headers=self.headers, json={"pages": 1, "filters_confirmed": True})
         self.assertEqual(response.status_code, 503, response.text)
         body = response.json()
         self.assertEqual(body["error_type"], "BrowserError")
@@ -257,11 +257,13 @@ class ApiCdpSessionIsolationTests(PipelineCase):
                                  headers=self.owner_headers).json()
         owner_scan = self.client.post(
             f"/api/jobs/job/batches/{batch['batch_id']}/browser/scan",
-            headers=self.owner_headers, json={"pages": 1, "page_size": 5})
+            headers=self.owner_headers, json={"pages": 1, "page_size": 5,
+                                             "filters_confirmed": True})
         self.assertEqual(owner_scan.status_code, 200, owner_scan.text)
         hr_scan = self.client.post(
             f"/api/jobs/job/batches/{batch['batch_id']}/browser/scan",
-            headers=self.hr2_headers, json={"pages": 1, "page_size": 5})
+            headers=self.hr2_headers, json={"pages": 1, "page_size": 5,
+                                            "filters_confirmed": True})
         self.assertEqual(hr_scan.status_code, 200, hr_scan.text)
 
         owner_body = owner_scan.json()
