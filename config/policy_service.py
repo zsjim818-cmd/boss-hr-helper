@@ -3,7 +3,18 @@ import json
 
 from config.policy_compiler import CompilationError
 from config.policy_validation import VALIDATOR_VERSION, diagnose_policy, validate_publishable_policy
+from engine.policy_validator import validate_policy_quality
 from schemas.job_policy import JobScoringPolicy, PolicyCompileInput, PolicyProvenance
+
+
+class PolicyQualityBlocked(ValueError):
+    """Explicit publish refusal: the quality gate found blocking issues."""
+
+    def __init__(self, issues):
+        self.issues = list(issues)
+        codes = sorted({item.code for item in self.issues if item.severity == "ERROR"})
+        super().__init__(
+            "Policy quality gate BLOCKED publication: " + ", ".join(codes or ["UNKNOWN"]))
 
 
 class PolicyCompilerService:
@@ -35,8 +46,13 @@ class PolicyCompilerService:
             metrics=result.metrics, policy_json=result.policy.model_dump(mode="json"),
             draft_id=draft["draft_id"], draft_revision=draft["revision"], diagnostics=diagnostics,
             error_type=None if result.publishable else "PolicyDiagnosticsBlocked")
+        # Compile-time structural review (Stage 5.5): report-only facts about
+        # the compiler output. It never blocks publishing here; the publish
+        # gate belongs to a later batch by explicit design.
+        quality = validate_policy_quality(result.policy)
         return {"draft": draft, "compilation_run": run, "diagnostics": diagnostics,
-                "publishable": result.publishable, "metrics": result.metrics}
+                "publishable": result.publishable, "metrics": result.metrics,
+                "quality": quality.model_dump(mode="json")}
 
     def update_draft(self, context, job_id, draft_id, policy_json, *, expected_revision,
                      source_input=None, parent_run_id=None):
@@ -62,7 +78,11 @@ class PolicyCompilerService:
             policy_json=policy.model_dump(mode="json"), draft_id=draft_id, draft_revision=updated["revision"],
             diagnostics=diagnostics, error_type="PolicyDiagnosticsBlocked" if blocking else None,
             run_kind="VALIDATION", parent_run_id=parent_run_id, metrics={"normalizer_version": NORMALIZER_VERSION})
-        return {"draft": updated, "compilation_run": run, "diagnostics": diagnostics, "publishable": not blocking}
+        # The same compile-time structural review runs on the HR-edited draft,
+        # so manual edits cannot silently reintroduce structural regressions.
+        quality = validate_policy_quality(policy)
+        return {"draft": updated, "compilation_run": run, "diagnostics": diagnostics,
+                "publishable": not blocking, "quality": quality.model_dump(mode="json")}
 
     def confirm_draft(self, context, job_id, draft_id, run_id, *, confirmation_hash):
         return self.repository.confirm_policy_draft(context, job_id, draft_id, run_id,
@@ -80,5 +100,30 @@ class PolicyCompilerService:
             compilation_run_id=run_id, confirmation_id=confirmation_id)
         return {"version": version}
 
-    def publish_version(self, context, job_id, policy_id, *, confirmation_hash):
-        return self.repository.publish_policy(context, job_id, policy_id, confirmation_hash=confirmation_hash)
+    def publish_version(self, context, job_id, policy_id, *, confirmation_hash,
+                        enforce_quality_gate=True, quality_override_reason=None):
+        """Publish a sealed version; Stage 5.5 quality gate runs by default.
+
+        Generic ``job_scoring_policy_v1`` versions are rejected with
+        ``PolicyQualityBlocked`` when ``validate_policy_quality`` reports
+        BLOCKED.  A bypass is only available with an explicit reason and is
+        recorded as an ORG_ADMIN audit event (operator, policy identity,
+        version/hash, reason, time); ordinary HR callers cannot bypass.
+        """
+        version = self.repository.get_policy_version(context, job_id, policy_id)
+        if version["policy_schema_version"] == "job_scoring_policy_v1":
+            policy = JobScoringPolicy.model_validate(json.loads(version["policy_json"]))
+            quality = validate_policy_quality(
+                policy, policy_id=version["policy_id"],
+                policy_version=version["policy_version"], policy_hash=version["policy_hash"])
+            if quality.status == "BLOCKED":
+                if not quality_override_reason:
+                    if enforce_quality_gate:
+                        raise PolicyQualityBlocked(quality.issues)
+                    raise ValueError("Quality gate override requires an explicit reason")
+                self.repository.record_quality_gate_override(
+                    context, job_id, policy_id, reason=quality_override_reason,
+                    quality_codes=sorted({item.code for item in quality.issues
+                                          if item.severity == "ERROR"}))
+        return self.repository.publish_policy(context, job_id, policy_id,
+                                              confirmation_hash=confirmation_hash)

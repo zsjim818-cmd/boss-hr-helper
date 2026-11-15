@@ -18,6 +18,8 @@ def main(argv=None):
     commands.add_parser("policy-diagnose", add_help=False, help="三个岗位真实Qwen编译验收；需显式--live")
     commands.add_parser("prescreen", add_help=False, help="按候选人绑定版本执行通用Tier0/Tier1，不调用模型")
     commands.add_parser("prescreen-benchmark", add_help=False, help="固定候选集新旧Tier0/Tier1对照，不调用模型")
+    commands.add_parser("tier3-review", add_help=False,
+                        help="通用Policy驱动的Tier3终审；默认离线Mock，--live调用真实Qwen")
     semantic_commands = ("embedding-check", "semantic-prepare", "semantic-diagnose")
     for command in semantic_commands:
         commands.add_parser(command, add_help=False, help="Stage5语义资产核验/准备与只读Tier2诊断")
@@ -27,6 +29,9 @@ def main(argv=None):
     if args.command == "prescreen":
         from engine.prescreen_cli import main as run
         return run(remaining)
+    if args.command == "tier3-review":
+        from engine.pipeline_cli import main as run
+        return run(args.command, remaining)
     if args.command == "prescreen-benchmark":
         from tests.prescreen_benchmark import main as run
         return run(remaining)

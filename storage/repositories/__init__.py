@@ -7,11 +7,12 @@ from .candidates import CandidateRepository
 from .evaluations import EvaluationRepository
 from .compiler import CompilerRepository
 from .embeddings import EmbeddingRepository
+from .pipeline import PipelineRepository
 
 
 class RecruitmentRepository(IdentityRepository, PolicyRepository, ScanBatchRepository,
                              CandidateRepository, EvaluationRepository, CompilerRepository,
-                             EmbeddingRepository):
+                             EmbeddingRepository, PipelineRepository):
     """One transaction/authorization boundary with domain-specific implementations."""
 
 

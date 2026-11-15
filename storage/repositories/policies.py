@@ -128,6 +128,24 @@ class PolicyRepository(BaseRepository):
             return self.one(connection, "SELECT * FROM job_policy_versions WHERE org_id=? AND job_id=? AND policy_id=?",
                             (context.org_id, job_id, policy_id))
 
+    def record_quality_gate_override(self, context, job_id, policy_id, *, reason,
+                                     quality_codes):
+        """Audited, ORG_ADMIN-only override of the Stage 5.5 publish gate."""
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("Quality gate override requires an explicit reason")
+        with self.tx(context, job_id, "publish") as connection:
+            self.require_admin(connection, context)
+            policy = self.one(connection, """SELECT * FROM job_policy_versions
+                WHERE org_id=? AND job_id=? AND policy_id=?""", (context.org_id, job_id, policy_id))
+            self.audit(connection, context, "POLICY_QUALITY_GATE_OVERRIDDEN", policy_id,
+                       {"policy_version": policy["policy_version"],
+                        "policy_hash": policy["policy_hash"],
+                        "reason": reason.strip(),
+                        "quality_codes": sorted(set(quality_codes)),
+                        "operator_role": "ORG_ADMIN"})
+            return {"policy_id": policy_id, "policy_version": policy["policy_version"],
+                    "policy_hash": policy["policy_hash"], "reason": reason.strip()}
+
     def publish_policy(self, context, job_id, policy_id, *, confirmation_hash):
         with self.tx(context, job_id, "publish") as connection:
             policy = self.one(connection, "SELECT * FROM job_policy_versions WHERE org_id=? AND job_id=? AND policy_id=?",

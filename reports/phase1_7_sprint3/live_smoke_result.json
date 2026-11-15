@@ -1,0 +1,409 @@
+{
+  "mode": "LIVE (real local BGE + real Qwen via .env)",
+  "embedding_model_path": "D:\\model\\bge-large-zh-v1.5\\hub\\models--BAAI--bge-large-zh-v1.5\\snapshots\\79e7739b6ab944e86d6171e44d24c997fc1e0116",
+  "llm_model": "qwen3.8-27b",
+  "cases": [
+    {
+      "case_id": "java_backend",
+      "policy_id": "e6de0bc8dfb54b76abd5d9d3f8fd9f2e",
+      "policy_version": 1,
+      "quality_gate": {
+        "validator_version": "policy-quality-validator-v1.2",
+        "policy_schema_version": "job_scoring_policy_v1",
+        "policy_id": null,
+        "policy_version": null,
+        "policy_hash": "e7ce6ea718e42960591bf7f3b96544a5dfdf209b8c07e66a1cfaa8cf87e63bd4",
+        "job_title": "Java后端开发工程师",
+        "status": "PASS",
+        "coverage_status": "DETERMINED",
+        "semantic_requirement_count": 6,
+        "directly_covered_count": 6,
+        "broad_only_count": 0,
+        "missing_positive_count": 0,
+        "unclassified_requirement_count": 0,
+        "orphan_group_count": 0,
+        "positive_coverage_rate": 1.0,
+        "dimension_coverage": [
+          {
+            "dimension_id": "service_design",
+            "requirement_ids": [
+              "java",
+              "spring_route",
+              "quarkus_route"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 3,
+            "direct_covered": 3,
+            "broad_only": 0,
+            "missing_positive": 0,
+            "direct_coverage_rate": 1.0
+          },
+          {
+            "dimension_id": "data_correctness",
+            "requirement_ids": [
+              "transactions"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 1,
+            "direct_covered": 1,
+            "broad_only": 0,
+            "missing_positive": 0,
+            "direct_coverage_rate": 1.0
+          },
+          {
+            "dimension_id": "troubleshooting",
+            "requirement_ids": [
+              "duty"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 1,
+            "direct_covered": 1,
+            "broad_only": 0,
+            "missing_positive": 0,
+            "direct_coverage_rate": 1.0
+          },
+          {
+            "dimension_id": "testing_quality",
+            "requirement_ids": [
+              "testing"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 1,
+            "direct_covered": 1,
+            "broad_only": 0,
+            "missing_positive": 0,
+            "direct_coverage_rate": 1.0
+          },
+          {
+            "dimension_id": "communication",
+            "requirement_ids": [
+              "duty"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 1,
+            "direct_covered": 1,
+            "broad_only": 0,
+            "missing_positive": 0,
+            "direct_coverage_rate": 1.0
+          }
+        ],
+        "issues": []
+      },
+      "policy_asset_manifest": {
+        "status": "READY",
+        "cache_hit": false,
+        "policy_id": "e6de0bc8dfb54b76abd5d9d3f8fd9f2e",
+        "policy_version": 1,
+        "policy_hash": "e7ce6ea718e42960591bf7f3b96544a5dfdf209b8c07e66a1cfaa8cf87e63bd4",
+        "embedding_profile_id": "bge-large-zh-v1.5-79e7739b-cls-v1",
+        "embedding_profile_hash": "16cf0e6fe94e2cfa0c6a81415a69d4e6a0f965ec683f67558e9f641a5d54f278",
+        "anchor_count": 8,
+        "unique_text_count": 8,
+        "encoded_count": 8,
+        "reused_asset_count": 0,
+        "inference_seconds": 9.372349,
+        "manifest_hash": "7296bcfecff259ff05ca346414cfa5b9fdb34a9387d5fdb468a359f91bf1018c",
+        "elapsed_seconds": 17.086334
+      },
+      "resume_asset": {
+        "status": "READY",
+        "cache_hit": false,
+        "job_candidate_id": "ed6cb1c1cf4d4ba088ab146d32e87a54",
+        "candidate_id": "04ea8d025a424318b9e87b3eb5377de2",
+        "resume_id": "67d6a01cb18b402184245accb663eb0e",
+        "resume_content_hash": "3234d3e9874f42933afba18f2c1e3b01fc1d73955e54f1f398e4e4ab122bfb87",
+        "embedding_profile_id": "bge-large-zh-v1.5-79e7739b-cls-v1",
+        "embedding_profile_hash": "16cf0e6fe94e2cfa0c6a81415a69d4e6a0f965ec683f67558e9f641a5d54f278",
+        "chunker_version": "resume-semantic-chunker-v1",
+        "chunker_profile_hash": "9cca3c305d47c309b4556eb5552a802a357083614fafaa9d54239804f53e043b",
+        "chunk_count": 4,
+        "unique_text_count": 4,
+        "encoded_count": 4,
+        "reused_asset_count": 0,
+        "inference_seconds": 0.524698,
+        "chunk_manifest_hash": "a08804980c5a5b0631287f0071e649ed205000cbe3d7b9b7b4e8aa766349eb4e",
+        "embedding_manifest_hash": "c2914f93714f9a37dfe68facc680b7ab69677fd1be465f75ecdb9e81a573a16f",
+        "elapsed_seconds": 2.526201
+      },
+      "status": "DEEP_SCORED",
+      "task_status": "SUCCEEDED",
+      "tier2": {
+        "status": "SEMANTIC_SCORED",
+        "score": 41.24,
+        "coverage": 1.0
+      },
+      "tier3": {
+        "total_score": 57.0,
+        "routing_suggestion": "NOT_RECOMMENDED",
+        "dimensions": [
+          {
+            "dimension_id": "service_design",
+            "label": "服务设计",
+            "weight": 0.3,
+            "score": 65.0,
+            "confidence": 0.7,
+            "evidence": [
+              {
+                "quote": "负责订单支付后台的Java服务开发，设计SQL事务与幂等约束，使用Spring Boot提供接口并编写接口自动化测试覆盖关键链路。",
+                "source_path": "work_experience[0].responsibility"
+              },
+              {
+                "quote": "使用Spring Boot与MySQL实现对账批处理，处理并发与事务边界，补充自动化测试。",
+                "source_path": "project_experience[0].description"
+              }
+            ]
+          },
+          {
+            "dimension_id": "data_correctness",
+            "label": "数据正确性",
+            "weight": 0.3,
+            "score": 60.0,
+            "confidence": 0.5,
+            "evidence": [
+              {
+                "quote": "设计SQL事务与幂等约束",
+                "source_path": "work_experience[0].responsibility"
+              },
+              {
+                "quote": "处理并发与事务边界",
+                "source_path": "project_experience[0].description"
+              }
+            ]
+          },
+          {
+            "dimension_id": "troubleshooting",
+            "label": "故障排查",
+            "weight": 0.2,
+            "score": 40.0,
+            "confidence": 0.3,
+            "evidence": []
+          },
+          {
+            "dimension_id": "testing_quality",
+            "label": "测试质量",
+            "weight": 0.15,
+            "score": 65.0,
+            "confidence": 0.6,
+            "evidence": [
+              {
+                "quote": "编写接口自动化测试覆盖关键链路",
+                "source_path": "work_experience[0].responsibility"
+              },
+              {
+                "quote": "补充自动化测试",
+                "source_path": "project_experience[0].description"
+              },
+              {
+                "quote": "将人工对账耗时从小时级降到分钟级。",
+                "source_path": "project_experience[0].achievement"
+              }
+            ]
+          },
+          {
+            "dimension_id": "communication",
+            "label": "业务沟通",
+            "weight": 0.05,
+            "score": 35.0,
+            "confidence": 0.2,
+            "evidence": []
+          }
+        ]
+      },
+      "llm_metrics": {
+        "status": "SUCCEEDED",
+        "stage": "completed",
+        "model": "qwen3.8-27b",
+        "elapsed_seconds": 64.7655,
+        "failure_type": null,
+        "validation_error": null
+      },
+      "raw_response_excerpt": "{\n  \"dimensions\": [\n    {\n      \"dimension_id\": \"service_design\",\n      \"score\": 65,\n      \"evidence_quotes\": [\n        \"负责订单支付后台的Java服务开发，设计SQL事务与幂等约束，使用Spring Boot提供接口并编写接口自动化测试覆盖关键链路。\",\n        \"使用Spring Boot与MySQL实现对账批处理，处理并发与事务边界，补充自动化测试。\"\n      ],\n      \"missing_evidence\": [\n        \"缺少订单支付服务接口边界的具体说明\",\n        \"缺少设计取舍的具体过程与理由\"\n      ],\n      \"confidence\": 0.7\n    },\n    {\n      \"dimension_id\": \"data_correctness\",\n      \"score\": 60,\n      \"evidence_quotes\": [\n        \"设计SQL事务与幂等约束\",\n        \"处理并发与事务边界\"\n      ],\n      \"missing_evidence\": [\n        \"缺少SQL事务与数据一致性具体约束的分析过程\",\n        \"缺少可核验的结果证据\"\n      ],\n      \"confidence\": 0.5\n    },\n    {\n      \"dimension_id\": \"troubleshooting\",\n      \"score\": 40,\n      \"evidence_quotes\": [],\n      \"missing_evidence\": [\n        \"缺少根据日志和指标定位性能及一致性问题的具体案例\",\n        \"缺少故障排查的具体过程与结果\"\n      ],\n      \"confidence\": 0.3\n    },\n    {\n      \"dimension_id\": \"testing_quality\",\n      \"score\": 65,\n      \"evidence_quotes\": [\n        \"编写接口自动化测试覆盖关键链路\",\n        \"补充自动化测试\",\n        \"将人工对账耗时从小时级降到分钟级。\"\n      ],\n      \"missing_evidence\": [\n        \"缺少接口自动化测试的具体覆盖范围与验证方法\",\n        \"缺少测试质量的可核验结果\"\n      ],\n      \"confidence\": 0.6\n    },\n    {\n      \"dimension_id\": \"communication\",\n      \"score\": 35,\n      \"evidence_quotes\": [],\n      \"missing_evidence\": [\n        \"缺少把订单支付规则转换为清晰接口验收条件的具体案例\",\n        \"缺少业务沟通的具体过程与结果\"\n      ],\n      \"confidence\": 0.2\n    }\n  ]\n}"
+    },
+    {
+      "case_id": "b2b_sales",
+      "policy_id": "c4e24ea6386b4b449363009b02fb114f",
+      "policy_version": 1,
+      "quality_gate": {
+        "validator_version": "policy-quality-validator-v1.2",
+        "policy_schema_version": "job_scoring_policy_v1",
+        "policy_id": null,
+        "policy_version": null,
+        "policy_hash": "9ccc1e4f662708a571082ca450da7aa6f33a30dd7bde6ebe24015d6e4f1be725",
+        "job_title": "企业客户销售经理",
+        "status": "PASS",
+        "coverage_status": "DETERMINED",
+        "semantic_requirement_count": 6,
+        "directly_covered_count": 6,
+        "broad_only_count": 0,
+        "missing_positive_count": 0,
+        "unclassified_requirement_count": 0,
+        "orphan_group_count": 0,
+        "positive_coverage_rate": 1.0,
+        "dimension_coverage": [
+          {
+            "dimension_id": "prospecting",
+            "requirement_ids": [
+              "direct_route",
+              "channel_route"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 2,
+            "direct_covered": 2,
+            "broad_only": 0,
+            "missing_positive": 0,
+            "direct_coverage_rate": 1.0
+          },
+          {
+            "dimension_id": "discovery_solution",
+            "requirement_ids": [
+              "discovery"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 1,
+            "direct_covered": 1,
+            "broad_only": 0,
+            "missing_positive": 0,
+            "direct_coverage_rate": 1.0
+          },
+          {
+            "dimension_id": "commercial_progress",
+            "requirement_ids": [
+              "negotiation",
+              "pipeline"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 2,
+            "direct_covered": 2,
+            "broad_only": 0,
+            "missing_positive": 0,
+            "direct_coverage_rate": 1.0
+          },
+          {
+            "dimension_id": "collections",
+            "requirement_ids": [
+              "duty"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 1,
+            "direct_covered": 1,
+            "broad_only": 0,
+            "missing_positive": 0,
+            "direct_coverage_rate": 1.0
+          }
+        ],
+        "issues": []
+      },
+      "policy_asset_manifest": {
+        "status": "READY",
+        "cache_hit": false,
+        "policy_id": "c4e24ea6386b4b449363009b02fb114f",
+        "policy_version": 1,
+        "policy_hash": "9ccc1e4f662708a571082ca450da7aa6f33a30dd7bde6ebe24015d6e4f1be725",
+        "embedding_profile_id": "bge-large-zh-v1.5-79e7739b-cls-v1",
+        "embedding_profile_hash": "16cf0e6fe94e2cfa0c6a81415a69d4e6a0f965ec683f67558e9f641a5d54f278",
+        "anchor_count": 7,
+        "unique_text_count": 7,
+        "encoded_count": 6,
+        "reused_asset_count": 1,
+        "inference_seconds": 0.583656,
+        "manifest_hash": "6264817f8c9a0c02ca40e431dcdd7a19d715daf76418c20fcd5edb0e977c7351",
+        "elapsed_seconds": 0.658809
+      },
+      "resume_asset": {
+        "status": "READY",
+        "cache_hit": false,
+        "job_candidate_id": "9079476a2ce54ee293800176918d9335",
+        "candidate_id": "43874989ed9a476e8a566a5666086148",
+        "resume_id": "2eef65abcad44a99985f193146d69340",
+        "resume_content_hash": "609f566062e304964cccaa6e96a5dfd3546b0ae47c2f19d6d1675eb14c15cfe5",
+        "embedding_profile_id": "bge-large-zh-v1.5-79e7739b-cls-v1",
+        "embedding_profile_hash": "16cf0e6fe94e2cfa0c6a81415a69d4e6a0f965ec683f67558e9f641a5d54f278",
+        "chunker_version": "resume-semantic-chunker-v1",
+        "chunker_profile_hash": "9cca3c305d47c309b4556eb5552a802a357083614fafaa9d54239804f53e043b",
+        "chunk_count": 2,
+        "unique_text_count": 2,
+        "encoded_count": 2,
+        "reused_asset_count": 0,
+        "inference_seconds": 0.293714,
+        "chunk_manifest_hash": "b23d2af1853f717599de855463e7e4f1474df2e6cc7f0223ae804e4d2310e846",
+        "embedding_manifest_hash": "fb520c5cae08a7daf1e65a991c74a1d18dadb490ee1fc463397857db4c8ad8c8",
+        "elapsed_seconds": 0.389377
+      },
+      "status": "DEEP_SCORED",
+      "task_status": "SUCCEEDED",
+      "tier2": {
+        "status": "SEMANTIC_SCORED",
+        "score": 45.2,
+        "coverage": 1.0
+      },
+      "tier3": {
+        "total_score": 53.25,
+        "routing_suggestion": "NOT_RECOMMENDED",
+        "dimensions": [
+          {
+            "dimension_id": "prospecting",
+            "label": "客户开拓",
+            "weight": 0.25,
+            "score": 45.0,
+            "confidence": 0.4,
+            "evidence": [
+              {
+                "quote": "负责企业客户需求访谈与方案沟通，独立推进合同谈判与签约，按月维护销售漏斗并跟进回款。",
+                "source_path": "work_experience[0].responsibility"
+              }
+            ]
+          },
+          {
+            "dimension_id": "discovery_solution",
+            "label": "需求与方案沟通",
+            "weight": 0.2,
+            "score": 55.0,
+            "confidence": 0.5,
+            "evidence": [
+              {
+                "quote": "负责企业客户需求访谈与方案沟通，独立推进合同谈判与签约，按月维护销售漏斗并跟进回款。",
+                "source_path": "work_experience[0].responsibility"
+              }
+            ]
+          },
+          {
+            "dimension_id": "commercial_progress",
+            "label": "商务推进",
+            "weight": 0.35,
+            "score": 60.0,
+            "confidence": 0.5,
+            "evidence": [
+              {
+                "quote": "负责企业客户需求访谈与方案沟通，独立推进合同谈判与签约，按月维护销售漏斗并跟进回款。",
+                "source_path": "work_experience[0].responsibility"
+              }
+            ]
+          },
+          {
+            "dimension_id": "collections",
+            "label": "回款管理",
+            "weight": 0.2,
+            "score": 50.0,
+            "confidence": 0.4,
+            "evidence": [
+              {
+                "quote": "负责企业客户需求访谈与方案沟通，独立推进合同谈判与签约，按月维护销售漏斗并跟进回款。",
+                "source_path": "work_experience[0].responsibility"
+              }
+            ]
+          }
+        ]
+      },
+      "llm_metrics": {
+        "status": "SUCCEEDED",
+        "stage": "completed",
+        "model": "qwen3.8-27b",
+        "elapsed_seconds": 49.5064,
+        "failure_type": null,
+        "validation_error": null
+      },
+      "raw_response_excerpt": "{\n  \"dimensions\": [\n    {\n      \"dimension_id\": \"prospecting\",\n      \"score\": 45,\n      \"evidence_quotes\": [\n        \"负责企业客户需求访谈与方案沟通，独立推进合同谈判与签约，按月维护销售漏斗并跟进回款。\"\n      ],\n      \"missing_evidence\": [\n        \"缺少具体客户开拓渠道、商机筛选标准、独立开拓数量或转化结果等可核验过程。\"\n      ],\n      \"confidence\": 0.4\n    },\n    {\n      \"dimension_id\": \"discovery_solution\",\n      \"score\": 55,\n      \"evidence_quotes\": [\n        \"负责企业客户需求访谈与方案沟通，独立推进合同谈判与签约，按月维护销售漏斗并跟进回款。\"\n      ],\n      \"missing_evidence\": [\n        \"缺少需求访谈具体问题、客户痛点识别、方案定制取舍、方案验收或客户反馈等可核验结果。\"\n      ],\n      \"confidence\": 0.5\n    },\n    {\n      \"dimension_id\": \"commercial_progress\",\n      \"score\": 60,\n      \"evidence_quotes\": [\n        \"负责企业客户需求访谈与方案沟通，独立推进合同谈判与签约，按月维护销售漏斗并跟进回款。\"\n      ],\n      \"missing_evidence\": [\n        \"缺少谈判关键取舍、销售漏斗阶段推进数据、合同签署数量或金额等可核验结果。\"\n      ],\n      \"confidence\": 0.5\n    },\n    {\n      \"dimension_id\": \"collections\",\n      \"score\": 50,\n      \"evidence_quotes\": [\n        \"负责企业客户需求访谈与方案沟通，独立推进合同谈判与签约，按月维护销售漏斗并跟进回款。\"\n      ],\n      \"missing_evidence\": [\n        \"缺少签约后回款计划、账期风险处理、逾期跟进方式及回款完成率等可核验结果。\"\n      ],\n      \"confidence\": 0.4\n    }\n  ]\n}"
+    }
+  ],
+  "ok": true
+}

@@ -44,14 +44,17 @@ class SemanticStorageTests(PrescreenDatabaseCase):
             self.ctx, "job", payload, embedding_profile_id=model.embedding_profile_id)
         return model, payload, row
 
-    def test_migration_is_v8_idempotent_and_survives_restart(self):
-        self.assertEqual(self.db.migrate()["schema_version"], 8)
+    def test_migration_is_idempotent_and_survives_restart(self):
+        # Schema version follows the current migration set (009 added the
+        # generic pipeline tables); the test's intent is idempotency + restart.
+        latest = max(migration.version for migration in self.db._migrations())
+        self.assertEqual(self.db.migrate()["schema_version"], latest)
         self.assertTrue(self.db.migrate()["already_current"])
         self.assertTrue(self.db.check()["ok"])
         restarted = type(self.db)(self.path)
         check = restarted.check()
         self.assertTrue(check["ok"])
-        self.assertEqual(check["schema_version"], 8)
+        self.assertEqual(check["schema_version"], latest)
 
     def test_profile_and_asset_are_persistent_and_content_addressed(self):
         model, payload, profile = self.create_profile()

@@ -4,6 +4,8 @@ import json
 from engine.hard_filter import check_hard_filters
 from engine.llm_reviewer import DIMENSIONS, LLMReviewerMixin
 from schemas import EvaluationOutput, LLMStructuredEvaluation, ResumeData
+from schemas.job_policy import DynamicPolicyAssessment, JobScoringPolicy
+from schemas.pipeline import PolicyTier3Evaluation
 
 from .base import BaseRepository, check_snapshot, digest, json_dump, uid
 
@@ -144,6 +146,87 @@ class EvaluationRepository(BaseRepository):
             conn.execute("UPDATE evaluation_tasks SET technical_state=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE org_id=? AND job_id=? AND task_id=?",
                          (status, ctx.org_id, job_id, task_id))
             self.audit(conn, ctx, "APPEND_EVALUATION_ATTEMPT", attempt_id, {"task_id": task_id, "status": status})
+            return self.one(conn, "SELECT * FROM evaluation_attempts WHERE org_id=? AND job_id=? AND attempt_id=?", (ctx.org_id, job_id, attempt_id))
+
+    def _validate_pipeline_result(self, conn, ctx, job_id, task, result):
+        """Validate a Stage 6 generic Tier 3 result against database truth.
+
+        The result must bind to the task's immutable candidate/policy/resume
+        identity, use exactly the bound policy's dimensions and weights, ground
+        every quote in the sealed resume, and reproduce the weighted score and
+        routing band.  Anything else is refused instead of being stored.
+        """
+        from config.policy_validation import validate_dynamic_assessment
+        from engine.llm_reviewer import llm_source_map
+        from engine.policy_llm_reviewer import verify_tier3_evaluation
+        value = result.model_dump(mode="json") if isinstance(result, PolicyTier3Evaluation) else result
+        output = PolicyTier3Evaluation.model_validate(value)
+        check_snapshot(output.model_dump(mode="json"))
+        if task["scoring_mode"] != "deep_mode":
+            raise ValueError("Pipeline Tier3 results require a deep_mode task")
+        if (output.job_candidate_id, output.candidate_id, output.policy_id,
+                output.policy_version, output.resume_id) != (
+                task["job_candidate_id"], task["candidate_id"], task["policy_id"],
+                task["policy_version"], task["resume_id"]):
+            raise ValueError("Pipeline result identity does not match its evaluation task")
+        source = self.one(conn, """SELECT r.normalized_resume_json,r.content_hash,
+                    p.policy_json,p.policy_hash,jc.candidate_key
+                FROM resume_snapshots r JOIN job_policy_versions p
+                  ON p.org_id=r.org_id AND p.job_id=? AND p.policy_id=?
+                JOIN job_candidates jc ON jc.org_id=p.org_id AND jc.job_id=p.job_id
+                  AND jc.job_candidate_id=?
+                WHERE r.org_id=? AND r.candidate_id=? AND r.resume_id=?""",
+                               (job_id, task["policy_id"], task["job_candidate_id"],
+                                ctx.org_id, task["candidate_id"], task["resume_id"]))
+        if (output.candidate_key != source["candidate_key"]
+                or output.policy_hash != source["policy_hash"]
+                or output.resume_content_hash != source["content_hash"]):
+            raise ValueError("Pipeline result identity or sealed resume/policy hash mismatch")
+        resume = ResumeData.model_validate_json(source["normalized_resume_json"])
+        if resume.data_completeness != "COMPLETE" or resume.collection_errors or resume.data_issues:
+            raise ValueError("Official Tier3 result requires a complete sealed input")
+        policy = JobScoringPolicy.model_validate_json(source["policy_json"])
+        # Single shared rule engine: evidence grounding/confidence/score caps,
+        # labels/weights, weighted total, routing and thresholds all re-derived.
+        verify_tier3_evaluation(policy, output.model_dump(mode="json"), llm_source_map(resume))
+        return output
+
+    def append_pipeline_attempt(self, ctx, job_id, task_id, *, status, result=None,
+                                error_type=None, metrics=None, attempt_id=None):
+        """Append a Stage 6 attempt under the same append-only guards.
+
+        Generic results are stored in ``evaluation_attempts`` (a JSON-object
+        column free of the legacy-EvaluationOutput shape triggers).  The
+        formal ``evaluations`` table stays bound to the legacy V2 contract, so
+        wiring generic results into it needs a separate schema decision.
+        """
+        if (status not in ("SUCCEEDED", "FAILED")
+                or (status == "FAILED" and (not isinstance(error_type, str) or not error_type.strip()))
+                or (status == "SUCCEEDED" and error_type is not None)):
+            raise ValueError("Attempt status and error_type are inconsistent")
+        check_snapshot(metrics if metrics is not None else {})
+        with self.tx(ctx, job_id, "evaluate") as conn:
+            task = self._task(conn, ctx, job_id, task_id)
+            if task["technical_state"] == "SUCCEEDED":
+                raise ValueError("An accepted successful task cannot receive another attempt")
+            if status == "SUCCEEDED":
+                response = self._validate_pipeline_result(conn, ctx, job_id, task, result).model_dump(mode="json")
+            else:
+                response = result if isinstance(result, dict) else {}
+            check_snapshot(response)
+            attempt_id = attempt_id or uid()
+            number = conn.execute("SELECT COALESCE(MAX(attempt_no),0)+1 FROM evaluation_attempts WHERE org_id=? AND task_id=?",
+                                  (ctx.org_id, task_id)).fetchone()[0]
+            conn.execute("UPDATE evaluation_tasks SET technical_state='RUNNING',updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE org_id=? AND job_id=? AND task_id=?",
+                         (ctx.org_id, job_id, task_id))
+            conn.execute("""INSERT INTO evaluation_attempts
+                (org_id,job_id,task_id,attempt_id,attempt_no,status,result_json,error_type,metrics_json)
+                VALUES(?,?,?,?,?,?,?,?,?)""",
+                         (ctx.org_id, job_id, task_id, attempt_id, number, status,
+                          json_dump(response), error_type, json_dump(metrics if metrics is not None else {})))
+            conn.execute("UPDATE evaluation_tasks SET technical_state=?,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE org_id=? AND job_id=? AND task_id=?",
+                         (status, ctx.org_id, job_id, task_id))
+            self.audit(conn, ctx, "APPEND_PIPELINE_ATTEMPT", attempt_id, {"task_id": task_id, "status": status})
             return self.one(conn, "SELECT * FROM evaluation_attempts WHERE org_id=? AND job_id=? AND attempt_id=?", (ctx.org_id, job_id, attempt_id))
 
     def save_evaluation(self, ctx, job_id, task_id, result, attempt_id=None, evaluation_id=None):

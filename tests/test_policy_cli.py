@@ -10,9 +10,12 @@ from pathlib import Path
 import subprocess
 import sys
 
+import sqlite3
+
 from config.policy_compiler import JobPolicyCompiler
 from config.policy_service import PolicyCompilerService
 from config.settings import PROJECT_ROOT
+from engine.policy_validator import policy_content_hash
 from tests.database_support import DatabaseTestCase
 from tests.policy_fixtures import offline_policy, policy_input
 from tests.test_policy_compiler import RecordedCompilerClient
@@ -29,9 +32,10 @@ class PolicyCliTests(DatabaseTestCase):
         path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
         return path
 
-    def run_cli(self, command, *arguments, scope=False, user_id="owner", parse=True):
-        scoped = ["--database", str(self.path), "--org-id", "org1", "--user-id", user_id,
-                  "--job-id", "job1"] if scope else []
+    def run_cli(self, command, *arguments, scope=False, user_id="owner", job_id="job1",
+                org_id="org1", parse=True):
+        scoped = ["--database", str(self.path), "--org-id", org_id, "--user-id", user_id,
+                  "--job-id", job_id] if scope else []
         environment = os.environ.copy()
         # If an authorization regression reaches the SDK, it still cannot use
         # the developer's real model credentials or endpoint.
@@ -134,7 +138,10 @@ class PolicyCliTests(DatabaseTestCase):
         self.assertEqual(process.returncode, 1)
         self.assertEqual(missing["error_type"], "NotFound")
         process, publication = self.run_cli("policy-publish", "--policy-id", version["policy_id"],
-                                           "--confirm-hash", draft["draft_hash"], scope=True)
+                                           "--confirm-hash", draft["draft_hash"],
+                                           "--allow-blocked-quality",
+                                           "--override-reason", "offline fixture publication mechanics",
+                                           scope=True)
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertEqual(publication["policy_id"], version["policy_id"])
         output = self.root / "artifacts" / "current.json"
@@ -169,3 +176,136 @@ class PolicyCliTests(DatabaseTestCase):
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertEqual(fetched["revision"], 2)
         self.assertEqual(len(self.repo.list_policy_compilations(self.ctx, "job1")), 2)
+
+    def database_snapshot(self):
+        """Read-only whole-database content snapshot for read-only assertions."""
+        connection = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
+        try:
+            return {name: connection.execute(f"SELECT * FROM {name} ORDER BY 1").fetchall()
+                    for (name,) in connection.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")}
+        finally:
+            connection.close()
+
+    def prepare_java_version(self):
+        """Compile+confirm+version the offline java_backend draft; no publication."""
+        compiled = self.compiled_draft()
+        draft, run = compiled["draft"], compiled["compilation_run"]
+        process, confirmed = self.run_cli("policy-confirm", "--draft-id", draft["draft_id"],
+                                          "--run-id", run["run_id"],
+                                          "--confirm-hash", draft["draft_hash"], scope=True)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        profile = self.repo.create_execution_profile(self.ctx, {"policy_protocol": "job_scoring_policy_v1"})
+        process, sealed = self.run_cli("policy-version", "--draft-id", draft["draft_id"],
+                                       "--run-id", run["run_id"],
+                                       "--confirmation-id", confirmed["confirmation_id"],
+                                       "--execution-profile-id", profile["profile_id"], scope=True)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        return draft, sealed["version"]
+
+    def publish_java_policy(self):
+        """Publish the offline java_backend draft, explicitly bypassing the gate.
+
+        The offline fixture is deliberately quality-BLOCKED (missing positive
+        anchors); these tests exercise the publication mechanics, so the bypass
+        is the documented, explicit decision (see test_policy_compiler gate tests).
+        """
+        draft, version = self.prepare_java_version()
+        process, publication = self.run_cli("policy-publish", "--policy-id", version["policy_id"],
+                                            "--confirm-hash", draft["draft_hash"],
+                                            "--allow-blocked-quality",
+                                            "--override-reason", "offline fixture publication mechanics",
+                                            scope=True)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        return draft, version
+
+    def test_publish_quality_gate_blocks_blocked_policy_by_default(self):
+        # Stage 5.5 close-out: BLOCKED quality refuses publication unless the
+        # caller explicitly bypasses it; the java offline fixture is BLOCKED.
+        draft, version = self.prepare_java_version()
+        process, error = self.run_cli("policy-publish", "--policy-id", version["policy_id"],
+                                      "--confirm-hash", draft["draft_hash"], scope=True)
+        self.assertEqual(process.returncode, 1)
+        self.assertEqual(error["error_type"], "PolicyQualityBlocked")
+        codes = {item["code"] for item in error["quality_issues"]}
+        self.assertIn("MISSING_POSITIVE_ANCHOR", codes)
+        # Nothing was published: the job still has no current policy.
+        process, missing = self.run_cli("policy-current", scope=True)
+        self.assertEqual(process.returncode, 1)
+        self.assertEqual(missing["error_type"], "NotFound")
+
+    def test_validate_scoped_reports_quality_of_current_published_policy_read_only(self):
+        draft, version = self.publish_java_policy()
+        before = self.database_snapshot()
+        process, result = self.run_cli("policy-validate", scope=True)
+        after = self.database_snapshot()
+        self.assertEqual(process.returncode, 0, process.stderr)
+        # The report names exactly which stored version was reviewed.
+        quality = result["quality"]
+        self.assertEqual(quality["policy_id"], version["policy_id"])
+        self.assertEqual(quality["policy_version"], version["policy_version"])
+        self.assertEqual(quality["policy_hash"], version["policy_hash"])
+        self.assertEqual(quality["job_title"], json.loads(draft["policy_json"])["job"]["title"])
+        self.assertEqual(quality["coverage_status"], "DETERMINED")
+        self.assertEqual(quality["semantic_requirement_count"], 6)
+        self.assertEqual(quality["directly_covered_count"], 3)
+        self.assertEqual(quality["broad_only_count"], 0)
+        self.assertEqual(quality["missing_positive_count"], 3)
+        self.assertEqual(quality["unclassified_requirement_count"], 0)
+        self.assertEqual(quality["positive_coverage_rate"], 0.5)
+        self.assertEqual(quality["status"], "BLOCKED")
+        missing = {item["requirement_id"] for item in quality["issues"]
+                   if item["code"] == "MISSING_POSITIVE_ANCHOR"}
+        self.assertEqual(missing, {"spring_route", "quarkus_route", "duty"})
+        self.assertTrue(all(item["suggested_action"] for item in quality["issues"]))
+        # Read-only command: publish diagnostics state and no model calls recorded.
+        self.assertEqual(result["diagnostics"], [])
+        self.assertTrue(result["publishable"])
+        self.assertNotIn("metrics", result)
+        # Nothing in the database changed: no policy edits, no audit rows, no embeddings.
+        self.assertEqual(before, after)
+
+    def test_validate_scoped_requires_a_published_policy(self):
+        process, error = self.run_cli("policy-validate", scope=True)
+        self.assertEqual(process.returncode, 1)
+        self.assertFalse(error["ok"])
+        self.assertEqual(error["error_type"], "NotFound")
+
+    def test_validate_scoped_rejects_unknown_job_with_clear_error(self):
+        process, error = self.run_cli("policy-validate", scope=True, job_id="job-does-not-exist")
+        self.assertEqual(process.returncode, 1)
+        self.assertEqual(error["error_type"], "NotFound")
+
+    def test_validate_scoped_rejects_unauthorized_identities(self):
+        self.repo.create_user(self.system, "test:ungranted-validate", user_id="ungranted")
+        self.repo.add_organization_member(self.ctx, "ungranted")
+        self.publish_java_policy()
+        process, error = self.run_cli("policy-validate", scope=True, user_id="ungranted")
+        self.assertEqual(process.returncode, 1)
+        self.assertEqual(error["error_type"], "PermissionDenied")
+        process, error = self.run_cli("policy-validate", scope=True, org_id="another-org")
+        self.assertEqual(process.returncode, 1)
+        self.assertEqual(error["error_type"], "PermissionDenied")
+
+    def test_validate_requires_file_or_scope_arguments(self):
+        process, error = self.run_cli("policy-validate")
+        self.assertEqual(process.returncode, 1)
+        self.assertFalse(error["ok"])
+        self.assertEqual(error["error_type"], "ValueError")
+        self.assertIn("requires", error["message"])
+
+    def test_validate_file_mode_outputs_quality_without_touching_any_database(self):
+        path = self.write_json("standalone.json", offline_policy("java_backend"))
+        before = self.database_snapshot()
+        process, result = self.run_cli("policy-validate", "--policy", path)
+        after = self.database_snapshot()
+        self.assertEqual(process.returncode, 0, process.stderr)
+        quality = result["quality"]
+        self.assertIsNone(quality["policy_id"])
+        self.assertIsNone(quality["policy_version"])
+        self.assertEqual(quality["policy_hash"], policy_content_hash(offline_policy("java_backend")))
+        self.assertEqual(quality["semantic_requirement_count"], 6)
+        self.assertEqual(quality["missing_positive_count"], 3)
+        self.assertEqual(quality["status"], "BLOCKED")
+        self.assertEqual(result["publishable"], True)
+        self.assertEqual(before, after)

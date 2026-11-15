@@ -167,7 +167,9 @@ class PolicyNormalizationIntegrationTests(DatabaseTestCase):
         profile = self.repo.create_execution_profile(self.ctx, {})
         sealed = service.create_version(self.ctx, "job1", draft["draft_id"], run["run_id"],
                                         confirmation["confirmation_id"], execution_profile_id=profile["profile_id"])
-        service.publish_version(self.ctx, "job1", sealed["version"]["policy_id"], confirmation_hash=draft["draft_hash"])
+        service.publish_version(self.ctx, "job1", sealed["version"]["policy_id"], confirmation_hash=draft["draft_hash"],
+                                enforce_quality_gate=False,
+                                quality_override_reason="normalization mechanics; quality covered by gate tests")
         self.assertEqual(json.loads(self.repo.get_current_policy(self.ctx, "job1")["policy_json"]), saved)
 
     def test_raw_unknown_alias_cannot_bypass_validation_via_repository_success_flag(self):

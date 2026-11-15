@@ -1,0 +1,213 @@
+{
+  "mode": "offline-acceptance (mock LLM, deterministic vectors, temp database)",
+  "tier3_cli": "python main.py tier3-review ... --persist (offline mock)",
+  "cases": [
+    {
+      "case_id": "ai_automation",
+      "job_id": "job-ai_automation",
+      "policy_id": "89c5dcb8d4cc45ff9da96fd947c24b31",
+      "policy_version": 1,
+      "policy_hash": "ff8c4efae5aca05e54aff0cf1e3945afb0bdf3ffc49ba73f9c24fc4e50f540cb",
+      "tier0_1": {
+        "hard_filter_status": "PASS",
+        "scoring_status": "BELOW_COARSE",
+        "preliminary_score": 51.0,
+        "dimensions": [
+          "delivery",
+          "reliability",
+          "efficiency",
+          "requirements"
+        ]
+      },
+      "tier2": {
+        "semantic_status": "SCORED",
+        "semantic_score": 100.0,
+        "semantic_coverage": 0.775,
+        "dimensions": [
+          "delivery",
+          "reliability",
+          "efficiency",
+          "requirements"
+        ]
+      },
+      "tier3": {
+        "returncode": 0,
+        "total_score": 82.9,
+        "routing_suggestion": "HUMAN_REVIEW",
+        "dimensions": [
+          {
+            "dimension_id": "delivery",
+            "label": "应用交付",
+            "weight": 0.5,
+            "score": 88.0,
+            "evidence_count": 1
+          },
+          {
+            "dimension_id": "reliability",
+            "label": "程序可靠性",
+            "weight": 0.25,
+            "score": 82.0,
+            "evidence_count": 1
+          },
+          {
+            "dimension_id": "efficiency",
+            "label": "流程提效",
+            "weight": 0.15,
+            "score": 76.0,
+            "evidence_count": 1
+          },
+          {
+            "dimension_id": "requirements",
+            "label": "需求理解",
+            "weight": 0.1,
+            "score": 70.0,
+            "evidence_count": 1
+          }
+        ],
+        "attempt_status": "SUCCEEDED",
+        "missing_evidence": []
+      }
+    },
+    {
+      "case_id": "java_backend",
+      "job_id": "job-java_backend",
+      "policy_id": "e345de1a592d46428ef3c16c7926f82a",
+      "policy_version": 1,
+      "policy_hash": "e7a4d054aa628d62bcceed70fa32a57f4ceed80c8f9eee5027f83b801f2d1c03",
+      "tier0_1": {
+        "hard_filter_status": "PASS",
+        "scoring_status": "READY_FOR_DEEP",
+        "preliminary_score": 60.59,
+        "dimensions": [
+          "service_design",
+          "data_correctness",
+          "troubleshooting",
+          "testing_quality",
+          "communication"
+        ]
+      },
+      "tier2": {
+        "semantic_status": "PARTIAL",
+        "semantic_score": 100.0,
+        "semantic_coverage": 0.6,
+        "dimensions": [
+          "service_design",
+          "data_correctness",
+          "troubleshooting",
+          "testing_quality",
+          "communication"
+        ]
+      },
+      "tier3": {
+        "returncode": 0,
+        "total_score": 79.9,
+        "routing_suggestion": "HUMAN_REVIEW",
+        "dimensions": [
+          {
+            "dimension_id": "service_design",
+            "label": "服务设计",
+            "weight": 0.3,
+            "score": 88.0,
+            "evidence_count": 1
+          },
+          {
+            "dimension_id": "data_correctness",
+            "label": "数据正确性",
+            "weight": 0.3,
+            "score": 82.0,
+            "evidence_count": 1
+          },
+          {
+            "dimension_id": "troubleshooting",
+            "label": "故障排查",
+            "weight": 0.2,
+            "score": 76.0,
+            "evidence_count": 1
+          },
+          {
+            "dimension_id": "testing_quality",
+            "label": "测试质量",
+            "weight": 0.15,
+            "score": 70.0,
+            "evidence_count": 1
+          },
+          {
+            "dimension_id": "communication",
+            "label": "业务沟通",
+            "weight": 0.05,
+            "score": 64.0,
+            "evidence_count": 1
+          }
+        ],
+        "attempt_status": "SUCCEEDED",
+        "missing_evidence": []
+      }
+    },
+    {
+      "case_id": "b2b_sales",
+      "job_id": "job-b2b_sales",
+      "policy_id": "f450da4143214619afd94c0d3a8883a2",
+      "policy_version": 1,
+      "policy_hash": "195a30e31ad011465315bc5574f7d0b3cd4fa3c15ec3080b5e5cdd807e6882cc",
+      "tier0_1": {
+        "hard_filter_status": "PASS",
+        "scoring_status": "READY_FOR_DEEP",
+        "preliminary_score": 49.9,
+        "dimensions": [
+          "prospecting",
+          "discovery_solution",
+          "commercial_progress",
+          "collections"
+        ]
+      },
+      "tier2": {
+        "semantic_status": "POLICY_ANCHOR_MISSING",
+        "semantic_score": 100.0,
+        "semantic_coverage": 0.55,
+        "dimensions": [
+          "prospecting",
+          "discovery_solution",
+          "commercial_progress",
+          "collections"
+        ]
+      },
+      "tier3": {
+        "returncode": 0,
+        "total_score": 79.0,
+        "routing_suggestion": "HUMAN_REVIEW",
+        "dimensions": [
+          {
+            "dimension_id": "prospecting",
+            "label": "客户开拓",
+            "weight": 0.25,
+            "score": 88.0,
+            "evidence_count": 1
+          },
+          {
+            "dimension_id": "discovery_solution",
+            "label": "需求与方案沟通",
+            "weight": 0.2,
+            "score": 82.0,
+            "evidence_count": 1
+          },
+          {
+            "dimension_id": "commercial_progress",
+            "label": "商务推进",
+            "weight": 0.35,
+            "score": 76.0,
+            "evidence_count": 1
+          },
+          {
+            "dimension_id": "collections",
+            "label": "回款管理",
+            "weight": 0.2,
+            "score": 70.0,
+            "evidence_count": 1
+          }
+        ],
+        "attempt_status": "SUCCEEDED",
+        "missing_evidence": []
+      }
+    }
+  ]
+}

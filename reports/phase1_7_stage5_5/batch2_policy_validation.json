@@ -1,0 +1,592 @@
+{
+  "scan_version": "stage5.5-batch2-cli-regression-v1",
+  "executed_at": "2026-11-15T06:48:27.203+00:00",
+  "mode": "read-only policy-validate file mode; no database, no model calls",
+  "command": "python main.py policy-validate --policy <policy.json>",
+  "records": [
+    {
+      "case_id": "ai_automation",
+      "policy_file": "reports\\phase1_7_stage3\\policies\\ai_automation.json",
+      "returncode": 0,
+      "pydantic_valid": true,
+      "publishable": true,
+      "quality": {
+        "validator_version": "policy-quality-validator-v1.2",
+        "policy_schema_version": "job_scoring_policy_v1",
+        "policy_id": null,
+        "policy_version": null,
+        "policy_hash": "a766427f40e7dd741d0bb3c4d1805210d3f90fe4db7c580949fbba57c7f4c457",
+        "job_title": "AI自动化应用开发工程师",
+        "status": "BLOCKED",
+        "coverage_status": "DETERMINED",
+        "semantic_requirement_count": 10,
+        "directly_covered_count": 0,
+        "broad_only_count": 7,
+        "missing_positive_count": 3,
+        "unclassified_requirement_count": 0,
+        "orphan_group_count": 0,
+        "positive_coverage_rate": 0.0,
+        "dimension_coverage": [
+          {
+            "dimension_id": "dim_delivery",
+            "requirement_ids": [
+              "req_py_01",
+              "alt_360e9d0fcbe7eff84718d116",
+              "alt_5861852725e342467607aac3",
+              "req_route_a_rag_01",
+              "alt_38a80e9c81143eb55a79ffb5",
+              "alt_3ebe7802549a648b3fe141ef"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 6,
+            "direct_covered": 0,
+            "broad_only": 5,
+            "missing_positive": 1,
+            "direct_coverage_rate": 0.0
+          },
+          {
+            "dimension_id": "dim_reliability",
+            "requirement_ids": [
+              "req_exc_01",
+              "req_api_test_01",
+              "req_route_b_retry_01"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 3,
+            "direct_covered": 0,
+            "broad_only": 2,
+            "missing_positive": 1,
+            "direct_coverage_rate": 0.0
+          },
+          {
+            "dimension_id": "dim_efficiency",
+            "requirement_ids": [
+              "req_route_a_rag_01",
+              "alt_38a80e9c81143eb55a79ffb5",
+              "alt_3ebe7802549a648b3fe141ef",
+              "req_n8n_01"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 4,
+            "direct_covered": 0,
+            "broad_only": 2,
+            "missing_positive": 2,
+            "direct_coverage_rate": 0.0
+          },
+          {
+            "dimension_id": "dim_understanding",
+            "requirement_ids": [
+              "req_py_01",
+              "alt_360e9d0fcbe7eff84718d116",
+              "alt_5861852725e342467607aac3",
+              "alt_38a80e9c81143eb55a79ffb5",
+              "alt_3ebe7802549a648b3fe141ef"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 5,
+            "direct_covered": 0,
+            "broad_only": 5,
+            "missing_positive": 0,
+            "direct_coverage_rate": 0.0
+          }
+        ],
+        "issues": [
+          {
+            "code": "MISSING_POSITIVE_ANCHOR",
+            "severity": "ERROR",
+            "message": "该原子要求被声明为Tier2语义评价，却没有正向语义锚点；负向锚点不能替代正向证据",
+            "requirement_id": "req_route_a_rag_01",
+            "group_id": null,
+            "anchor_ids": [],
+            "dimension_ids": [
+              "dim_delivery",
+              "dim_efficiency"
+            ],
+            "suggested_action": "为该原子要求补充一条仅关联本要求的 POSITIVE 语义锚点；负向锚点只能作诊断，不能证明能力存在"
+          },
+          {
+            "code": "MISSING_POSITIVE_ANCHOR",
+            "severity": "ERROR",
+            "message": "该原子要求被声明为Tier2语义评价，却没有正向语义锚点；负向锚点不能替代正向证据",
+            "requirement_id": "req_api_test_01",
+            "group_id": null,
+            "anchor_ids": [],
+            "dimension_ids": [
+              "dim_reliability"
+            ],
+            "suggested_action": "为该原子要求补充一条仅关联本要求的 POSITIVE 语义锚点；负向锚点只能作诊断，不能证明能力存在"
+          },
+          {
+            "code": "MISSING_POSITIVE_ANCHOR",
+            "severity": "ERROR",
+            "message": "该原子要求被声明为Tier2语义评价，却没有正向语义锚点；负向锚点不能替代正向证据",
+            "requirement_id": "req_n8n_01",
+            "group_id": null,
+            "anchor_ids": [],
+            "dimension_ids": [
+              "dim_efficiency"
+            ],
+            "suggested_action": "为该原子要求补充一条仅关联本要求的 POSITIVE 语义锚点；负向锚点只能作诊断，不能证明能力存在"
+          },
+          {
+            "code": "BROAD_ONLY_POSITIVE_ANCHOR",
+            "severity": "WARNING",
+            "message": "该要求仅有同时关联多个原子要求的宽泛正向锚点，一次匹配不能独立证明本要求",
+            "requirement_id": "req_py_01",
+            "group_id": null,
+            "anchor_ids": [
+              "sa_pos_delivery"
+            ],
+            "dimension_ids": [
+              "dim_delivery",
+              "dim_understanding"
+            ],
+            "suggested_action": "补充仅关联本要求的正向锚点，或由HR确认拆分共享锚点；共享相似度不能独立证明本要求"
+          },
+          {
+            "code": "BROAD_ONLY_POSITIVE_ANCHOR",
+            "severity": "WARNING",
+            "message": "该要求仅有同时关联多个原子要求的宽泛正向锚点，一次匹配不能独立证明本要求",
+            "requirement_id": "alt_360e9d0fcbe7eff84718d116",
+            "group_id": null,
+            "anchor_ids": [
+              "sa_pos_delivery"
+            ],
+            "dimension_ids": [
+              "dim_delivery",
+              "dim_understanding"
+            ],
+            "suggested_action": "补充仅关联本要求的正向锚点，或由HR确认拆分共享锚点；共享相似度不能独立证明本要求"
+          },
+          {
+            "code": "BROAD_ONLY_POSITIVE_ANCHOR",
+            "severity": "WARNING",
+            "message": "该要求仅有同时关联多个原子要求的宽泛正向锚点，一次匹配不能独立证明本要求",
+            "requirement_id": "alt_5861852725e342467607aac3",
+            "group_id": null,
+            "anchor_ids": [
+              "sa_pos_delivery"
+            ],
+            "dimension_ids": [
+              "dim_delivery",
+              "dim_understanding"
+            ],
+            "suggested_action": "补充仅关联本要求的正向锚点，或由HR确认拆分共享锚点；共享相似度不能独立证明本要求"
+          },
+          {
+            "code": "BROAD_ONLY_POSITIVE_ANCHOR",
+            "severity": "WARNING",
+            "message": "该要求仅有同时关联多个原子要求的宽泛正向锚点，一次匹配不能独立证明本要求",
+            "requirement_id": "alt_38a80e9c81143eb55a79ffb5",
+            "group_id": null,
+            "anchor_ids": [
+              "sa_pos_delivery"
+            ],
+            "dimension_ids": [
+              "dim_delivery",
+              "dim_efficiency",
+              "dim_understanding"
+            ],
+            "suggested_action": "补充仅关联本要求的正向锚点，或由HR确认拆分共享锚点；共享相似度不能独立证明本要求"
+          },
+          {
+            "code": "BROAD_ONLY_POSITIVE_ANCHOR",
+            "severity": "WARNING",
+            "message": "该要求仅有同时关联多个原子要求的宽泛正向锚点，一次匹配不能独立证明本要求",
+            "requirement_id": "alt_3ebe7802549a648b3fe141ef",
+            "group_id": null,
+            "anchor_ids": [
+              "sa_pos_delivery"
+            ],
+            "dimension_ids": [
+              "dim_delivery",
+              "dim_efficiency",
+              "dim_understanding"
+            ],
+            "suggested_action": "补充仅关联本要求的正向锚点，或由HR确认拆分共享锚点；共享相似度不能独立证明本要求"
+          },
+          {
+            "code": "BROAD_ONLY_POSITIVE_ANCHOR",
+            "severity": "WARNING",
+            "message": "该要求仅有同时关联多个原子要求的宽泛正向锚点，一次匹配不能独立证明本要求",
+            "requirement_id": "req_exc_01",
+            "group_id": null,
+            "anchor_ids": [
+              "sa_pos_reliability"
+            ],
+            "dimension_ids": [
+              "dim_reliability"
+            ],
+            "suggested_action": "补充仅关联本要求的正向锚点，或由HR确认拆分共享锚点；共享相似度不能独立证明本要求"
+          },
+          {
+            "code": "BROAD_ONLY_POSITIVE_ANCHOR",
+            "severity": "WARNING",
+            "message": "该要求仅有同时关联多个原子要求的宽泛正向锚点，一次匹配不能独立证明本要求",
+            "requirement_id": "req_route_b_retry_01",
+            "group_id": null,
+            "anchor_ids": [
+              "sa_pos_reliability"
+            ],
+            "dimension_ids": [
+              "dim_reliability"
+            ],
+            "suggested_action": "补充仅关联本要求的正向锚点，或由HR确认拆分共享锚点；共享相似度不能独立证明本要求"
+          }
+        ]
+      },
+      "batch2_issues": []
+    },
+    {
+      "case_id": "java_backend",
+      "policy_file": "reports\\phase1_7_stage3\\policies\\java_backend.json",
+      "returncode": 0,
+      "pydantic_valid": true,
+      "publishable": true,
+      "quality": {
+        "validator_version": "policy-quality-validator-v1.2",
+        "policy_schema_version": "job_scoring_policy_v1",
+        "policy_id": null,
+        "policy_version": null,
+        "policy_hash": "4c5607139fdf35a1bd7e6ff900fde64dc4b1b9051f28b5fab72e61dc3efb4a92",
+        "job_title": "Java后端开发工程师",
+        "status": "BLOCKED",
+        "coverage_status": "DETERMINED",
+        "semantic_requirement_count": 5,
+        "directly_covered_count": 0,
+        "broad_only_count": 2,
+        "missing_positive_count": 3,
+        "unclassified_requirement_count": 0,
+        "orphan_group_count": 0,
+        "positive_coverage_rate": 0.0,
+        "dimension_coverage": [
+          {
+            "dimension_id": "dim_service_design",
+            "requirement_ids": [
+              "req_java_dev",
+              "req_spring_boot",
+              "req_quarkus"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 3,
+            "direct_covered": 0,
+            "broad_only": 1,
+            "missing_positive": 2,
+            "direct_coverage_rate": 0.0
+          },
+          {
+            "dimension_id": "dim_data_correctness",
+            "requirement_ids": [
+              "req_sql_txn"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 1,
+            "direct_covered": 0,
+            "broad_only": 1,
+            "missing_positive": 0,
+            "direct_coverage_rate": 0.0
+          },
+          {
+            "dimension_id": "dim_troubleshooting",
+            "requirement_ids": [
+              "req_java_dev"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 1,
+            "direct_covered": 0,
+            "broad_only": 1,
+            "missing_positive": 0,
+            "direct_coverage_rate": 0.0
+          },
+          {
+            "dimension_id": "dim_test_quality",
+            "requirement_ids": [
+              "req_auto_test"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 1,
+            "direct_covered": 0,
+            "broad_only": 0,
+            "missing_positive": 1,
+            "direct_coverage_rate": 0.0
+          },
+          {
+            "dimension_id": "dim_communication",
+            "requirement_ids": [
+              "req_java_dev"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 1,
+            "direct_covered": 0,
+            "broad_only": 1,
+            "missing_positive": 0,
+            "direct_coverage_rate": 0.0
+          }
+        ],
+        "issues": [
+          {
+            "code": "MISSING_POSITIVE_ANCHOR",
+            "severity": "ERROR",
+            "message": "该原子要求被声明为Tier2语义评价，却没有正向语义锚点；负向锚点不能替代正向证据",
+            "requirement_id": "req_spring_boot",
+            "group_id": null,
+            "anchor_ids": [],
+            "dimension_ids": [
+              "dim_service_design"
+            ],
+            "suggested_action": "为该原子要求补充一条仅关联本要求的 POSITIVE 语义锚点；负向锚点只能作诊断，不能证明能力存在"
+          },
+          {
+            "code": "MISSING_POSITIVE_ANCHOR",
+            "severity": "ERROR",
+            "message": "该原子要求被声明为Tier2语义评价，却没有正向语义锚点；负向锚点不能替代正向证据",
+            "requirement_id": "req_quarkus",
+            "group_id": null,
+            "anchor_ids": [],
+            "dimension_ids": [
+              "dim_service_design"
+            ],
+            "suggested_action": "为该原子要求补充一条仅关联本要求的 POSITIVE 语义锚点；负向锚点只能作诊断，不能证明能力存在"
+          },
+          {
+            "code": "MISSING_POSITIVE_ANCHOR",
+            "severity": "ERROR",
+            "message": "该原子要求被声明为Tier2语义评价，却没有正向语义锚点；负向锚点不能替代正向证据",
+            "requirement_id": "req_auto_test",
+            "group_id": null,
+            "anchor_ids": [],
+            "dimension_ids": [
+              "dim_test_quality"
+            ],
+            "suggested_action": "为该原子要求补充一条仅关联本要求的 POSITIVE 语义锚点；负向锚点只能作诊断，不能证明能力存在"
+          },
+          {
+            "code": "BROAD_ONLY_POSITIVE_ANCHOR",
+            "severity": "WARNING",
+            "message": "该要求仅有同时关联多个原子要求的宽泛正向锚点，一次匹配不能独立证明本要求",
+            "requirement_id": "req_java_dev",
+            "group_id": null,
+            "anchor_ids": [
+              "sa_pos_order_payment",
+              "sa_pos_perf_tuning"
+            ],
+            "dimension_ids": [
+              "dim_communication",
+              "dim_service_design",
+              "dim_troubleshooting"
+            ],
+            "suggested_action": "补充仅关联本要求的正向锚点，或由HR确认拆分共享锚点；共享相似度不能独立证明本要求"
+          },
+          {
+            "code": "BROAD_ONLY_POSITIVE_ANCHOR",
+            "severity": "WARNING",
+            "message": "该要求仅有同时关联多个原子要求的宽泛正向锚点，一次匹配不能独立证明本要求",
+            "requirement_id": "req_sql_txn",
+            "group_id": null,
+            "anchor_ids": [
+              "sa_pos_order_payment",
+              "sa_pos_perf_tuning"
+            ],
+            "dimension_ids": [
+              "dim_data_correctness"
+            ],
+            "suggested_action": "补充仅关联本要求的正向锚点，或由HR确认拆分共享锚点；共享相似度不能独立证明本要求"
+          }
+        ]
+      },
+      "batch2_issues": []
+    },
+    {
+      "case_id": "b2b_sales",
+      "policy_file": "reports\\phase1_7_stage3\\policies\\b2b_sales.json",
+      "returncode": 0,
+      "pydantic_valid": true,
+      "publishable": true,
+      "quality": {
+        "validator_version": "policy-quality-validator-v1.2",
+        "policy_schema_version": "job_scoring_policy_v1",
+        "policy_id": null,
+        "policy_version": null,
+        "policy_hash": "d2cbfd2319c26008c824f3a1c0ed6afeaaa916dc26b39b721c5e9634520038ac",
+        "job_title": "企业客户销售经理",
+        "status": "BLOCKED",
+        "coverage_status": "DETERMINED",
+        "semantic_requirement_count": 6,
+        "directly_covered_count": 1,
+        "broad_only_count": 4,
+        "missing_positive_count": 1,
+        "unclassified_requirement_count": 2,
+        "orphan_group_count": 1,
+        "positive_coverage_rate": 0.166667,
+        "dimension_coverage": [
+          {
+            "dimension_id": "dim_customer_dev",
+            "requirement_ids": [
+              "req_exp_direct_sales",
+              "req_exp_channel_sales",
+              "req_skill_interview"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 3,
+            "direct_covered": 0,
+            "broad_only": 2,
+            "missing_positive": 1,
+            "direct_coverage_rate": 0.0
+          },
+          {
+            "dimension_id": "dim_solution_comm",
+            "requirement_ids": [
+              "req_skill_interview"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 1,
+            "direct_covered": 0,
+            "broad_only": 0,
+            "missing_positive": 1,
+            "direct_coverage_rate": 0.0
+          },
+          {
+            "dimension_id": "dim_commercial_push",
+            "requirement_ids": [
+              "req_skill_negotiation",
+              "req_evidence_deal"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 2,
+            "direct_covered": 1,
+            "broad_only": 1,
+            "missing_positive": 0,
+            "direct_coverage_rate": 0.5
+          },
+          {
+            "dimension_id": "dim_collection_mgmt",
+            "requirement_ids": [
+              "req_skill_funnel",
+              "req_evidence_deal"
+            ],
+            "invalid_requirement_ids": [],
+            "semantic_requirement_count": 2,
+            "direct_covered": 0,
+            "broad_only": 2,
+            "missing_positive": 0,
+            "direct_coverage_rate": 0.0
+          }
+        ],
+        "issues": [
+          {
+            "code": "MISSING_POSITIVE_ANCHOR",
+            "severity": "ERROR",
+            "message": "该原子要求被声明为Tier2语义评价，却没有正向语义锚点；负向锚点不能替代正向证据",
+            "requirement_id": "req_skill_interview",
+            "group_id": null,
+            "anchor_ids": [],
+            "dimension_ids": [
+              "dim_customer_dev",
+              "dim_solution_comm"
+            ],
+            "suggested_action": "为该原子要求补充一条仅关联本要求的 POSITIVE 语义锚点；负向锚点只能作诊断，不能证明能力存在"
+          },
+          {
+            "code": "BROAD_ONLY_POSITIVE_ANCHOR",
+            "severity": "WARNING",
+            "message": "该要求仅有同时关联多个原子要求的宽泛正向锚点，一次匹配不能独立证明本要求",
+            "requirement_id": "req_exp_direct_sales",
+            "group_id": null,
+            "anchor_ids": [
+              "sa_pos_direct_deal"
+            ],
+            "dimension_ids": [
+              "dim_customer_dev"
+            ],
+            "suggested_action": "补充仅关联本要求的正向锚点，或由HR确认拆分共享锚点；共享相似度不能独立证明本要求"
+          },
+          {
+            "code": "BROAD_ONLY_POSITIVE_ANCHOR",
+            "severity": "WARNING",
+            "message": "该要求仅有同时关联多个原子要求的宽泛正向锚点，一次匹配不能独立证明本要求",
+            "requirement_id": "req_exp_channel_sales",
+            "group_id": null,
+            "anchor_ids": [
+              "sa_pos_channel_partner"
+            ],
+            "dimension_ids": [
+              "dim_customer_dev"
+            ],
+            "suggested_action": "补充仅关联本要求的正向锚点，或由HR确认拆分共享锚点；共享相似度不能独立证明本要求"
+          },
+          {
+            "code": "BROAD_ONLY_POSITIVE_ANCHOR",
+            "severity": "WARNING",
+            "message": "该要求仅有同时关联多个原子要求的宽泛正向锚点，一次匹配不能独立证明本要求",
+            "requirement_id": "req_evidence_deal",
+            "group_id": null,
+            "anchor_ids": [
+              "sa_pos_direct_deal"
+            ],
+            "dimension_ids": [
+              "dim_collection_mgmt",
+              "dim_commercial_push"
+            ],
+            "suggested_action": "补充仅关联本要求的正向锚点，或由HR确认拆分共享锚点；共享相似度不能独立证明本要求"
+          },
+          {
+            "code": "BROAD_ONLY_POSITIVE_ANCHOR",
+            "severity": "WARNING",
+            "message": "该要求仅有同时关联多个原子要求的宽泛正向锚点，一次匹配不能独立证明本要求",
+            "requirement_id": "req_skill_funnel",
+            "group_id": null,
+            "anchor_ids": [
+              "sa_pos_channel_partner"
+            ],
+            "dimension_ids": [
+              "dim_collection_mgmt"
+            ],
+            "suggested_action": "补充仅关联本要求的正向锚点，或由HR确认拆分共享锚点；共享相似度不能独立证明本要求"
+          },
+          {
+            "code": "UNCLASSIFIED_REQUIREMENT_SCOPE",
+            "severity": "WARNING",
+            "message": "该要求未被任何评价层结构引用（无维度投影/关键词组/硬过滤），无法确定评价范围",
+            "requirement_id": "req_pref_crm",
+            "group_id": null,
+            "anchor_ids": [],
+            "dimension_ids": [],
+            "suggested_action": "人工核对该要求应属 Tier0/Tier1/Tier2 哪一层，补齐对应投影（硬过滤/关键词组/评分维度）或明确人工处理方式"
+          },
+          {
+            "code": "UNCLASSIFIED_REQUIREMENT_SCOPE",
+            "severity": "WARNING",
+            "message": "该要求未被任何评价层结构引用（无维度投影/关键词组/硬过滤），无法确定评价范围",
+            "requirement_id": "req_pref_english",
+            "group_id": null,
+            "anchor_ids": [],
+            "dimension_ids": [],
+            "suggested_action": "人工核对该要求应属 Tier0/Tier1/Tier2 哪一层，补齐对应投影（硬过滤/关键词组/评分维度）或明确人工处理方式"
+          },
+          {
+            "code": "ORPHAN_REQUIREMENT_GROUP",
+            "severity": "WARNING",
+            "message": "该组的全部叶子要求未被任何评价层（硬过滤/关键词组/评分维度）引用，组合语义从未被执行",
+            "requirement_id": null,
+            "group_id": "grp_bonus_items",
+            "anchor_ids": [],
+            "dimension_ids": [],
+            "suggested_action": "为该组的成员补齐硬过滤/关键词组/评分维度引用，或删除该死结构组；其 ALL/ANY 组合语义当前从未被执行"
+          }
+        ]
+      },
+      "batch2_issues": [
+        {
+          "code": "ORPHAN_REQUIREMENT_GROUP",
+          "severity": "WARNING",
+          "message": "该组的全部叶子要求未被任何评价层（硬过滤/关键词组/评分维度）引用，组合语义从未被执行",
+          "requirement_id": null,
+          "group_id": "grp_bonus_items",
+          "anchor_ids": [],
+          "dimension_ids": [],
+          "suggested_action": "为该组的成员补齐硬过滤/关键词组/评分维度引用，或删除该死结构组；其 ALL/ANY 组合语义当前从未被执行"
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,6 @@
 """Organization bootstrap, memberships, private jobs and explicit grants."""
+from contextlib import closing
+
 from storage.models import AccessContext
 from .base import BaseRepository, PERMISSIONS, uid, utcnow
 
@@ -23,6 +25,21 @@ class IdentityRepository(BaseRepository):
                 VALUES(?,?,'ORG_ADMIN')""", (org_id, owner_user_id))
             self.audit(connection, AccessContext(org_id, owner_user_id), "ORGANIZATION_CREATED", org_id)
             return self.one(connection, "SELECT * FROM organizations WHERE org_id=?", (org_id,))
+
+    def list_local_identities(self):
+        """LOCAL DEMO ONLY: enumerate active orgs/members for the mock selector.
+
+        Never expose this over a real deployment; the API only registers the
+        corresponding route in deterministic mode with trusted headers enabled.
+        """
+        with closing(self.database.connect()) as connection:
+            rows = connection.execute("""SELECT m.org_id, m.user_id, m.org_role
+                FROM organization_memberships m
+                JOIN organizations o ON o.org_id=m.org_id AND o.state='ACTIVE'
+                JOIN users u ON u.user_id=m.user_id AND u.state='ACTIVE'
+                WHERE m.state='ACTIVE'
+                ORDER BY m.org_id, m.org_role DESC, m.user_id""").fetchall()
+            return [dict(row) for row in rows]
 
     def add_organization_member(self, context, user_id, *, org_role="HR"):
         with self.tx(context) as connection:

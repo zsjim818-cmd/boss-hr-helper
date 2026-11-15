@@ -11,7 +11,8 @@ import httpx2
 from openai import APITimeoutError
 
 from config.policy_compiler import CompilationError, JobPolicyCompiler
-from config.policy_service import PolicyCompilerService
+from config.policy_service import PolicyCompilerService, PolicyQualityBlocked
+from engine.policy_validator import POLICY_VALIDATOR_VERSION
 from storage.models import AccessContext
 from storage.repositories import NotFound, PermissionDenied
 from tests.database_support import DatabaseTestCase
@@ -214,7 +215,9 @@ class PolicyCompilerServiceTests(DatabaseTestCase):
         self.assertEqual(version["source_draft_hash"], draft["draft_hash"])
         with self.assertRaises(NotFound):
             self.repo.get_current_policy(self.ctx, "job1")
-        service.publish_version(self.ctx, "job1", version["policy_id"], confirmation_hash=draft["draft_hash"])
+        service.publish_version(self.ctx, "job1", version["policy_id"], confirmation_hash=draft["draft_hash"],
+                                enforce_quality_gate=False,
+                                quality_override_reason="offline fixture is quality-BLOCKED by design; publication mechanics coverage")  # explicit audited bypass
         current = self.repo.get_current_policy(self.ctx, "job1")
         self.assertEqual(current["policy_id"], version["policy_id"])
         self.assertEqual(json.loads(current["policy_json"]), json.loads(draft["policy_json"]))
@@ -238,6 +241,139 @@ class PolicyCompilerServiceTests(DatabaseTestCase):
             service.compile_draft(self.ctx, "job1", {**policy_input("ai_automation"), "job_title": ""})
         self.assertEqual(client.requests, [])
         self.assertEqual(self.repo.list_policy_compilations(self.ctx, "job1"), [])
+
+    def test_compile_draft_and_edit_report_compile_time_quality_review(self):
+        # Stage 5.5 Batch 2: the structural quality review runs where the
+        # compiler actually produces a Policy, report-only (no publish gate).
+        service, _ = self.service("java_backend")
+        compiled = service.compile_draft(self.ctx, "job1", policy_input("java_backend"))
+        quality = compiled["quality"]
+        self.assertEqual(quality["validator_version"], POLICY_VALIDATOR_VERSION)
+        self.assertEqual(quality["semantic_requirement_count"], 6)
+        self.assertEqual(quality["missing_positive_count"], 3)
+        self.assertEqual(quality["orphan_group_count"], 0)
+        self.assertIn("issues", quality)
+        self.assertEqual(compiled["publishable"], True)  # quality never gates here
+        draft, run = compiled["draft"], compiled["compilation_run"]
+        changed = json.loads(draft["policy_json"])
+        changed["scoring_dimensions"][0]["description"] += "；HR补充具体验收标准。"
+        updated = service.update_draft(self.ctx, "job1", draft["draft_id"], changed,
+                                       expected_revision=1, parent_run_id=run["run_id"])
+        self.assertEqual(updated["quality"]["validator_version"], POLICY_VALIDATOR_VERSION)
+        self.assertEqual(updated["quality"]["semantic_requirement_count"], 6)
+
+    def test_publish_quality_gate_blocks_blocked_policy_by_default(self):
+        # Stage 5.5 close-out: BLOCKED quality refuses publication with the
+        # explicit diagnostics; nothing is written to policy_publications.
+        service, _ = self.service("java_backend")
+        compiled = service.compile_draft(self.ctx, "job1", policy_input("java_backend"))
+        draft, run = compiled["draft"], compiled["compilation_run"]
+        confirmation = service.confirm_draft(self.ctx, "job1", draft["draft_id"], run["run_id"],
+                                             confirmation_hash=draft["draft_hash"])
+        profile = self.repo.create_execution_profile(self.ctx, {"policy_protocol": "job_scoring_policy_v1"})
+        sealed = service.create_version(self.ctx, "job1", draft["draft_id"], run["run_id"],
+                                        confirmation["confirmation_id"], execution_profile_id=profile["profile_id"])
+        with self.assertRaises(PolicyQualityBlocked) as captured:
+            service.publish_version(self.ctx, "job1", sealed["version"]["policy_id"],
+                                    confirmation_hash=draft["draft_hash"])
+        self.assertIn("MISSING_POSITIVE_ANCHOR",
+                      {item.code for item in captured.exception.issues})
+        # The sealed version exists, but nothing was published.
+        with self.assertRaises(NotFound):
+            self.repo.get_current_policy(self.ctx, "job1")
+
+    def test_publish_quality_gate_passes_a_clean_policy(self):
+        from tests.policy_fixtures import offline_policy
+        from tests.test_policy_validator import _add_positive
+        clean = offline_policy("java_backend")
+        for requirement_id in ("testing", "duty", "spring_route", "quarkus_route"):
+            _add_positive(clean, "fix_" + requirement_id, requirement_id)
+        client = RecordedCompilerClient(clean)
+        compiler = JobPolicyCompiler(client=client, model_name="explicit-offline-test-model",
+                                     timeout_seconds=45, max_tokens=8192)
+        service = PolicyCompilerService(self.repo, compiler)
+        compiled = service.compile_draft(self.ctx, "job1", policy_input("java_backend"))
+        self.assertEqual(compiled["quality"]["status"], "PASS")
+        draft, run = compiled["draft"], compiled["compilation_run"]
+        confirmation = service.confirm_draft(self.ctx, "job1", draft["draft_id"], run["run_id"],
+                                             confirmation_hash=draft["draft_hash"])
+        profile = self.repo.create_execution_profile(self.ctx, {"policy_protocol": "job_scoring_policy_v1"})
+        sealed = service.create_version(self.ctx, "job1", draft["draft_id"], run["run_id"],
+                                        confirmation["confirmation_id"], execution_profile_id=profile["profile_id"])
+        publication = service.publish_version(self.ctx, "job1", sealed["version"]["policy_id"],
+                                              confirmation_hash=draft["draft_hash"])
+        self.assertEqual(publication["policy_id"], sealed["version"]["policy_id"])
+
+    def test_publish_quality_gate_bypass_requires_explicit_reason(self):
+        service, _ = self.service("java_backend")
+        compiled = service.compile_draft(self.ctx, "job1", policy_input("java_backend"))
+        draft, run = compiled["draft"], compiled["compilation_run"]
+        confirmation = service.confirm_draft(self.ctx, "job1", draft["draft_id"], run["run_id"],
+                                             confirmation_hash=draft["draft_hash"])
+        profile = self.repo.create_execution_profile(self.ctx, {"policy_protocol": "job_scoring_policy_v1"})
+        sealed = service.create_version(self.ctx, "job1", draft["draft_id"], run["run_id"],
+                                        confirmation["confirmation_id"], execution_profile_id=profile["profile_id"])
+        with self.assertRaisesRegex(ValueError, "explicit reason"):
+            service.publish_version(self.ctx, "job1", sealed["version"]["policy_id"],
+                                    confirmation_hash=draft["draft_hash"],
+                                    enforce_quality_gate=False)
+        with self.assertRaises(NotFound):
+            self.repo.get_current_policy(self.ctx, "job1")
+
+    def test_publish_quality_gate_bypass_requires_org_admin(self):
+        self.repo.create_user(self.system, "test:gate-hr", user_id="hr1")
+        self.repo.add_organization_member(self.ctx, "hr1", org_role="HR")
+        service, _ = self.service("java_backend")
+        compiled = service.compile_draft(self.ctx, "job1", policy_input("java_backend"))
+        draft, run = compiled["draft"], compiled["compilation_run"]
+        confirmation = service.confirm_draft(self.ctx, "job1", draft["draft_id"], run["run_id"],
+                                             confirmation_hash=draft["draft_hash"])
+        profile = self.repo.create_execution_profile(self.ctx, {"policy_protocol": "job_scoring_policy_v1"})
+        sealed = service.create_version(self.ctx, "job1", draft["draft_id"], run["run_id"],
+                                        confirmation["confirmation_id"], execution_profile_id=profile["profile_id"])
+        with self.assertRaises(PermissionDenied):
+            service.publish_version(AccessContext("org1", "hr1"), "job1",
+                                    sealed["version"]["policy_id"],
+                                    confirmation_hash=draft["draft_hash"],
+                                    quality_override_reason="HR wants to skip")
+
+    def test_publish_quality_gate_bypass_is_audited(self):
+        service, _ = self.service("java_backend")
+        compiled = service.compile_draft(self.ctx, "job1", policy_input("java_backend"))
+        draft, run = compiled["draft"], compiled["compilation_run"]
+        confirmation = service.confirm_draft(self.ctx, "job1", draft["draft_id"], run["run_id"],
+                                             confirmation_hash=draft["draft_hash"])
+        profile = self.repo.create_execution_profile(self.ctx, {"policy_protocol": "job_scoring_policy_v1"})
+        sealed = service.create_version(self.ctx, "job1", draft["draft_id"], run["run_id"],
+                                        confirmation["confirmation_id"], execution_profile_id=profile["profile_id"])
+        service.publish_version(self.ctx, "job1", sealed["version"]["policy_id"],
+                                confirmation_hash=draft["draft_hash"],
+                                enforce_quality_gate=False,
+                                quality_override_reason="audited acceptance bypass")
+        events = [event for event in self.repo.list_audit_events(self.ctx, "job1")
+                  if event["action"] == "POLICY_QUALITY_GATE_OVERRIDDEN"]
+        self.assertEqual(len(events), 1)
+        details = json.loads(events[0]["details_json"])
+        self.assertEqual(details["reason"], "audited acceptance bypass")
+        self.assertEqual(details["policy_version"], 1)
+        self.assertEqual(details["policy_hash"], sealed["version"]["policy_hash"])
+        self.assertIn("MISSING_POSITIVE_ANCHOR", details["quality_codes"])
+        self.assertEqual(events[0]["actor_id"], "owner")
+
+    def test_publish_quality_gate_bypass_is_explicit_and_auditable(self):
+        service, _ = self.service("java_backend")
+        compiled = service.compile_draft(self.ctx, "job1", policy_input("java_backend"))
+        draft, run = compiled["draft"], compiled["compilation_run"]
+        confirmation = service.confirm_draft(self.ctx, "job1", draft["draft_id"], run["run_id"],
+                                             confirmation_hash=draft["draft_hash"])
+        profile = self.repo.create_execution_profile(self.ctx, {"policy_protocol": "job_scoring_policy_v1"})
+        sealed = service.create_version(self.ctx, "job1", draft["draft_id"], run["run_id"],
+                                        confirmation["confirmation_id"], execution_profile_id=profile["profile_id"])
+        publication = service.publish_version(self.ctx, "job1", sealed["version"]["policy_id"],
+                                              confirmation_hash=draft["draft_hash"],
+                                              enforce_quality_gate=False,
+                                              quality_override_reason="explicit bypass audit test")
+        self.assertEqual(publication["policy_id"], sealed["version"]["policy_id"])
 
     def test_human_edit_cannot_claim_a_different_model_or_prompt_call(self):
         service, client = self.service()
