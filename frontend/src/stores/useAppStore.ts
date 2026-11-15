@@ -55,7 +55,7 @@ export const useAppStore = defineStore('appStore', () => {
     try {
       runtime.value = await api.runtimeMode()
       backendConnected.value = true
-      if (runtime.value.local_only) {
+      if (runtime.value.auth_mode === 'trusted-headers') {
         try {
           identities.value = (await api.localIdentities()).identities
           if ((!orgId.value || !userId.value) && identities.value.length > 0) {

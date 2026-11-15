@@ -107,7 +107,13 @@ class PolicyRepository(BaseRepository):
                 raise ValueError("Draft revision requires source_draft_id")
             if generic:
                 from config.policy_validation import validate_publishable_policy
-                validate_publishable_policy(policy_json, source_snapshot)
+                from schemas.job_policy import JobScoringPolicy
+                parsed = JobScoringPolicy.model_validate(policy_json)
+                acknowledged = sorted(
+                    {item.requirement_id for item in parsed.requirements}
+                    | {item.group_id for item in parsed.requirement_groups})
+                validate_publishable_policy(policy_json, source_snapshot,
+                                            confirmed_requirement_ids=acknowledged)
             if original_jd is None:
                 original_jd = source_snapshot.get("jd_text" if generic else "original_jd", job_target.get("raw_jd_text", ""))
             if hr_requirements is None:

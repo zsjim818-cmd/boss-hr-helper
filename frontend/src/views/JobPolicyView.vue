@@ -53,8 +53,8 @@
             <el-descriptions :column="3" border size="small" style="margin-bottom: 12px;">
               <el-descriptions-item label="草稿哈希">{{ shortHash(draft.draft_hash) }}</el-descriptions-item>
               <el-descriptions-item label="Publishable">
-                <el-tag :type="compileResult?.publishable ? 'success' : 'danger'" size="small">
-                  {{ compileResult?.publishable ? 'YES' : 'NO' }}
+                <el-tag :type="publishableDisplay ? 'success' : 'danger'" size="small">
+                  {{ publishableDisplay ? 'YES' : 'NO' }}
                 </el-tag>
               </el-descriptions-item>
               <el-descriptions-item label="质量状态">
@@ -65,7 +65,16 @@
             <el-alert v-if="quality?.status === 'BLOCKED'" type="error" show-icon :closable="false"
                       title="质量门控 BLOCKED：默认禁止发布。仅 ORG_ADMIN 可填写豁免原因后发布（写入审计）。" />
             <el-alert v-else-if="quality?.status === 'WARNING'" type="warning" show-icon :closable="false"
-                      title="质量门控 WARNING：可发布，但请人工确认下列问题。" />
+                      title="质量评审 WARNING：仅为质量建议；能否创建不可变版本由 Publishable 与编译诊断（ERROR/CONFIRM）决定。" />
+            <el-alert v-if="compileErrorDiagnostics.length" type="error" show-icon
+                      :closable="false" style="margin-top: 8px;"
+                      :title="`Publishable=NO：存在 ${compileErrorDiagnostics.length} 条 ERROR 编译诊断，必须修改草稿并重新校验后才能确认/创建不可变版本。`" />
+            <el-alert v-if="confirmDiagnostics.length" type="info" show-icon
+                      :closable="false" style="margin-top: 8px;"
+                      :title="`有 ${confirmDiagnostics.length} 条 CONFIRM 诊断：点击“确认并创建不可变版本”即表示 HR 对当前草稿的显式确认；发布仍受质量门控（BLOCKED）约束。`" />
+            <el-alert v-if="compileErrorDiagnostics.length && quality?.status === 'WARNING'"
+                      type="info" show-icon :closable="false" style="margin-top: 8px;"
+                      title="质量 WARNING 与编译 ERROR 是两套检查：以“编译错误诊断”为准逐项修正草稿。" />
 
             <div v-if="quality" style="margin: 12px 0;">
               <el-space wrap>
@@ -81,6 +90,27 @@
                 <el-tag v-else type="warning">覆盖率 INDETERMINATE</el-tag>
               </el-space>
             </div>
+
+            <el-tabs v-if="blockingDiagnostics.length" style="margin-top: 8px;">
+              <el-tab-pane :label="`编译错误诊断 (${blockingDiagnostics.length})`">
+                <el-table :data="blockingDiagnostics" size="small" border>
+                  <el-table-column label="级别" width="90">
+                    <template #default="{ row }">
+                      <el-tag :type="row.severity === 'ERROR' ? 'danger' : 'warning'" size="small">
+                        {{ row.severity }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="code" label="代码" width="260" />
+                  <el-table-column label="要求" width="180">
+                    <template #default="{ row }">
+                      {{ (row.requirement_ids || []).join('、') || '—' }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="message" label="说明" />
+                </el-table>
+              </el-tab-pane>
+            </el-tabs>
 
             <el-tabs v-if="quality && quality.issues.length" style="margin-top: 8px;">
               <el-tab-pane :label="`质量问题 (${quality.issues.length})`">
@@ -197,7 +227,23 @@ const policy = computed<JobScoringPolicy | null>(() => {
   const value = draft.value?.policy_json
   return value && typeof value === 'object' ? value : null
 })
-const canPublish = computed(() => Boolean(draft.value && compileResult.value?.compilation_run))
+const canPublish = computed(() => Boolean(
+  draft.value
+  && compileResult.value?.compilation_run
+  && compileErrorDiagnostics.value.length === 0))
+const compileDiagnostics = computed(() => {
+  const list = compileResult.value?.diagnostics || draft.value?.diagnostics_json || []
+  return list
+})
+const compileErrorDiagnostics = computed(() =>
+  compileDiagnostics.value.filter((item) => item.severity === 'ERROR'))
+const confirmDiagnostics = computed(() =>
+  compileDiagnostics.value.filter((item) => item.severity === 'CONFIRM'))
+const blockingDiagnostics = compileErrorDiagnostics
+const publishableDisplay = computed(() => {
+  if (quality.value) return quality.value.status !== 'BLOCKED'
+  return compileResult.value?.publishable === true
+})
 const qualityTagType = computed(() => {
   if (!quality.value) return 'info'
   return quality.value.status === 'PASS' ? 'success'

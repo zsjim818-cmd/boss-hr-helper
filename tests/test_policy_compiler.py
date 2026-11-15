@@ -177,6 +177,45 @@ class PolicyCompilerServiceTests(DatabaseTestCase):
                                   confirmation_hash=result["draft"]["draft_hash"])
         self.assert_no_version_or_publication()
 
+    def test_warning_quality_draft_with_confirm_diagnostic_can_be_confirmed_and_published(self):
+        """WARNING quality + CONFIRM diagnostics must not block confirm/version."""
+        service, client = self.service()
+        payload = offline_policy("ai_automation")
+        requirements = payload["requirements"]
+        first = requirements[0]["requirement_id"]
+        second = next(item["requirement_id"] for item in requirements
+                      if item["requirement_id"] != first)
+        # Merge one anchor across two requirements -> broad-only quality WARNING.
+        payload["semantic_anchors"][0]["requirement_ids"] = [first, second]
+        # A human-confirmable fact (CONFIRM severity) must not be an ERROR.
+        requirements[0]["needs_confirmation"] = True
+        client.payload = payload
+
+        result = service.compile_draft(self.ctx, "job1", policy_input("ai_automation"))
+        self.assertTrue(result["publishable"], result["diagnostics"])
+        self.assertEqual(result["quality"]["status"], "WARNING")
+        self.assertIn("CONFIRM", {item["severity"] for item in result["diagnostics"]})
+
+        draft = result["draft"]
+        confirmation = service.confirm_draft(
+            self.ctx, "job1", draft["draft_id"],
+            result["compilation_run"]["run_id"],
+            confirmation_hash=draft["draft_hash"])
+        profile = self.repo.create_execution_profile(
+            self.ctx, {"assessment_scope": "warning-confirm-regression"})
+        version = service.create_version(
+            self.ctx, "job1", draft["draft_id"],
+            result["compilation_run"]["run_id"],
+            confirmation["confirmation_id"],
+            execution_profile_id=profile["profile_id"])["version"]
+        published = service.publish_version(
+            self.ctx, "job1", version["policy_id"],
+            confirmation_hash=draft["draft_hash"])
+        self.assertEqual(published["policy_id"], version["policy_id"])
+        self.assertEqual(
+            self.repo.get_current_policy(self.ctx, "job1")["policy_id"],
+            version["policy_id"])
+
     def test_hr_edit_creates_new_revision_and_invalidates_old_confirmation(self):
         service, _ = self.service()
         initial = service.compile_draft(self.ctx, "job1", policy_input("ai_automation"))
@@ -250,7 +289,7 @@ class PolicyCompilerServiceTests(DatabaseTestCase):
         quality = compiled["quality"]
         self.assertEqual(quality["validator_version"], POLICY_VALIDATOR_VERSION)
         self.assertEqual(quality["semantic_requirement_count"], 6)
-        self.assertEqual(quality["missing_positive_count"], 3)
+        self.assertEqual(quality["missing_positive_count"], 1)
         self.assertEqual(quality["orphan_group_count"], 0)
         self.assertIn("issues", quality)
         self.assertEqual(compiled["publishable"], True)  # quality never gates here

@@ -248,18 +248,19 @@ class PolicyCliTests(DatabaseTestCase):
         self.assertEqual(quality["job_title"], json.loads(draft["policy_json"])["job"]["title"])
         self.assertEqual(quality["coverage_status"], "DETERMINED")
         self.assertEqual(quality["semantic_requirement_count"], 6)
-        self.assertEqual(quality["directly_covered_count"], 3)
+        self.assertEqual(quality["directly_covered_count"], 5)
         self.assertEqual(quality["broad_only_count"], 0)
-        self.assertEqual(quality["missing_positive_count"], 3)
+        self.assertEqual(quality["missing_positive_count"], 1)
         self.assertEqual(quality["unclassified_requirement_count"], 0)
-        self.assertEqual(quality["positive_coverage_rate"], 0.5)
+        self.assertAlmostEqual(quality["positive_coverage_rate"], 5 / 6, places=6)
         self.assertEqual(quality["status"], "BLOCKED")
         missing = {item["requirement_id"] for item in quality["issues"]
                    if item["code"] == "MISSING_POSITIVE_ANCHOR"}
-        self.assertEqual(missing, {"spring_route", "quarkus_route", "duty"})
+        self.assertEqual(missing, {"duty"})
         self.assertTrue(all(item["suggested_action"] for item in quality["issues"]))
         # Read-only command: publish diagnostics state and no model calls recorded.
-        self.assertEqual(result["diagnostics"], [])
+        self.assertTrue(all(item["severity"] == "WARNING"
+                            for item in result["diagnostics"]))
         self.assertTrue(result["publishable"])
         self.assertNotIn("metrics", result)
         # Nothing in the database changed: no policy edits, no audit rows, no embeddings.

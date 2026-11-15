@@ -174,6 +174,7 @@ class PolicyNormalizationIntegrationTests(DatabaseTestCase):
 
     def test_raw_unknown_alias_cannot_bypass_validation_via_repository_success_flag(self):
         raw = tool_alias_policy()
+        raw["scoring_dimensions"][0]["weight"] = 0.99  # ERROR: INVALID_WEIGHT_SUM
         draft = self.repo.create_policy_draft(self.ctx, "job1", raw,
                                               source_json=policy_input("java_backend"), diagnostics=[])
         with self.assertRaises(ValueError):

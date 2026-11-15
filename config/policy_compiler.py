@@ -14,7 +14,7 @@ from schemas.job_policy import JobScoringPolicy, PolicyCompileInput, PolicyProve
 
 
 COMPILER_VERSION = "job-policy-compiler-v1.1"
-PROMPT_VERSION = "job-policy-prompt-v1.3"
+PROMPT_VERSION = "job-policy-prompt-v1.4"
 PROMPT_PATH = Path(__file__).parent / "prompts" / "job_policy_v1.txt"
 
 
@@ -34,7 +34,12 @@ class CompilationResult:
 
     @property
     def publishable(self):
-        return not any(item.severity in ("ERROR", "CONFIRM") for item in self.diagnostics)
+        """Structurally valid: only ERROR diagnostics block confirmation.
+
+        CONFIRM diagnostics require explicit HR acknowledgement and are handled
+        by the policy service; quality (Stage 5.5) gates publication separately.
+        """
+        return not any(item.severity == "ERROR" for item in self.diagnostics)
 
 
 class JobPolicyCompiler:

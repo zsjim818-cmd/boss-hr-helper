@@ -200,6 +200,45 @@ def normalize_policy(policy):
     for projection in [*result["keyword_groups"], *result["semantic_anchors"], *result["scoring_dimensions"]]:
         references = [new for old in projection["requirement_ids"] for new in replacements.get(old, [old])]
         projection["requirement_ids"] = list(dict.fromkeys(references))
+    # Safe fallback: every semantic (SKILL/EXPERIENCE) requirement projected into
+    # a scoring dimension must own a single-target POSITIVE anchor.  Real models
+    # occasionally omit one; without it Stage 5.5 reports a blocking missing
+    # anchor even though the requirement itself is valid.
+    projected = {rid for dimension in result["scoring_dimensions"]
+                 for rid in dimension["requirement_ids"]}
+    direct_positive = {tuple(anchor["requirement_ids"])
+                       for anchor in result["semantic_anchors"]
+                       if anchor["polarity"] == "POSITIVE"
+                       and len(anchor["requirement_ids"]) == 1}
+    used_anchor_ids = {anchor["anchor_id"] for anchor in result["semantic_anchors"]}
+    for requirement in result["requirements"]:
+        if requirement["requirement_type"] not in ("SKILL", "EXPERIENCE"):
+            continue
+        requirement_id = requirement["requirement_id"]
+        if requirement_id not in projected or (requirement_id,) in direct_positive:
+            continue
+        if len(result["semantic_anchors"]) >= 30:
+            diagnostics.append({"code": "POSITIVE_ANCHOR_AUTOFILL_LIMIT", "severity": "CONFIRM",
+                "message": "Cannot add a dedicated positive anchor without exceeding the anchor limit",
+                "requirement_ids": [requirement_id]})
+            break
+        salt = 0
+        while True:
+            anchor_id = "anchor_norm_" + hashlib.sha256(
+                f"{requirement_id}|{salt}".encode("utf-8")).hexdigest()[:20]
+            if anchor_id not in used_anchor_ids:
+                break
+            salt += 1
+        used_anchor_ids.add(anchor_id)
+        text = (f"具备「{requirement['label']}」相关经验或能力，"
+                "并能提供可核验的实践证据")[:1000]
+        result["semantic_anchors"].append({
+            "anchor_id": anchor_id, "requirement_ids": [requirement_id],
+            "polarity": "POSITIVE", "text": text})
+        direct_positive.add((requirement_id,))
+        diagnostics.append({"code": "NORMALIZED_POSITIVE_ANCHOR", "severity": "WARNING",
+            "message": f"Added a dedicated POSITIVE anchor for {requirement_id!r}",
+            "requirement_ids": [requirement_id]})
     # Retained ambiguous/unsafe alternatives are explicit blockers, never guessed.
     interim = JobScoringPolicy.model_validate(result)
     diagnostics.extend(item.model_dump(mode="json") for item in normalization_diagnostics(interim))

@@ -88,7 +88,7 @@ def main(command, argv=None):
                     policy_version=current["policy_version"], policy_hash=current["policy_hash"])
             diagnostics = [item.model_dump(mode="json") for item in diagnose_policy(policy)]
             result = {"pydantic_valid": True, "diagnostics": diagnostics,
-                      "publishable": not any(item["severity"] in ("ERROR", "CONFIRM") for item in diagnostics),
+                      "publishable": not any(item["severity"] == "ERROR" for item in diagnostics),
                       "quality": quality.model_dump(mode="json")}
         else:
             database = Database(database_path(args.database))

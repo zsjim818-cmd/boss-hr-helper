@@ -51,7 +51,7 @@
           </div>
 
           <div v-if="showIdentitySelector" style="display: flex; align-items: center; gap: 8px;">
-            <el-tag type="info" size="small">本地Mock身份</el-tag>
+            <el-tag type="info" size="small">本地身份（受信头）</el-tag>
             <el-select :model-value="identityLabel" style="width: 320px;" @change="applyIdentityLabel">
               <el-option v-for="item in store.identities" :key="item.org_id + ':' + item.user_id"
                          :label="`${item.org_id.slice(0, 8)}… / ${item.user_id.slice(0, 8)}… (${item.org_role})`"
@@ -87,7 +87,7 @@ const route = useRoute()
 const store = useAppStore()
 
 const showIdentitySelector = computed(
-  () => store.runtime?.local_only === true && store.runtime?.auth_mode === 'trusted-headers')
+  () => store.runtime?.auth_mode === 'trusted-headers')
 
 const identityLabel = computed(() => `${store.orgId}:${store.userId}`)
 

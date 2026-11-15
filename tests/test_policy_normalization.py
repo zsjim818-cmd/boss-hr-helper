@@ -141,6 +141,19 @@ class PolicyNormalizationTests(unittest.TestCase):
         self.assertEqual([band.model_dump() for band in normalized.scoring_dimensions[0].rubric], raw["scoring_dimensions"][0]["rubric"])
         self.assertIn("INVALID_WEIGHT_SUM", self.codes(normalized))
 
+    def test_missing_atomic_positive_anchors_are_safely_autofilled(self):
+        policy = generic_policy()  # communication has an anchor, portfolio does not
+        normalized = normalize_policy(policy)
+        anchors = {(tuple(item.requirement_ids), item.polarity)
+                   for item in normalized.semantic_anchors}
+        self.assertIn((("portfolio",), "POSITIVE"), anchors)
+        self.assertIn("NORMALIZED_POSITIVE_ANCHOR",
+                      {item.code for item in normalized.diagnostics})
+        self.assertNotIn("MISSING_POSITIVE_ANCHOR", self.codes(normalized))
+        self.assertNotIn("portfolio", {
+            tuple(item.requirement_ids) for item in
+            JobScoringPolicy.model_validate(policy).semantic_anchors})
+
     def test_direct_repository_lint_blocks_unknown_alias_and_unlowered_alternative(self):
         raw = alternative_policy()
         raw["keyword_groups"][0]["keywords"][0]["aliases"] = ["DifferentTool"]

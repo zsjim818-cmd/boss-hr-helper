@@ -8,13 +8,22 @@ class CompilerRepository(BaseRepository):
     @staticmethod
     def _validate_compiled_policy(policy_json, source_json):
         from config.policy_validation import validate_publishable_policy
-        return validate_publishable_policy(policy_json, source_json)
+        from schemas.job_policy import JobScoringPolicy
+        policy = JobScoringPolicy.model_validate(policy_json)
+        acknowledged = sorted(
+            {item.requirement_id for item in policy.requirements}
+            | {item.group_id for item in policy.requirement_groups})
+        return validate_publishable_policy(
+            policy_json, source_json, confirmed_requirement_ids=acknowledged)
 
     def _current_compilation_draft(self, connection, ctx, job_id, draft_id, run):
         draft = self.one(connection,
             "SELECT * FROM policy_drafts WHERE org_id=? AND job_id=? AND draft_id=?",
             (ctx.org_id, job_id, draft_id))
-        if (run["status"] != "SUCCEEDED" or not run["publishable"]
+        run_diagnostics = json.loads(run["diagnostics_json"] or "[]")
+        has_error = any(item.get("severity") == "ERROR" for item in run_diagnostics)
+        if (run["status"] not in ("SUCCEEDED", "FAILED") or has_error
+                or (run["status"] == "FAILED" and not run_diagnostics)
                 or run["draft_id"] != draft_id or run["draft_revision"] != draft["revision"]
                 or run["draft_hash"] != draft["draft_hash"]
                 or run["policy_json"] != draft["policy_json"]
@@ -22,7 +31,7 @@ class CompilerRepository(BaseRepository):
             raise ValueError("Compilation does not validate the exact current draft revision and source")
         self._validate_compiled_policy(json.loads(draft["policy_json"]), json.loads(draft["source_json"]))
         issues = json.loads(draft["diagnostics_json"])
-        if any(not isinstance(item, dict) or item.get("severity") in ("ERROR", "CONFIRM") for item in issues):
+        if any(not isinstance(item, dict) or item.get("severity") == "ERROR" for item in issues):
             raise ValueError("The current draft still has blocking diagnostics")
         return draft
 

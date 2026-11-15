@@ -79,14 +79,22 @@
         <el-card shadow="never" style="margin-bottom: 16px;">
           <template #header><span style="font-weight: 600;">步骤 2：语义准备与 Tier 0~3 评分</span></template>
           <el-space wrap>
-            <el-button size="small" :loading="preparing" :disabled="!imported"
+            <el-button size="small" :loading="preparing" :disabled="!selectedCandidate"
                        @click="prepareSemantic">
               语义资产准备（{{ store.runtime?.mode === 'live' ? '真实 BGE' : '确定性模式无需' }}）
             </el-button>
-            <el-button size="small" type="warning" :loading="scoringFast" :disabled="!imported"
+            <el-button size="small" type="warning" :loading="scoringFast" :disabled="!selectedCandidate"
                        @click="score('fast_mode')">快速初筛 (fast)</el-button>
-            <el-button size="small" type="danger" :loading="scoringDeep" :disabled="!imported"
+            <el-button size="small" type="danger" :loading="scoringDeep" :disabled="!selectedCandidate"
                        @click="score('deep_mode')">深度评分 (Tier 0~3)</el-button>
+            <el-button size="small" type="success" plain :loading="batchScoring"
+                       :disabled="!candidates.length" @click="scoreBatch('fast_mode')">
+              批量 Fast 初筛（未评分）
+            </el-button>
+            <el-button size="small" type="danger" plain :loading="batchScoring"
+                       :disabled="!candidates.length" @click="scoreBatch('deep_mode')">
+              批量 Deep 深评（未评分）
+            </el-button>
             <el-tag v-if="task" :type="taskTagType">{{ task.status }}</el-tag>
           </el-space>
 
@@ -113,10 +121,14 @@
           <template #header>
             <div style="display: flex; justify-content: space-between;">
               <span style="font-weight: 600;">本岗位候选人</span>
+              <span v-if="selectedCandidate" style="font-size: 12px; color: #409eff;">
+                已选：{{ selectedCandidate.job_candidate.candidate_key }}
+              </span>
               <el-button size="small" @click="refreshCandidates">刷新</el-button>
             </div>
           </template>
-          <el-table :data="candidates" size="small" border>
+          <el-table :data="candidates" size="small" border highlight-current-row
+                    row-style="cursor: pointer;" @row-click="selectCandidate">
             <el-table-column label="候选人" width="160">
               <template #default="{ row }">{{ row.job_candidate.candidate_key }}</template>
             </el-table-column>
@@ -162,8 +174,10 @@ const preparing = ref(false)
 const scanning = ref(false)
 const scoringFast = ref(false)
 const scoringDeep = ref(false)
+const batchScoring = ref(false)
 const batch = ref<Batch | null>(null)
 const imported = ref<ImportResult | null>(null)
+const selectedCandidate = ref<CandidateListItem | null>(null)
 const scanReport = ref<BrowserScanResult | null>(null)
 const scanStatus = ref('')
 const scanError = ref('')
@@ -307,14 +321,15 @@ async function importCandidate() {
 }
 
 async function prepareSemantic() {
-  if (!store.activeJobId || !imported.value) return
+  const candidate = selectedCandidate.value
+  if (!store.activeJobId || !candidate) return
+  const jobId = store.activeJobId
   const epoch = store.dataEpoch
+  const jcid = candidate.job_candidate.job_candidate_id
   preparing.value = true
   try {
-    const result = await api.semanticPrepare(
-      store.activeJobId, imported.value.job_candidate.job_candidate_id,
-      batch.value?.batch_id)
-    if (store.dataEpoch !== epoch) return
+    const result = await api.semanticPrepare(jobId, jcid, batch.value?.batch_id)
+    if (store.dataEpoch !== epoch || store.activeJobId !== jobId) return
     ElMessage.success(`语义准备：${result.status}`)
   } catch (error) {
     if (store.dataEpoch === epoch) {
@@ -325,30 +340,51 @@ async function prepareSemantic() {
   }
 }
 
+async function runScore(jcid: string, mode: ScoringMode, epoch: number) {
+  if (!store.activeJobId) return null
+  const jobId = store.activeJobId
+  const started = await api.startScoring(jobId, jcid, {
+    scoring_mode: mode,
+    batch_id: batch.value?.batch_id,
+    idempotency_key: batch.value
+      ? `${batch.value.batch_id}:${jcid}:${mode}`
+      : undefined
+  })
+  if (store.dataEpoch !== epoch || store.activeJobId !== jobId) return null
+  if (started.reused && started.evaluation) return started.evaluation
+  if (!started.task) return null
+  task.value = started.task
+  for (let i = 0; i < 720; i += 1) {
+    if (store.dataEpoch !== epoch || store.activeJobId !== jobId) return null
+    const body = await api.task(jobId, started.task.pipeline_task_id)
+    if (store.dataEpoch !== epoch || store.activeJobId !== jobId) return null
+    task.value = body.task
+    if (body.task.status === 'SUCCEEDED') return body.evaluation
+    if (body.task.status === 'FAILED') {
+      throw new Error(`${body.task.error_type}: ${body.task.error_message || ''}`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500))
+  }
+  throw new Error('评分任务仍在运行，请稍后在审核看板查看结果')
+}
+
 async function score(mode: ScoringMode) {
-  if (!store.activeJobId || !imported.value) return
+  const candidate = selectedCandidate.value
+  if (!store.activeJobId || !candidate) return
   const epoch = store.dataEpoch
+  const jcid = candidate.job_candidate.job_candidate_id
   const busy = mode === 'fast_mode' ? scoringFast : scoringDeep
   busy.value = true
   evaluation.value = null
   task.value = null
   try {
-    const started = await api.startScoring(
-      store.activeJobId, imported.value.job_candidate.job_candidate_id,
-      { scoring_mode: mode, batch_id: batch.value?.batch_id,
-        idempotency_key: batch.value
-          ? `${batch.value.batch_id}:${imported.value.job_candidate.job_candidate_id}:${mode}`
-          : undefined })
-    if (store.dataEpoch !== epoch) return
-    if (started.reused && started.evaluation) {
-      evaluation.value = started.evaluation
-      ElMessage.success('已有正式结果，直接复用')
+    const result = await runScore(jcid, mode, epoch)
+    if (result) {
+      if (selectedCandidate.value?.job_candidate.job_candidate_id === jcid) {
+        evaluation.value = result
+      }
+      ElMessage.success('评分完成')
       await refreshCandidates()
-      return
-    }
-    if (started.task) {
-      task.value = started.task
-      await pollTask(started.task.pipeline_task_id, epoch)
     }
   } catch (error) {
     if (store.dataEpoch === epoch) {
@@ -359,26 +395,41 @@ async function score(mode: ScoringMode) {
   }
 }
 
-async function pollTask(taskId: string, epoch: number) {
+async function scoreBatch(mode: ScoringMode) {
   if (!store.activeJobId) return
-  for (let i = 0; i < 240; i += 1) {
-    if (store.dataEpoch !== epoch) return  // job/identity switched: stop polling
-    const body = await api.task(store.activeJobId, taskId)
-    if (store.dataEpoch !== epoch) return
-    task.value = body.task
-    if (body.task.status === 'SUCCEEDED') {
-      evaluation.value = body.evaluation
-      ElMessage.success('评分完成')
-      await refreshCandidates()
-      return
-    }
-    if (body.task.status === 'FAILED') {
-      ElMessage.error(`${body.task.error_type}: ${body.task.error_message || ''}`)
-      return
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500))
+  const targets = candidates.value.filter((item) => !item.latest_evaluation)
+  if (!targets.length) {
+    ElMessage.info('当前没有未评分候选人')
+    return
   }
-  ElMessage.warning('任务仍在运行，可稍后在审核看板查看结果')
+  const epoch = store.dataEpoch
+  batchScoring.value = true
+  let succeeded = 0
+  let failed = 0
+  try {
+    for (const candidate of targets) {
+      if (store.dataEpoch !== epoch) break
+      try {
+        const result = await runScore(
+          candidate.job_candidate.job_candidate_id, mode, epoch)
+        if (result) succeeded += 1
+      } catch {
+        failed += 1
+      }
+    }
+    if (store.dataEpoch === epoch) {
+      ElMessage.success(`批量评分完成：成功 ${succeeded}，失败 ${failed}`)
+      await refreshCandidates()
+    }
+  } finally {
+    batchScoring.value = false
+  }
+}
+
+function selectCandidate(row: CandidateListItem) {
+  selectedCandidate.value = row
+  evaluation.value = null
+  task.value = null
 }
 
 async function refreshCandidates() {
@@ -389,6 +440,19 @@ async function refreshCandidates() {
     const result = await api.listCandidates(jobId, { limit: 50 })
     if (store.dataEpoch !== epoch || store.activeJobId !== jobId) return
     candidates.value = result.items
+    const current = selectedCandidate.value
+    const stillPresent = current && result.items.find(
+      (item) => item.job_candidate.job_candidate_id
+        === current.job_candidate.job_candidate_id)
+    if (stillPresent) {
+      selectedCandidate.value = stillPresent
+    } else {
+      // Prefer the first unscored candidate, otherwise the first row.
+      selectedCandidate.value = result.items.find((item) => !item.latest_evaluation)
+        || result.items[0] || null
+      evaluation.value = null
+      task.value = null
+    }
   } catch (error) {
     if (store.dataEpoch === epoch) {
       ElMessage.error(error instanceof ApiError ? error.message : String(error))
@@ -400,6 +464,7 @@ watch(() => store.dataEpoch, () => {
   // Job/identity switch: clear job-scoped batch/candidate/scan/task state.
   batch.value = null
   imported.value = null
+  selectedCandidate.value = null
   task.value = null
   evaluation.value = null
   candidates.value = []

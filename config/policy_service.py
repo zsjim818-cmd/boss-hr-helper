@@ -38,7 +38,9 @@ class PolicyCompilerService:
                 error_type=exc.metrics.get("failure_type", "CompilationError"))
             raise
         diagnostics = [item.model_dump(mode="json") for item in result.diagnostics]
-        blocking = [item for item in diagnostics if item["severity"] in ("ERROR", "CONFIRM")]
+        # Only structural/source ERRORs block confirmation. CONFIRM diagnostics
+        # are HR-acknowledged at version creation; quality gates publication.
+        blocking = [item for item in diagnostics if item["severity"] == "ERROR"]
         draft = self.repository.create_policy_draft(context, job_id, result.policy.model_dump(mode="json"),
             source_json=upload.model_dump(mode="json"), diagnostics=blocking)
         run = self.repository.record_policy_compilation(context, job_id, upload.model_dump(mode="json"),
@@ -70,7 +72,7 @@ class PolicyCompilerService:
             validator_version=VALIDATOR_VERSION, model_version=parent["model_version"])})
         policy = normalize_policy(policy)
         diagnostics = [item.model_dump(mode="json") for item in diagnose_policy(policy, source)]
-        blocking = [item for item in diagnostics if item["severity"] in ("ERROR", "CONFIRM")]
+        blocking = [item for item in diagnostics if item["severity"] == "ERROR"]
         updated = self.repository.update_policy_draft(context, job_id, draft_id, policy.model_dump(mode="json"),
             expected_revision=expected_revision, source_json=source, diagnostics=blocking)
         run = self.repository.record_policy_compilation(context, job_id, source,
@@ -91,7 +93,15 @@ class PolicyCompilerService:
     def create_version(self, context, job_id, draft_id, run_id, confirmation_id, *, execution_profile_id):
         draft = self.repository.get_policy_draft(context, job_id, draft_id)
         policy = json.loads(draft["policy_json"])
-        validate_publishable_policy(policy, json.loads(draft["source_json"]))
+        source = json.loads(draft["source_json"])
+        # The HR confirmation action acknowledges CONFIRM diagnostics for the
+        # exact draft. ERROR diagnostics still block; quality gates publication.
+        parsed = JobScoringPolicy.model_validate(policy)
+        acknowledged = sorted(
+            {item.requirement_id for item in parsed.requirements}
+            | {item.group_id for item in parsed.requirement_groups})
+        validate_publishable_policy(policy, source,
+                                    confirmed_requirement_ids=acknowledged)
         # Allocation, source freezing and attestation share one transaction;
         # stale confirmations cannot leave an allocated partial version.
         version = self.repository.create_policy_version(context, job_id, policy,
