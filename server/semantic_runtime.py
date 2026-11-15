@@ -28,7 +28,7 @@ class DeterministicSemanticRuntime:
                 "semantic": "fixed deterministic payload (demo only)",
                 "notes": "No BGE model loaded; Tier 2 scores are demo data, not quality claims."}
 
-    def prepare(self, context, job_id, job_candidate_id=None):
+    def prepare(self, context, job_id, job_candidate_id=None, batch_id=None):
         return {"mode": self.mode, "status": "DETERMINISTIC_NO_ASSETS_REQUIRED",
                 "policy": None, "candidate": None}
 
@@ -42,16 +42,19 @@ class _DeterministicSemanticService:
     def __init__(self, repository):
         self.repository = repository
 
-    def evaluate(self, context, job_id, job_candidate_id, *, preliminary=None):
-        candidate = self.repository.get_job_candidate(context, job_id, job_candidate_id)
+    def evaluate(self, context, job_id, job_candidate_id, *, preliminary=None,
+                 batch_id=None):
+        expected = self.repository.expected_candidate_policy(
+            context, job_id, job_candidate_id, batch_id)
         sealed = self.repository.get_sealed_input(context, job_id, job_candidate_id)
         snapshot = self.repository.get_resume_snapshot(
             context, job_id, job_candidate_id, sealed["resume_id"])
         plan = PolicyInterpreter(self.repository).load_for_candidate(
-            context, job_id, job_candidate_id).plan
+            context, job_id, job_candidate_id, batch_id=batch_id).plan
         return {
             "org_id": context.org_id, "job_id": job_id,
-            "job_candidate_id": job_candidate_id, "candidate_id": candidate["candidate_id"],
+            "job_candidate_id": job_candidate_id,
+            "candidate_id": expected["candidate_id"],
             "policy_id": plan.policy_id, "policy_version": plan.policy_version,
             "policy_hash": plan.policy_hash, "resume_id": sealed["resume_id"],
             "resume_content_hash": snapshot["content_hash"],
@@ -97,24 +100,24 @@ class LiveSemanticRuntime:
             self._model = model
         return self._model
 
-    def prepare(self, context, job_id, job_candidate_id=None):
+    def prepare(self, context, job_id, job_candidate_id=None, batch_id=None):
         """Prepare immutable embedding assets for the correct Policy version.
 
-        With a candidate, the Policy identity always comes from the candidate's
-        first-bound batch version (never the job's current publication): a batch
-        locked on v1 must keep preparing and scoring v1 after v2 is published.
-        Without a candidate, the currently published Policy is allowed.
+        With a candidate + batch, the batch-locked Policy version wins (a new
+        batch on v2 prepares v2 without rewriting the candidate's v1 binding).
+        With a candidate only, the candidate's first binding is used.
         """
         from engine.embedding_service import PolicyEmbeddingService, ResumeEmbeddingService
         if job_candidate_id is not None:
-            candidate = self.repository.get_job_candidate(context, job_id, job_candidate_id)
+            expected = self.repository.expected_candidate_policy(
+                context, job_id, job_candidate_id, batch_id)
+            policy_id = expected["policy_id"]
+            policy_version = expected["policy_version"]
             version = self.repository.get_policy_version(
-                context, job_id, policy_id=candidate["policy_id"])
-            if version["policy_version"] != candidate["policy_version"]:
+                context, job_id, policy_id=policy_id)
+            if version["policy_version"] != policy_version:
                 raise SemanticRuntimeError(
-                    "Candidate-bound Policy version does not match its immutable version row")
-            policy_id = candidate["policy_id"]
-            policy_version = candidate["policy_version"]
+                    "Scoring-context Policy version does not match its immutable version row")
         else:
             current = self.repository.get_current_policy(context, job_id)
             policy_id = current["policy_id"]
@@ -140,10 +143,11 @@ class _PreparingSemanticService:
         self.runtime = runtime
         self._service = None
 
-    def evaluate(self, context, job_id, job_candidate_id, *, preliminary=None):
+    def evaluate(self, context, job_id, job_candidate_id, *, preliminary=None,
+                 batch_id=None):
         from engine.semantic_scoring_service import SemanticScoringService
-        self.runtime.prepare(context, job_id, job_candidate_id)
+        self.runtime.prepare(context, job_id, job_candidate_id, batch_id=batch_id)
         if self._service is None:
             self._service = SemanticScoringService(self.repository)
         return self._service.evaluate(context, job_id, job_candidate_id,
-                                      preliminary=preliminary)
+                                      preliminary=preliminary, batch_id=batch_id)

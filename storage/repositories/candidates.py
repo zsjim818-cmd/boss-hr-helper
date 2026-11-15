@@ -77,6 +77,53 @@ class CandidateRepository(BaseRepository):
                         "candidate_key job prefix does not match the bound job; "
                         "cross-job candidate keys are not accepted")
 
+    def resolve_batch_policy(self, ctx, job_id, batch_id, job_candidate_id):
+        """Batch-scoped Policy binding for a candidate re-collected in a new batch.
+
+        The original ``job_candidates.policy_id/version`` row is never rewritten;
+        the batch's locked version takes precedence for this scoring context.
+        """
+        with self.read(ctx, job_id, "view") as conn:
+            batch = self.one(conn, """SELECT * FROM scan_batches
+                WHERE org_id=? AND job_id=? AND batch_id=?""",
+                             (ctx.org_id, job_id, batch_id))
+            candidate = self._job_candidate(conn, ctx, job_id, job_candidate_id)
+            acquired = conn.execute("""SELECT 1 FROM candidate_acquisitions
+                WHERE org_id=? AND job_id=? AND batch_id=? AND job_candidate_id=?""",
+                                    (ctx.org_id, job_id, batch_id,
+                                     job_candidate_id)).fetchone()
+            if acquired is None and candidate["first_batch_id"] != batch_id:
+                raise ValueError(
+                    "Candidate was not acquired in the requested batch")
+            version = self.one(conn, """SELECT * FROM job_policy_versions
+                WHERE org_id=? AND job_id=? AND policy_id=?""",
+                               (ctx.org_id, job_id, batch["policy_id"]))
+            if version["policy_version"] != batch["policy_version"]:
+                raise ValueError(
+                    "Batch Policy version is inconsistent with the sealed version")
+            return {
+                "batch_id": batch_id,
+                "policy_id": batch["policy_id"],
+                "policy_version": batch["policy_version"],
+                "policy_hash": version["policy_hash"],
+                "candidate_id": candidate["candidate_id"],
+                "job_candidate_id": job_candidate_id,
+            }
+
+    def expected_candidate_policy(self, ctx, job_id, job_candidate_id,
+                                  batch_id=None):
+        """Policy identity for a scoring context (batch-scoped when provided)."""
+        if batch_id:
+            return self.resolve_batch_policy(ctx, job_id, batch_id, job_candidate_id)
+        candidate = self.get_job_candidate(ctx, job_id, job_candidate_id)
+        return {
+            "batch_id": None,
+            "policy_id": candidate["policy_id"],
+            "policy_version": candidate["policy_version"],
+            "candidate_id": candidate["candidate_id"],
+            "job_candidate_id": job_candidate_id,
+        }
+
     def create_candidate(self, ctx, job_id, display_name="", candidate_id=None):
         with self.tx(ctx, job_id, "collect") as conn:
             identifier = candidate_id or uid()

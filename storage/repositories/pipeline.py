@@ -27,7 +27,7 @@ class PipelineConflict(ValueError):
 class PipelineRepository(BaseRepository):
     # ------------------------------------------------------------------ tasks
     def create_pipeline_task(self, ctx, job_id, job_candidate_id, scoring_mode,
-                             idempotency_key=None, task_id=None):
+                             idempotency_key=None, task_id=None, batch_id=None):
         if scoring_mode not in ("fast_mode", "deep_mode"):
             raise ValueError("Unsupported scoring mode")
         if idempotency_key is not None and (not isinstance(idempotency_key, str)
@@ -36,19 +36,24 @@ class PipelineRepository(BaseRepository):
         with self.tx(ctx, job_id, "evaluate") as conn:
             self.one(conn, "SELECT 1 FROM job_candidates WHERE org_id=? AND job_id=? AND job_candidate_id=?",
                      (ctx.org_id, job_id, job_candidate_id))
+            if batch_id is not None:
+                self.one(conn, "SELECT 1 FROM scan_batches WHERE org_id=? AND job_id=? AND batch_id=?",
+                         (ctx.org_id, job_id, batch_id))
             if idempotency_key is not None:
                 existing = conn.execute("""SELECT * FROM pipeline_tasks
                     WHERE org_id=? AND job_id=? AND idempotency_key=?""",
                                         (ctx.org_id, job_id, idempotency_key)).fetchone()
                 if existing is not None:
-                    return self._reuse_task(existing, job_candidate_id, scoring_mode)
+                    return self._reuse_task(existing, job_candidate_id, scoring_mode,
+                                            batch_id)
             identifier = task_id or uid()
             try:
                 conn.execute("""INSERT INTO pipeline_tasks
-                    (org_id,job_id,pipeline_task_id,job_candidate_id,scoring_mode,idempotency_key,created_by)
-                    VALUES(?,?,?,?,?,?,?)""",
+                    (org_id,job_id,pipeline_task_id,job_candidate_id,scoring_mode,
+                     idempotency_key,batch_id,created_by)
+                    VALUES(?,?,?,?,?,?,?,?)""",
                              (ctx.org_id, job_id, identifier, job_candidate_id, scoring_mode,
-                              idempotency_key, ctx.user_id))
+                              idempotency_key, batch_id, ctx.user_id))
             except Exception:
                 # Concurrent same-key creation: the unique index is the arbiter.
                 if idempotency_key is not None:
@@ -56,22 +61,25 @@ class PipelineRepository(BaseRepository):
                         WHERE org_id=? AND job_id=? AND idempotency_key=?""",
                                             (ctx.org_id, job_id, idempotency_key)).fetchone()
                     if existing is not None:
-                        return self._reuse_task(existing, job_candidate_id, scoring_mode)
+                        return self._reuse_task(existing, job_candidate_id, scoring_mode,
+                                                batch_id)
                 raise
             self.audit(conn, ctx, "PIPELINE_TASK_CREATED", identifier,
                        {"job_id": job_id, "job_candidate_id": job_candidate_id,
-                        "scoring_mode": scoring_mode})
+                        "scoring_mode": scoring_mode, "batch_id": batch_id})
             return self.one(conn, "SELECT * FROM pipeline_tasks WHERE org_id=? AND job_id=? AND pipeline_task_id=?",
                             (ctx.org_id, job_id, identifier))
 
     @staticmethod
-    def _reuse_task(existing, job_candidate_id, scoring_mode):
-        """An idempotency key may only be reused for the same candidate + mode."""
+    def _reuse_task(existing, job_candidate_id, scoring_mode, batch_id=None):
+        """An idempotency key may only be reused for the same candidate/mode/batch."""
         row = dict(existing)
-        if (row["job_candidate_id"], row["scoring_mode"]) != (job_candidate_id, scoring_mode):
+        if ((row["job_candidate_id"], row["scoring_mode"], row.get("batch_id")) !=
+                (job_candidate_id, scoring_mode, batch_id)):
             raise PipelineConflict(
-                "Idempotency key was already used for a different candidate or scoring mode "
-                f"(task candidate={row['job_candidate_id']}, mode={row['scoring_mode']})")
+                "Idempotency key was already used for a different candidate, "
+                f"scoring mode or batch (task candidate={row['job_candidate_id']}, "
+                f"mode={row['scoring_mode']}, batch={row.get('batch_id')})")
         return row
 
     def update_pipeline_task(self, ctx, job_id, task_id, *, status,
@@ -99,23 +107,31 @@ class PipelineRepository(BaseRepository):
 
     # --------------------------------------------------------- formal results
     def _binding_truth(self, conn, ctx, job_id, job_candidate_id, policy_id=None):
-        """Resolve DB truth for a candidate binding (policy + sealed resume)."""
-        clause, params = "", [ctx.org_id, job_id, job_candidate_id]
-        if policy_id is not None:
-            clause = " AND jc.policy_id=?"
-            params.append(policy_id)
-        return self.one(conn, """SELECT jc.*, r.content_hash AS resume_content_hash,
-                    r.resume_id, p.policy_hash, p.policy_json, p.policy_version
+        """Resolve DB truth for a candidate binding (policy + sealed resume).
+
+        ``policy_id`` selects a batch-scoped Policy version; the candidate's
+        original binding row is left untouched.
+        """
+        if policy_id is None:
+            policy_join = " AND p.policy_id=jc.policy_id"
+            params = [ctx.org_id, job_id, job_candidate_id]
+        else:
+            policy_join = " AND p.policy_id=?"
+            params = [policy_id, ctx.org_id, job_id, job_candidate_id]
+        return self.one(conn, """SELECT jc.*, p.policy_id AS binding_policy_id,
+                    r.content_hash AS resume_content_hash,
+                    r.resume_id, p.policy_hash, p.policy_json,
+                    p.policy_version AS binding_policy_version
                 FROM job_candidates jc
                 JOIN job_candidate_inputs i ON i.org_id=jc.org_id AND i.job_id=jc.job_id
                   AND i.job_candidate_id=jc.job_candidate_id
                 JOIN resume_snapshots r ON r.org_id=jc.org_id AND r.candidate_id=jc.candidate_id
                   AND r.resume_id=i.resume_id
-                JOIN job_policy_versions p ON p.org_id=jc.org_id AND p.job_id=jc.job_id
-                  AND p.policy_id=jc.policy_id
-                WHERE jc.org_id=? AND jc.job_id=? AND jc.job_candidate_id=?""" + clause, params)
+                JOIN job_policy_versions p ON p.org_id=jc.org_id AND p.job_id=jc.job_id""" + policy_join + """
+                WHERE jc.org_id=? AND jc.job_id=? AND jc.job_candidate_id=?""", params)
 
-    def _validate_pipeline_formal_result(self, conn, ctx, job_id, result):
+    def _validate_pipeline_formal_result(self, conn, ctx, job_id, result,
+                                         expected_policy_id=None):
         from engine.llm_reviewer import llm_source_map
         from engine.policy_llm_reviewer import verify_tier3_evaluation
         from schemas import ResumeData
@@ -124,10 +140,19 @@ class PipelineRepository(BaseRepository):
         check_snapshot(output.model_dump(mode="json"))
         if output.status not in FORMAL_STATUSES:
             raise ValueError("Only formal pipeline statuses can be stored")
-        truth = self._binding_truth(conn, ctx, job_id, output.job_candidate_id, output.policy_id)
+        truth = self._binding_truth(conn, ctx, job_id, output.job_candidate_id,
+                                    expected_policy_id)
+        if output.policy_id != truth["binding_policy_id"]:
+            raise ValueError("Pipeline result policy does not match the scoring context")
         if (output.candidate_id, output.candidate_key, output.policy_version) != (
-                truth["candidate_id"], truth["candidate_key"], truth["policy_version"]):
-            raise ValueError("Pipeline result identity does not match the candidate binding")
+                truth["candidate_id"], truth["candidate_key"],
+                truth["binding_policy_version"]):
+            raise ValueError(
+                "Pipeline result identity does not match the candidate binding: "
+                f"result={(output.candidate_id, output.candidate_key, output.policy_version)!r} "
+                f"binding={(truth['candidate_id'], truth['candidate_key'], truth['binding_policy_version'])!r} "
+                f"result_policy={output.policy_id!r} binding_policy={truth['binding_policy_id']!r} "
+                f"expected={expected_policy_id!r}")
         if (output.policy_hash != truth["policy_hash"]
                 or output.resume_id != truth["resume_id"]
                 or output.resume_content_hash != truth["resume_content_hash"]):
@@ -176,10 +201,33 @@ class PipelineRepository(BaseRepository):
                 raise ValueError("COARSE_ONLY total must equal the preliminary score")
         return output
 
-    def save_pipeline_result(self, ctx, job_id, result):
+    def _assert_batch_candidate(self, conn, ctx, job_id, batch_id, job_candidate_id,
+                                policy_id, policy_version):
+        batch = self.one(conn, """SELECT * FROM scan_batches
+            WHERE org_id=? AND job_id=? AND batch_id=?""",
+                         (ctx.org_id, job_id, batch_id))
+        candidate = self.one(conn, """SELECT * FROM job_candidates
+            WHERE org_id=? AND job_id=? AND job_candidate_id=?""",
+                             (ctx.org_id, job_id, job_candidate_id))
+        acquired = conn.execute("""SELECT 1 FROM candidate_acquisitions
+            WHERE org_id=? AND job_id=? AND batch_id=? AND job_candidate_id=?""",
+                                (ctx.org_id, job_id, batch_id,
+                                 job_candidate_id)).fetchone()
+        if acquired is None and candidate["first_batch_id"] != batch_id:
+            raise ValueError("Pipeline result candidate is not part of the batch")
+        if (batch["policy_id"], batch["policy_version"]) != (policy_id, policy_version):
+            raise ValueError("Pipeline result policy does not match the batch lock")
+
+    def save_pipeline_result(self, ctx, job_id, result, *, batch_id=None):
         value = result.model_dump(mode="json") if isinstance(result, PolicyPipelineResult) else result
         with self.tx(ctx, job_id, "evaluate") as conn:
-            output = self._validate_pipeline_formal_result(conn, ctx, job_id, value)
+            output = self._validate_pipeline_formal_result(
+                conn, ctx, job_id, value,
+                expected_policy_id=None if batch_id is None else value["policy_id"])
+            if batch_id is not None:
+                self._assert_batch_candidate(
+                    conn, ctx, job_id, batch_id, output.job_candidate_id,
+                    output.policy_id, output.policy_version)
             existing = conn.execute("""SELECT * FROM pipeline_evaluations WHERE org_id=? AND job_id=?
                 AND job_candidate_id=? AND policy_id=? AND policy_version=? AND resume_id=?
                 AND scoring_mode=?""",
@@ -228,16 +276,25 @@ class PipelineRepository(BaseRepository):
                                (ctx.org_id, job_id, job_candidate_id)).fetchone()
             return dict(row) if row else None
 
-    def pipeline_result_for_mode(self, ctx, job_id, job_candidate_id, scoring_mode):
+    def pipeline_result_for_mode(self, ctx, job_id, job_candidate_id, scoring_mode,
+                                 *, policy_id=None, policy_version=None):
         if scoring_mode not in ("fast_mode", "deep_mode"):
             raise ValueError("Unsupported scoring mode")
         with self.read(ctx, job_id, "view") as conn:
             self.one(conn, "SELECT 1 FROM job_candidates WHERE org_id=? AND job_id=? AND job_candidate_id=?",
                      (ctx.org_id, job_id, job_candidate_id))
+            clauses = ["org_id=?", "job_id=?", "job_candidate_id=?", "scoring_mode=?"]
+            params = [ctx.org_id, job_id, job_candidate_id, scoring_mode]
+            if policy_id is not None:
+                clauses.append("policy_id=?")
+                params.append(policy_id)
+            if policy_version is not None:
+                clauses.append("policy_version=?")
+                params.append(policy_version)
             row = conn.execute("""SELECT * FROM pipeline_evaluations
-                WHERE org_id=? AND job_id=? AND job_candidate_id=? AND scoring_mode=?
+                WHERE """ + " AND ".join(clauses) + """
                 ORDER BY created_at DESC, pipeline_evaluation_id DESC LIMIT 1""",
-                               (ctx.org_id, job_id, job_candidate_id, scoring_mode)).fetchone()
+                               params).fetchone()
             return dict(row) if row else None
 
     def list_pipeline_results(self, ctx, job_id, job_candidate_id):
@@ -327,21 +384,28 @@ class PipelineRepository(BaseRepository):
                 ORDER BY created_at, review_event_id""",
                                                        (ctx.org_id, job_id, evaluation_id))]
 
-    def append_pipeline_contact_event(self, ctx, job_id, evaluation_id, action, note=""):
+    def append_pipeline_contact_event(self, ctx, job_id, evaluation_id, action, note="",
+                                      *, mode="LEGACY", browser_account_id=None):
         if action not in CONTACT_ACTIONS:
             raise ValueError("Unsupported contact action")
+        if mode not in ("DRY_RUN", "REAL_SEND", "LEGACY"):
+            raise ValueError("Unsupported contact event mode")
         if not isinstance(note, str) or len(note) > 2000:
             raise ValueError("Contact note must be a string up to 2000 characters")
         with self.tx(ctx, job_id, "review") as conn:
-            self.one(conn, "SELECT 1 FROM pipeline_evaluations WHERE org_id=? AND job_id=? AND pipeline_evaluation_id=?",
-                     (ctx.org_id, job_id, evaluation_id))
+            evaluation = self.one(conn, """SELECT * FROM pipeline_evaluations
+                WHERE org_id=? AND job_id=? AND pipeline_evaluation_id=?""",
+                                  (ctx.org_id, job_id, evaluation_id))
             event_id = uid()
             conn.execute("""INSERT INTO pipeline_contact_events
-                (org_id,job_id,contact_event_id,pipeline_evaluation_id,action,note,actor_id)
-                VALUES(?,?,?,?,?,?,?)""",
-                         (ctx.org_id, job_id, event_id, evaluation_id, action, note, ctx.user_id))
+                (org_id,job_id,contact_event_id,pipeline_evaluation_id,job_candidate_id,
+                 action,mode,browser_account_id,note,actor_id)
+                VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                         (ctx.org_id, job_id, event_id, evaluation_id,
+                          evaluation["job_candidate_id"], action, mode,
+                          browser_account_id, note, ctx.user_id))
             self.audit(conn, ctx, "PIPELINE_CONTACT_EVENT", event_id,
-                       {"evaluation_id": evaluation_id, "action": action})
+                       {"evaluation_id": evaluation_id, "action": action, "mode": mode})
             return self.one(conn, """SELECT * FROM pipeline_contact_events
                 WHERE org_id=? AND job_id=? AND contact_event_id=?""",
                             (ctx.org_id, job_id, event_id))
@@ -398,7 +462,8 @@ class PipelineRepository(BaseRepository):
         contacted = [row for row in rows if row["action"] == "CONTACTED"]
         contacted_by = sorted({row["actor_id"] for row in contacted})
         rehearsals = [row for row in rows if row["action"] == "PENDING"
-                      and row["note"].startswith("DRY_RUN:")]
+                      and (row.get("mode") == "DRY_RUN"
+                           or row["note"].startswith("DRY_RUN:"))]
         return {
             "job_candidate_id": job_candidate_id,
             "contacted": bool(contacted_by),
@@ -427,13 +492,14 @@ class PipelineRepository(BaseRepository):
                      (ctx.org_id, job_id, evaluation_id, job_candidate_id))
             row = conn.execute("""SELECT * FROM pipeline_contact_events
                 WHERE org_id=? AND job_id=? AND pipeline_evaluation_id=? AND actor_id=?
-                  AND action='PENDING' AND note LIKE 'DRY_RUN:%'
+                  AND action='PENDING'
+                  AND (mode='DRY_RUN' OR note LIKE 'DRY_RUN:%')
                 ORDER BY created_at DESC, contact_event_id DESC LIMIT 1""",
                                (ctx.org_id, job_id, evaluation_id, actor_id)).fetchone()
             return dict(row) if row is not None else None
 
     def ensure_pending_dry_run(self, ctx, job_id, job_candidate_id, evaluation_id,
-                               note):
+                               note, *, browser_account_id=None):
         """Atomically get-or-create the caller's DRY_RUN PENDING rehearsal row.
 
         One ``BEGIN IMMEDIATE`` transaction holds the write lock from the lookup
@@ -449,7 +515,8 @@ class PipelineRepository(BaseRepository):
                      (ctx.org_id, job_id, evaluation_id, job_candidate_id))
             existing = conn.execute("""SELECT * FROM pipeline_contact_events
                 WHERE org_id=? AND job_id=? AND pipeline_evaluation_id=? AND actor_id=?
-                  AND action='PENDING' AND note LIKE 'DRY_RUN:%'
+                  AND action='PENDING'
+                  AND (mode='DRY_RUN' OR note LIKE 'DRY_RUN:%')
                 ORDER BY created_at DESC, contact_event_id DESC LIMIT 1""",
                                     (ctx.org_id, job_id, evaluation_id,
                                      ctx.user_id)).fetchone()
@@ -457,13 +524,15 @@ class PipelineRepository(BaseRepository):
                 return dict(existing), True
             event_id = uid()
             conn.execute("""INSERT INTO pipeline_contact_events
-                (org_id,job_id,contact_event_id,pipeline_evaluation_id,action,note,actor_id)
-                VALUES(?,?,?,?,?,?,?)""",
-                         (ctx.org_id, job_id, event_id, evaluation_id, "PENDING",
-                          note, ctx.user_id))
+                (org_id,job_id,contact_event_id,pipeline_evaluation_id,job_candidate_id,
+                 action,mode,browser_account_id,note,actor_id)
+                VALUES(?,?,?,?,?,?,?,?,?,?)""",
+                         (ctx.org_id, job_id, event_id, evaluation_id,
+                          job_candidate_id, "PENDING", "DRY_RUN",
+                          browser_account_id, note, ctx.user_id))
             self.audit(conn, ctx, "PIPELINE_CONTACT_EVENT", event_id,
                        {"evaluation_id": evaluation_id, "action": "PENDING",
-                        "rehearsal": True})
+                        "mode": "DRY_RUN", "rehearsal": True})
             return self.one(conn, """SELECT * FROM pipeline_contact_events
                 WHERE org_id=? AND job_id=? AND contact_event_id=?""",
                             (ctx.org_id, job_id, event_id)), False

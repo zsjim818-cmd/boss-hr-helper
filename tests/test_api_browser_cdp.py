@@ -42,7 +42,7 @@ class ApiCdpCase(PipelineCase):
     def setUp(self):
         super().setUp()
         self.job_version = self.publish_case(job_id="job")
-        self.directory = tempfile.TemporaryDirectory(prefix="api_cdp_")
+        self.directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True, prefix="api_cdp_")
         self.addCleanup(self.directory.cleanup)
         self.source = BrowserSourceConfig(
             name="cdp_mock", enabled=True, port=free_port(),
@@ -178,7 +178,7 @@ class ApiCdpUnavailableTests(PipelineCase):
     def setUp(self):
         super().setUp()
         self.publish_case(job_id="job")
-        self.directory = tempfile.TemporaryDirectory(prefix="api_cdp_down_")
+        self.directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True, prefix="api_cdp_down_")
         self.addCleanup(self.directory.cleanup)
         self.source = BrowserSourceConfig(
             name="cdp_mock", enabled=True, port=free_port(),
@@ -227,7 +227,7 @@ class ApiCdpSessionIsolationTests(PipelineCase):
     def setUp(self):
         super().setUp()
         self.publish_case(job_id="job")
-        self.directory = tempfile.TemporaryDirectory(prefix="api_cdp_sessions_")
+        self.directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True, prefix="api_cdp_sessions_")
         self.addCleanup(self.directory.cleanup)
         self.source = BrowserSourceConfig(
             name="cdp_mock", enabled=True, port=free_port(),
@@ -278,11 +278,38 @@ class ApiCdpSessionIsolationTests(PipelineCase):
         sessions = self.registry.describe()
         self.assertEqual(len(sessions), 2)
         self.assertEqual(len({item["cdp_port"] for item in sessions}), 2)
-        self.assertEqual(len({item["profile"] for item in sessions}), 2)
+        self.assertEqual(len({item["profile_id"] for item in sessions}), 2)
         self.assertTrue(all(item["profile_verified"] for item in sessions))
+        for item in sessions:
+            self.assertNotIn("profile", item)
+            self.assertNotIn("user_data_dir", item)
 
-        runtime_mode = self.client.get("/api/runtime-mode").json()
-        self.assertEqual(len(runtime_mode["browser_source"]["sessions"]), 2)
+        # Anonymous runtime-mode: global summary only, no sessions or paths.
+        anonymous = self.client.get("/api/runtime-mode")
+        self.assertEqual(anonymous.status_code, 200)
+        anonymous_body = anonymous.json()
+        self.assertNotIn("sessions", anonymous_body["browser_source"])
+        self.assertIsNone(anonymous_body["browser_source"]["session"])
+        self.assertNotIn(self.directory.name, anonymous.text)
+        self.assertNotIn("user_data_dir", anonymous.text)
+        self.assertNotIn("actor_user_id", anonymous.text)
+
+        # Authenticated HR only sees their own session summary.
+        owner_mode = self.client.get("/api/runtime-mode",
+                                     headers=self.owner_headers).json()
+        owner_session = owner_mode["browser_source"]["session"]
+        self.assertEqual(owner_session["actor_user_id"], "owner")
+        self.assertEqual(owner_session["org_id"], "org")
+        self.assertNotIn("profile", owner_session)
+        self.assertNotIn(self.directory.name, self.client.get(
+            "/api/runtime-mode", headers=self.owner_headers).text)
+
+        hr_mode = self.client.get("/api/runtime-mode",
+                                  headers=self.hr2_headers).json()
+        hr_session = hr_mode["browser_source"]["session"]
+        self.assertEqual(hr_session["actor_user_id"], "hr2")
+        self.assertNotEqual(hr_session["browser_account_id"],
+                            owner_session["browser_account_id"])
 
 
 if __name__ == "__main__":

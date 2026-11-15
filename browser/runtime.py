@@ -21,6 +21,8 @@ import socket
 import subprocess
 import tempfile
 import time
+import urllib.parse
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -208,23 +210,6 @@ class CDPConnectionManager:
         return self._health_impl()
 
     # ------------------------------------------------------ profile provenance
-    def _sentinel_path(self) -> Path:
-        return Path(self.user_data_dir) / "boss-hr-helper-profile.json"
-
-    def _write_sentinel(self) -> None:
-        sentinel = self._sentinel_path()
-        sentinel.parent.mkdir(parents=True, exist_ok=True)
-        sentinel.write_text(json.dumps({
-            "marker": "boss-hr-helper-cdp", "port": self.port,
-            "profile": self.user_data_dir}), encoding="utf-8")
-
-    def _sentinel_valid(self) -> bool:
-        try:
-            payload = json.loads(self._sentinel_path().read_text(encoding="utf-8"))
-        except Exception:
-            return False
-        return payload.get("marker") == "boss-hr-helper-cdp"
-
     def _cdp_command_line(self) -> list[str] | None:
         """Actual Edge command line via a browser-level CDP session."""
         try:
@@ -245,12 +230,52 @@ class CDPConnectionManager:
                 return argument.split("=", 1)[1].strip().strip('"') or None
         return None
 
+    def _devtools_active_port_matches(self) -> bool:
+        """Runtime handshake: the active profile's DevToolsActivePort must match.
+
+        Edge writes ``<user-data-dir>/DevToolsActivePort`` with the actual port
+        and browser websocket path.  A stale/planted file cannot match both the
+        live endpoint's ``/json/version`` payload and our configured port.
+        """
+        path = Path(self.user_data_dir) / "DevToolsActivePort"
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return False
+        if len(lines) < 2:
+            return False
+        try:
+            port = int(lines[0].strip())
+        except ValueError:
+            return False
+        if port != self.port:
+            return False
+        expected_path = lines[1].strip().strip("/")
+        if not expected_path:
+            return False
+        try:
+            with urllib.request.urlopen(
+                    f"http://{self.host}:{self.port}/json/version", timeout=2) as response:
+                payload = json.loads(response.read().decode("utf-8", "replace"))
+        except Exception:
+            return False
+        debugger_url = str(payload.get("webSocketDebuggerUrl") or "")
+        if not debugger_url:
+            return False
+        actual_path = urllib.parse.urlparse(debugger_url).path.lstrip("/")
+        return bool(actual_path) and actual_path == expected_path
+
     def _verify_external_profile(self) -> bool:
         """Prove the attached browser uses OUR dedicated profile.
 
-        Accepted evidence: the browser's real ``--user-data-dir`` (read over
-        CDP) or our sentinel file in the configured profile.  Unknown profiles
-        are refused unless ``BROWSER_ALLOW_UNVERIFIED_CDP=1`` is set explicitly.
+        Trust requires runtime evidence:
+        1. the browser's real ``--user-data-dir`` read over CDP; or
+        2. the active profile's ``DevToolsActivePort`` handshake matching this
+           endpoint's ``/json/version`` websocket path.
+
+        A static file planted on disk is NOT evidence.  Without evidence the
+        connection is refused unless ``BROWSER_ALLOW_UNVERIFIED_CDP=1`` is set
+        explicitly (then ``profile_verified`` stays False).
         """
         expected = Path(self.user_data_dir).resolve()
         arguments = self._cdp_command_line()
@@ -267,15 +292,15 @@ class CDPConnectionManager:
                     f"not the configured dedicated profile {str(expected)!r}",
                     recoverable=False)
             return True
-        if self._sentinel_valid():
+        if self._devtools_active_port_matches():
             return True
         if os.getenv("BROWSER_ALLOW_UNVERIFIED_CDP", "").strip() == "1":
             return False
         raise BrowserError(
             "CDP_PROFILE_UNVERIFIED",
             f"could not verify the profile of {self.endpoint}; refusing to attach. "
-            "Use a profile launched by this runtime, provision the dedicated "
-            "profile sentinel, or explicitly set BROWSER_ALLOW_UNVERIFIED_CDP=1",
+            "Provide a matching --user-data-dir or an active DevToolsActivePort "
+            "handshake, or explicitly set BROWSER_ALLOW_UNVERIFIED_CDP=1",
             recoverable=False)
 
     def _connect_with_retry(self, started: float):
@@ -308,7 +333,6 @@ class CDPConnectionManager:
 
     def _launch_edge(self) -> None:
         plan = self.launch_plan()
-        self._write_sentinel()
         try:
             self._process = subprocess.Popen(
                 plan.command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

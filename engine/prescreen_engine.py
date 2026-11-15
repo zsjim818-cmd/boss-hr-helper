@@ -51,17 +51,21 @@ class PreliminaryScreeningEngine:
         self.repository = repository
         self.interpreter = interpreter or PolicyInterpreter(repository, profile=profile, profile_path=profile_path)
 
-    def evaluate(self, context, job_id, job_candidate_id, *, resume_id=None):
+    def evaluate(self, context, job_id, job_candidate_id, *, resume_id=None,
+                 batch_id=None):
         # Auth failure is an access error, never a candidate score or identity leak.
         with self.repository.read(context, job_id, "evaluate"):
             pass
         candidate = self.repository.get_job_candidate(context, job_id, job_candidate_id)
-        bound = self.interpreter.load_for_candidate(context, job_id, job_candidate_id)
+        bound = self.interpreter.load_for_candidate(
+            context, job_id, job_candidate_id, batch_id=batch_id)
         plan = bound.plan
+        expected = self.repository.expected_candidate_policy(
+            context, job_id, job_candidate_id, batch_id)
         if ((plan.org_id, plan.job_id, bound.job_candidate_id, bound.candidate_id,
              plan.policy_id, plan.policy_version) !=
-                (context.org_id, job_id, job_candidate_id, candidate["candidate_id"],
-                 candidate["policy_id"], candidate["policy_version"])):
+                (context.org_id, job_id, job_candidate_id, expected["candidate_id"],
+                 expected["policy_id"], expected["policy_version"])):
             raise ValueError("Interpreter binding does not match the authorized candidate association")
         try:
             sealed = self.repository.get_sealed_input(context, job_id, job_candidate_id)

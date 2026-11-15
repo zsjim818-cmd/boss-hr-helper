@@ -94,6 +94,28 @@ class ApiBrowserScanTests(ApiBrowserCase):
         self.assertEqual(
             self.client.get("/api/jobs/job/candidates", headers=self.headers).json()["total"], 3)
 
+    def test_scan_status_is_isolated_per_actor_in_one_batch(self):
+        batch_id = self.create_batch()
+        owner_scan = self.scan(batch_id, pages=1, page_size=1).json()
+        self.assertEqual(owner_scan["collected"], 1)
+
+        self.repo.create_user(self.system, "test:scan-hr2", user_id="hr2")
+        self.repo.add_organization_member(self.ctx, "hr2", org_role="ORG_ADMIN")
+        hr_headers = {"X-Org-Id": "org", "X-User-Id": "hr2"}
+        hr_scan = self.client.post(
+            f"/api/jobs/job/batches/{batch_id}/browser/scan", headers=hr_headers,
+            json={"pages": 1, "page_size": 5})
+        self.assertEqual(hr_scan.status_code, 200, hr_scan.text)
+        self.assertEqual(hr_scan.json()["collected"], 3)
+
+        owner_status = self.scan_status(batch_id).json()
+        hr_status = self.scan_status(batch_id, headers=hr_headers).json()
+        self.assertEqual(owner_status["status"], "COMPLETED")
+        self.assertEqual(owner_status["result"]["collected"], 1)
+        self.assertEqual(hr_status["result"]["collected"], 3)
+        self.assertNotEqual(owner_status["result"]["collected"],
+                            hr_status["result"]["collected"])
+
     def test_scan_status_is_isolated_between_batches_of_one_job(self):
         first = self.create_batch()
         first_report = self.scan(first).json()
@@ -112,6 +134,25 @@ class ApiBrowserScanTests(ApiBrowserCase):
         self.assertEqual(second_status["batch_id"], second)
         self.assertEqual(second_status["result"]["batch_id"], second)
         self.assertEqual(second_status["result"]["imported"], 0)
+
+    def test_scan_status_survives_application_restart(self):
+        batch_id = self.create_batch()
+        first = self.scan(batch_id).json()
+        self.assertEqual(first["imported"], 3)
+
+        restarted = create_app(self.repo, browser_source="mock")
+        try:
+            client = TestClient(restarted)
+            status = client.get(
+                f"/api/jobs/job/batches/{batch_id}/browser/scan",
+                headers=self.headers)
+            self.assertEqual(status.status_code, 200, status.text)
+            body = status.json()
+            self.assertEqual(body["status"], "COMPLETED")
+            self.assertEqual(body["result"]["imported"], 3)
+            self.assertEqual(body["result"]["batch_id"], batch_id)
+        finally:
+            restarted.state.executor.shutdown(wait=True)
 
     def test_scan_rejects_unknown_batch_and_unauthorised_identity(self):
         unknown = self.scan("ghost-batch")
@@ -193,6 +234,8 @@ class ApiGreetingDryRunTests(ApiBrowserCase):
 
         events = self.contact_events(evaluation_id)
         self.assertEqual([item["action"] for item in events], ["PENDING"])
+        self.assertEqual(events[0]["mode"], "DRY_RUN")
+        self.assertIsNone(events[0]["browser_account_id"])
 
         # 3. Repeated rehearsal is idempotent: reuse, never duplicate PENDING.
         second = self.dry_run(evaluation_id)

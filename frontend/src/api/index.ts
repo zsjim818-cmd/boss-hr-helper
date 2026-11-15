@@ -120,11 +120,13 @@ export const api = {
       http.get(`/jobs/${jobId}/candidates/${jobCandidateId}/evaluations`)),
 
   // semantic + scoring
-  semanticPrepare: (jobId: string, jobCandidateId?: string) =>
-    call<SemanticPrepareResult>(http.post(`/jobs/${jobId}/semantic-prepare`,
-      jobCandidateId ? { job_candidate_id: jobCandidateId } : {})),
+  semanticPrepare: (jobId: string, jobCandidateId?: string, batchId?: string) =>
+    call<SemanticPrepareResult>(http.post(`/jobs/${jobId}/semantic-prepare`, {
+      ...(jobCandidateId ? { job_candidate_id: jobCandidateId } : {}),
+      ...(batchId ? { batch_id: batchId } : {})
+    })),
   startScoring: (jobId: string, jobCandidateId: string,
-                 payload: { scoring_mode: ScoringMode; idempotency_key?: string }) =>
+                 payload: { scoring_mode: ScoringMode; idempotency_key?: string; batch_id?: string }) =>
     call<ScoreStartResult>(http.post(`/jobs/${jobId}/candidates/${jobCandidateId}/score`, payload)),
   task: (jobId: string, taskId: string) => call<TaskResult>(http.get(`/jobs/${jobId}/tasks/${taskId}`)),
   ranking: (jobId: string, limit = 100) =>

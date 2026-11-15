@@ -216,7 +216,8 @@ def start_scoring(job_id: str, job_candidate_id: str, body: ScoreRequest,
                   request: Request, ctx=Depends(get_context)):
     repo = _repo(request)
     pipeline_factory = request.app.state.pipeline_factory
-    candidate = repo.get_job_candidate(ctx, job_id, job_candidate_id)
+    expected = repo.expected_candidate_policy(
+        ctx, job_id, job_candidate_id, body.batch_id)
     try:
         repo.get_sealed_input(ctx, job_id, job_candidate_id)
     except LookupError:
@@ -225,22 +226,28 @@ def start_scoring(job_id: str, job_candidate_id: str, body: ScoreRequest,
             detail="Candidate has no sealed scoring input; re-collect the resume first "
                    "(incomplete information is never scored)") from None
     pipeline = pipeline_factory(repo)
-    existing = pipeline.reusable_result(ctx, job_id, job_candidate_id, body.scoring_mode)
-    if (existing is not None and existing["policy_id"] == candidate["policy_id"]
-            and existing["policy_version"] == candidate["policy_version"]):
+    existing = pipeline.reusable_result(ctx, job_id, job_candidate_id,
+                                        body.scoring_mode, batch_id=body.batch_id)
+    if (existing is not None and existing["policy_id"] == expected["policy_id"]
+            and existing["policy_version"] == expected["policy_version"]):
         return {"reused": True, "task": None, "evaluation": _row(existing)}
     task = repo.create_pipeline_task(ctx, job_id, job_candidate_id, body.scoring_mode,
-                                     idempotency_key=body.idempotency_key)
+                                     idempotency_key=body.idempotency_key,
+                                     batch_id=body.batch_id)
     if task["status"] == "SUCCEEDED" and task["pipeline_evaluation_id"]:
-        return {"reused": True, "task": _row(task),
-                "evaluation": _row(repo.get_pipeline_result(ctx, job_id,
-                                                            task["pipeline_evaluation_id"]))}
+        evaluation = repo.get_pipeline_result(
+            ctx, job_id, task["pipeline_evaluation_id"])
+        if (evaluation["policy_id"], evaluation["policy_version"]) != (
+                expected["policy_id"], expected["policy_version"]):
+            raise PipelineConflict(
+                "Task is bound to another Policy version than the scoring batch")
+        return {"reused": True, "task": _row(task), "evaluation": _row(evaluation)}
     if task["status"] == "RUNNING":
         return {"reused": True, "in_progress": True, "task": _row(task)}
     request.app.state.executor.submit(
         pipeline.run_and_persist, ctx, job_id, job_candidate_id,
         scoring_mode=body.scoring_mode, idempotency_key=body.idempotency_key,
-        task_id=task["pipeline_task_id"])
+        task_id=task["pipeline_task_id"], batch_id=body.batch_id)
     return {"reused": False, "in_progress": True, "task": _row(task)}
 
 
@@ -278,10 +285,15 @@ def semantic_prepare(job_id: str, request: Request, ctx=Depends(get_context),
     repo = _repo(request)
     # Authorization: reading the current policy requires job view permission.
     repo.get_current_policy(ctx, job_id)
+    batch_id = body.batch_id if body else None
     if body and body.job_candidate_id:
         repo.get_job_candidate(ctx, job_id, body.job_candidate_id)
+        if batch_id:
+            repo.resolve_batch_policy(ctx, job_id, batch_id, body.job_candidate_id)
+    elif batch_id:
+        repo.get_scan_batch(ctx, job_id, batch_id)
     return _row(request.app.state.semantic_runtime.prepare(
-        ctx, job_id, body.job_candidate_id if body else None))
+        ctx, job_id, body.job_candidate_id if body else None, batch_id=batch_id))
 
 
 # --------------------------------------------------------- local mock browser
@@ -310,7 +322,13 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
     if body and body.batch_id and body.batch_id != batch["batch_id"]:
         raise HTTPException(status_code=400,
                             detail="body batch_id conflicts with the request path")
-    key = (ctx.org_id, job_id, batch["batch_id"])
+    registry = getattr(request.app.state, "browser_session_registry", None)
+    account = None
+    if registry is not None:
+        account = registry.binding_for(ctx).browser_account_id
+    run = repo.start_browser_scan(
+        ctx, job_id, batch["batch_id"],
+        source=request.app.state.browser_source.name, browser_account_id=account)
     adapter = None
     try:
         adapter = _browser_adapter(request, ctx, job_id)
@@ -319,11 +337,11 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
             ctx, job_id, batch["batch_id"], pages=(body.pages if body else 3),
             page_size=(body.page_size if body else 20))
     except BrowserError as exc:
-        request.app.state.browser_scan_results[key] = {
-            "status": "FAILED", "batch_id": batch["batch_id"],
-            "source": request.app.state.browser_source.name,
-            "error": {"code": exc.code, "message": str(exc),
-                      "recoverable": exc.recoverable}}
+        repo.finish_browser_scan(
+            ctx, job_id, batch["batch_id"], status="FAILED", collected=0,
+            imported=0, reused=0, failed=0, issues=[],
+            error_code=exc.code, error_message=str(exc)[:2000],
+            browser_account_id=account)
         raise
     finally:
         if adapter is not None:
@@ -334,20 +352,24 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
     payload = report.model_dump(mode="json")
     payload.update({"source": health.source or request.app.state.browser_source.name,
                     "browser": health.browser, "page_url": health.page_url,
-                    "browser_account_id": getattr(adapter, "browser_account_id", None)})
+                    "browser_account_id": getattr(adapter, "browser_account_id", account)})
     if report.collected == 0 and report.issues:
         # A fatal connection/DOM failure must not look like an empty page.
         first = report.issues[0]
-        request.app.state.browser_scan_results[key] = {
-            "status": "FAILED", "batch_id": batch["batch_id"],
-            "source": payload["source"], "result": payload,
-            "error": {"code": first.code, "message": first.message,
-                      "recoverable": first.recoverable}}
+        repo.finish_browser_scan(
+            ctx, job_id, batch["batch_id"], status="FAILED",
+            collected=0, imported=0, reused=0, failed=report.failed,
+            issues=[issue.model_dump(mode="json") for issue in report.issues],
+            error_code=first.code, error_message=first.message,
+            browser_account_id=payload["browser_account_id"])
         raise BrowserError(first.code, first.message, recoverable=first.recoverable)
-    request.app.state.browser_scan_results[key] = {
-        "status": "COMPLETED" if not report.issues else "COMPLETED_WITH_ERRORS",
-        "batch_id": batch["batch_id"], "source": payload["source"],
-        "result": payload}
+    repo.finish_browser_scan(
+        ctx, job_id, batch["batch_id"],
+        status="COMPLETED" if not report.issues else "COMPLETED_WITH_ERRORS",
+        collected=report.collected, imported=report.imported,
+        reused=report.reused, failed=report.failed,
+        issues=[issue.model_dump(mode="json") for issue in report.issues],
+        browser_account_id=payload["browser_account_id"])
     return payload
 
 
@@ -355,15 +377,28 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
                     response_model=BrowserScanStatusOut)
 def browser_scan_status(job_id: str, batch_id: str, request: Request,
                         ctx=Depends(get_context)):
-    # Status is batch-scoped: another batch of the same job never overwrites it.
+    # Status is persisted per (org, job, batch, actor) and survives restarts.
     repo = _repo(request)
     batch = repo.get_scan_batch(ctx, job_id, batch_id)
-    status = request.app.state.browser_scan_results.get(
-        (ctx.org_id, job_id, batch["batch_id"]))
-    if status is None:
+    run = repo.get_browser_scan_run(ctx, job_id, batch["batch_id"])
+    if run is None:
         raise HTTPException(status_code=404,
-                            detail="No browser scan has run for this batch yet")
-    return status
+                            detail="No browser scan has run for this batch by this user yet")
+    issues = json.loads(run["issues_json"] or "[]")
+    result = {
+        "job_id": job_id, "batch_id": run["batch_id"],
+        "collected": run["collected"], "imported": run["imported"],
+        "reused": run["reused"], "failed": run["failed"], "issues": issues,
+        "imported_candidates": [], "source": run["source"],
+        "browser": "edge-cdp" if run["source"] in ("cdp_mock", "boss_readonly") else "mock",
+        "page_url": None, "browser_account_id": run["browser_account_id"],
+    }
+    error = None
+    if run["error_code"]:
+        error = {"code": run["error_code"], "message": run["error_message"] or "",
+                 "recoverable": True}
+    return {"status": run["status"], "batch_id": run["batch_id"],
+            "source": run["source"], "result": result, "error": error}
 
 
 @browser_router.post("/{job_id}/evaluations/{evaluation_id}/greeting-dry-run",
@@ -390,9 +425,14 @@ def greeting_dry_run(job_id: str, evaluation_id: str, request: Request,
             "error_type": "GreetingRefused", "state": outcome.state,
             "message": outcome.message})
     evaluation = repo.get_pipeline_result(ctx, job_id, evaluation_id)
+    account = getattr(adapter, "browser_account_id", None)
+    if account is None:
+        registry = getattr(request.app.state, "browser_session_registry", None)
+        if registry is not None:
+            account = registry.binding_for(ctx).browser_account_id
     event, reused = repo.ensure_pending_dry_run(
         ctx, job_id, evaluation["job_candidate_id"], evaluation_id,
-        "DRY_RUN: " + outcome.message)
+        "DRY_RUN: " + outcome.message, browser_account_id=account)
     payload = outcome.model_dump(mode="json")
     payload["idempotent"] = reused
     payload["contact_event"] = _row(event)

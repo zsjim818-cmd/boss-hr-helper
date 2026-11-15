@@ -3,6 +3,7 @@ import socket
 import tempfile
 import threading
 import unittest
+import json
 from pathlib import Path
 from unittest import mock
 
@@ -263,13 +264,75 @@ class CDPManagerTests(unittest.TestCase):
         with mock.patch.object(manager, "_cdp_command_line", return_value=arguments):
             self.assertTrue(manager._verify_external_profile())
 
-    def test_sentinel_marks_the_dedicated_profile(self):
+    def test_devtools_active_port_handshake_is_verified_against_the_endpoint(self):
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        from threading import Thread
+
+        payload = {}
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802 - http.server API
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+        Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        port = server.server_address[1]
+        payload["webSocketDebuggerUrl"] = (
+            f"ws://127.0.0.1:{port}/devtools/browser/abc-123")
+
+        manager = CDPConnectionManager(
+            port=port, user_data_dir=self.profile, auto_launch=False,
+            edge_path=r"C:\fake\msedge.exe")
+        self.addCleanup(manager.close)
+        handshake = Path(self.profile) / "DevToolsActivePort"
+        handshake.write_text(f"{port}\ndevtools/browser/abc-123\n", encoding="utf-8")
+        self.assertTrue(manager._devtools_active_port_matches())
+
+        handshake.write_text(f"{port}\ndevtools/browser/forged\n", encoding="utf-8")
+        self.assertFalse(manager._devtools_active_port_matches())
+
+        handshake.write_text(f"{port + 1}\ndevtools/browser/abc-123\n", encoding="utf-8")
+        self.assertFalse(manager._devtools_active_port_matches())
+
+    def test_static_sentinel_file_is_not_trusted(self):
         manager = self._manager()
-        self.assertFalse(manager._sentinel_valid())
-        manager._write_sentinel()
-        self.assertTrue(manager._sentinel_valid())
+        sentinel = Path(self.profile) / "boss-hr-helper-profile.json"
+        sentinel.write_text(json.dumps({"marker": "boss-hr-helper-cdp"}),
+                            encoding="utf-8")
+        with mock.patch.object(manager, "_cdp_command_line", return_value=None), \
+                mock.patch.object(manager, "_devtools_active_port_matches",
+                                  return_value=False):
+            with self.assertRaises(BrowserError) as captured:
+                manager._verify_external_profile()
+        self.assertEqual(captured.exception.code, "CDP_PROFILE_UNVERIFIED")
+
+    def test_planted_devtools_active_port_without_live_browser_is_not_trusted(self):
+        manager = self._manager()
+        forged = Path(self.profile) / "DevToolsActivePort"
+        forged.write_text(f"{manager.port}\ndevtools/browser/forged-id\n",
+                          encoding="utf-8")
         with mock.patch.object(manager, "_cdp_command_line", return_value=None):
-            self.assertTrue(manager._verify_external_profile())
+            # No live endpoint answers /json/version for the forged handshake.
+            self.assertFalse(manager._devtools_active_port_matches())
+            with self.assertRaises(BrowserError) as captured:
+                manager._verify_external_profile()
+        self.assertEqual(captured.exception.code, "CDP_PROFILE_UNVERIFIED")
+
+    def test_devtools_active_port_with_wrong_port_is_rejected(self):
+        manager = self._manager()
+        forged = Path(self.profile) / "DevToolsActivePort"
+        forged.write_text("1\ndevtools/browser/whatever\n", encoding="utf-8")
+        self.assertFalse(manager._devtools_active_port_matches())
 
     def test_reconnect_preserves_owned_process(self):
         class FakeBrowser:

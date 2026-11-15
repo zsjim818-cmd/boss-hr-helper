@@ -60,7 +60,7 @@ class BrowserSourceConfig:
             "cdp_endpoint": self.endpoint if self.name in ("cdp_mock", "boss_readonly") else None,
             "headless": self.headless,
             "auto_launch": self.auto_launch,
-            "user_data_dir": self.user_data_dir or None,
+            "profile_isolated": bool(self.user_data_dir),
             "channel": self.channel,
             "diagnostics": list(self.diagnostics),
         }

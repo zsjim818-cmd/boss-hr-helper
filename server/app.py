@@ -12,7 +12,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -22,6 +22,7 @@ from config.policy_service import PolicyQualityBlocked
 from engine.demo_models import MOCK_MODEL, DeterministicLLMClient, demo_tier3_response
 from engine.policy_llm_reviewer import PolicyReviewService
 from engine.policy_scoring_pipeline import PolicyScoringPipeline
+from browser.boss_readonly_adapter import BossReadonlyCdpAdapter
 from browser.contracts import BrowserError
 from browser.mock_adapter import MockBossAdapter
 from browser.mock_data import mock_cards
@@ -30,11 +31,12 @@ from browser.sessions import BrowserSessionRegistry
 from browser.source import BrowserSourceConfig, load_browser_source
 from server.api import (browser_router, candidates_router, jobs_router,
                         policies_router, reviews_router, scoring_router)
-from server.auth import get_context
+from server.auth import get_context, get_optional_context
 from server.demo_compiler import DemoJobPolicyCompiler
 from server.responses import RuntimeModeOut
 from server.semantic_runtime import (RUNTIME_MODES, DeterministicSemanticRuntime,
                                      LiveSemanticRuntime)
+from storage.models import AccessContext
 from storage.repositories import NotFound, PermissionDenied
 from storage.repositories.pipeline import PipelineConflict
 
@@ -88,12 +90,23 @@ def _browser_factory(source: BrowserSourceConfig, runtime: BrowserRuntime | None
             adapter.connect()
             return adapter
         if source.name == "boss_readonly":
-            raise BrowserError(
-                "UNSUPPORTED",
-                "boss_readonly is authorised for connection diagnostics only; "
-                "real BOSS DOM contracts are unverified in this batch, so no "
-                "collection is attempted",
-                recoverable=False)
+            if not source.real_boss_allowed:
+                raise BrowserError(
+                    "UNSUPPORTED",
+                    "boss_readonly requires BROWSER_ALLOW_REAL_BOSS=1",
+                    recoverable=False)
+            if registry is None:
+                raise BrowserError("BROWSER_ACCOUNT_UNMAPPED",
+                                   "no HR browser session registry is configured",
+                                   recoverable=False)
+            session = registry.runtime_for(context)
+            adapter = BossReadonlyCdpAdapter(
+                session.manager,
+                page_url=os.getenv("BROWSER_BOSS_URL") or None)
+            adapter.connect()
+            binding = registry.binding_for(context)
+            adapter.browser_account_id = binding.browser_account_id
+            return adapter
         raise BrowserError("UNSUPPORTED", f"browser source {source.name!r} is disabled",
                            recoverable=False)
     return factory
@@ -135,7 +148,7 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
     runtime = browser_runtime
     registry = browser_session_registry
     if registry is None and runtime is None and source.name in ("cdp_mock", "boss_readonly"):
-        registry = BrowserSessionRegistry(source)
+        registry = BrowserSessionRegistry(source, store=repository)
     if runtime is None and source.name in ("cdp_mock", "boss_readonly") and registry is None:
         runtime = BrowserRuntime(source)
 
@@ -185,14 +198,19 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
                 "mode": mode}
 
     @app.get("/api/runtime-mode", tags=["health"], response_model=RuntimeModeOut)
-    def runtime_mode():
+    def runtime_mode(ctx: AccessContext | None = Depends(get_optional_context)):
         body = dict(semantic_runtime.describe())
         body.update({"auth_mode": "trusted-headers" if allow_trusted_headers
                      else "gateway-required",
                      "local_only": mode == "deterministic",
                      "browser_source": source.describe()})
         if registry is not None:
-            body["browser_source"]["sessions"] = registry.describe()
+            # Least privilege: anonymous callers get no session details; an
+            # authenticated HR sees only their own session (no other org/user,
+            # no local absolute paths).
+            body["browser_source"]["session"] = None
+            if allow_trusted_headers and ctx is not None:
+                body["browser_source"]["session"] = registry.describe_for(ctx)
         return body
 
     if not allow_trusted_headers:

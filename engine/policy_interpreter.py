@@ -98,12 +98,22 @@ class PolicyInterpreter:
         self.cache_hits = 0
         self.cache_misses = 0
 
-    def load_for_candidate(self, context, job_id, job_candidate_id):
+    def load_for_candidate(self, context, job_id, job_candidate_id, batch_id=None):
         if self.repository is None:
             raise ValueError("A repository is required to load candidate-bound policies")
         candidate = self.repository.get_job_candidate(context, job_id, job_candidate_id)
-        version = self.repository.get_policy_version(context, job_id, candidate["policy_id"])
-        if (version["policy_version"] != candidate["policy_version"]
+        if batch_id:
+            binding = self.repository.resolve_batch_policy(
+                context, job_id, batch_id, job_candidate_id)
+            policy_id = binding["policy_id"]
+            expected_version = binding["policy_version"]
+            candidate_id = binding["candidate_id"]
+        else:
+            policy_id = candidate["policy_id"]
+            expected_version = candidate["policy_version"]
+            candidate_id = candidate["candidate_id"]
+        version = self.repository.get_policy_version(context, job_id, policy_id=policy_id)
+        if (version["policy_version"] != expected_version
                 or version["policy_schema_version"] != "job_scoring_policy_v1"):
             raise ValueError("Candidate-bound policy version/protocol is not executable by this interpreter")
         policy = json.loads(version["policy_json"])
@@ -111,7 +121,7 @@ class PolicyInterpreter:
         plan = self.compile_policy(policy, org_id=context.org_id, job_id=job_id,
             policy_id=version["policy_id"], policy_version=version["policy_version"],
             policy_hash=version["policy_hash"], source_input=source)
-        return BoundPolicy(plan, candidate["candidate_id"], job_candidate_id)
+        return BoundPolicy(plan, candidate_id, job_candidate_id)
 
     def compile_policy(self, policy, *, org_id, job_id, policy_id, policy_version,
                        policy_hash=None, source_input=None):

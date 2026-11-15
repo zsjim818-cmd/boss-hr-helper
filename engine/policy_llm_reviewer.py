@@ -242,17 +242,20 @@ class PolicyReviewService:
         return OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key,
                       max_retries=0)
 
-    def _identity(self, context, job_id, job_candidate_id):
+    def _identity(self, context, job_id, job_candidate_id, batch_id=None):
         """Resolve the same immutable binding Tier 0/1/2 use, plus sealed input."""
         with self.repository.read(context, job_id, "evaluate"):
             pass
         candidate = self.repository.get_job_candidate(context, job_id, job_candidate_id)
-        bound = self.interpreter.load_for_candidate(context, job_id, job_candidate_id)
+        bound = self.interpreter.load_for_candidate(
+            context, job_id, job_candidate_id, batch_id=batch_id)
         plan = bound.plan
+        expected = self.repository.expected_candidate_policy(
+            context, job_id, job_candidate_id, batch_id)
         if ((plan.org_id, plan.job_id, bound.job_candidate_id, bound.candidate_id,
              plan.policy_id, plan.policy_version) !=
-                (context.org_id, job_id, job_candidate_id, candidate["candidate_id"],
-                 candidate["policy_id"], candidate["policy_version"])):
+                (context.org_id, job_id, job_candidate_id, expected["candidate_id"],
+                 expected["policy_id"], expected["policy_version"])):
             raise ValueError("Interpreter binding does not match the authorized candidate association")
         try:
             sealed = self.repository.get_sealed_input(context, job_id, job_candidate_id)
@@ -275,9 +278,10 @@ class PolicyReviewService:
                 "DATA_INCOMPLETE:封存评分输入不完整或含数据问题，不生成Tier3分数")
         return plan, candidate, sealed, resume, snapshot["content_hash"]
 
-    def evaluate(self, context, job_id, job_candidate_id) -> PolicyTier3Evaluation:
+    def evaluate(self, context, job_id, job_candidate_id, *,
+                 batch_id=None) -> PolicyTier3Evaluation:
         plan, candidate, sealed, resume, resume_hash = self._identity(
-            context, job_id, job_candidate_id)
+            context, job_id, job_candidate_id, batch_id=batch_id)
         policy = plan.policy
         request = build_pipeline_request(
             policy, llm_source_map(resume), model=self.model_name or "",
@@ -316,11 +320,13 @@ class PolicyReviewService:
             missing_evidence=missing,
             llm_metrics=self.last_llm_diagnostics or {})
 
-    def evaluate_and_persist(self, context, job_id, job_candidate_id):
+    def evaluate_and_persist(self, context, job_id, job_candidate_id, *,
+                             batch_id=None):
         """Persist through the append-only attempts table (immutability guards)."""
         task = self.repository.create_evaluation_task(context, job_id, job_candidate_id, "deep_mode")
         try:
-            evaluation = self.evaluate(context, job_id, job_candidate_id)
+            evaluation = self.evaluate(context, job_id, job_candidate_id,
+                                       batch_id=batch_id)
         except Exception as exc:
             self.repository.append_pipeline_attempt(
                 context, job_id, task["task_id"], status="FAILED",

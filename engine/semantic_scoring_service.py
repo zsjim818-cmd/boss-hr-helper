@@ -33,17 +33,21 @@ class SemanticScoringService:
         self.profiles = profiles or load_semantic_profiles(profile_path)
         self.interpreter = interpreter or PolicyInterpreter(repository)
 
-    def evaluate(self, context, job_id, job_candidate_id, *, preliminary=None) -> SemanticEvaluation:
+    def evaluate(self, context, job_id, job_candidate_id, *, preliminary=None,
+                 batch_id=None) -> SemanticEvaluation:
         # Authorization failure is an access error, never a fabricated score.
         with self.repository.read(context, job_id, "evaluate"):
             pass
         candidate = self.repository.get_job_candidate(context, job_id, job_candidate_id)
-        bound = self.interpreter.load_for_candidate(context, job_id, job_candidate_id)
+        bound = self.interpreter.load_for_candidate(
+            context, job_id, job_candidate_id, batch_id=batch_id)
         plan = bound.plan
+        expected = self.repository.expected_candidate_policy(
+            context, job_id, job_candidate_id, batch_id)
         if ((plan.org_id, plan.job_id, bound.job_candidate_id, bound.candidate_id,
              plan.policy_id, plan.policy_version) !=
-                (context.org_id, job_id, job_candidate_id, candidate["candidate_id"],
-                 candidate["policy_id"], candidate["policy_version"])):
+                (context.org_id, job_id, job_candidate_id, expected["candidate_id"],
+                 expected["policy_id"], expected["policy_version"])):
             raise ValueError("Interpreter binding does not match the authorized candidate association")
 
         # Semantic scoring requires the immutable first-complete scoring input.

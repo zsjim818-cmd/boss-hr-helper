@@ -312,7 +312,8 @@ async function prepareSemantic() {
   preparing.value = true
   try {
     const result = await api.semanticPrepare(
-      store.activeJobId, imported.value.job_candidate.job_candidate_id)
+      store.activeJobId, imported.value.job_candidate.job_candidate_id,
+      batch.value?.batch_id)
     if (store.dataEpoch !== epoch) return
     ElMessage.success(`语义准备：${result.status}`)
   } catch (error) {
@@ -334,7 +335,10 @@ async function score(mode: ScoringMode) {
   try {
     const started = await api.startScoring(
       store.activeJobId, imported.value.job_candidate.job_candidate_id,
-      { scoring_mode: mode })
+      { scoring_mode: mode, batch_id: batch.value?.batch_id,
+        idempotency_key: batch.value
+          ? `${batch.value.batch_id}:${imported.value.job_candidate.job_candidate_id}:${mode}`
+          : undefined })
     if (store.dataEpoch !== epoch) return
     if (started.reused && started.evaluation) {
       evaluation.value = started.evaluation

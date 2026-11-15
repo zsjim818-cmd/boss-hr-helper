@@ -35,7 +35,7 @@ def free_port() -> int:
 @unittest.skipUnless(EDGE_AVAILABLE, "Playwright/Edge CDP unavailable")
 class CdpRuntimeTests(unittest.TestCase):
     def setUp(self):
-        self.directory = tempfile.TemporaryDirectory(prefix="cdp_e2e_")
+        self.directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True, prefix="cdp_e2e_")
         self.addCleanup(self.directory.cleanup)
         self.profile = str(Path(self.directory.name) / "profile")
         self.port = free_port()
@@ -265,7 +265,7 @@ class CdpRuntimeTests(unittest.TestCase):
 class CdpCollectorAndGreetingTests(PipelineCase):
     def setUp(self):
         super().setUp()
-        self.directory = tempfile.TemporaryDirectory(prefix="cdp_collect_")
+        self.directory = tempfile.TemporaryDirectory(ignore_cleanup_errors=True, prefix="cdp_collect_")
         self.addCleanup(self.directory.cleanup)
         self.manager = CDPConnectionManager(
             port=free_port(), user_data_dir=str(Path(self.directory.name) / "profile"),

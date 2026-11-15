@@ -105,10 +105,25 @@ class BrowserSessionRegistryTests(unittest.TestCase):
         for item in described:
             self.assertIn("cdp_port", item)
             self.assertIn("browser_account_id", item)
-            self.assertIn("profile", item)
+            self.assertIn("profile_id", item)
+            self.assertNotIn("profile", item)
+            self.assertNotIn("user_data_dir", item)
         registry.close()
         self.assertTrue(owner_runtime.closed)
         self.assertTrue(hr_runtime.closed)
+
+    def test_runtime_inherits_auto_launch_from_the_source(self):
+        source = BrowserSourceConfig(
+            name="cdp_mock", enabled=True, port=self.source.port,
+            user_data_dir=self.source.user_data_dir, auto_launch=False)
+        registry = BrowserSessionRegistry(
+            source, profile_root=str(Path(self.directory.name) / "sessions3"))
+        self.addCleanup(registry.close)
+        binding = registry.binding_for(self.owner)
+        runtime = registry._default_runtime(binding)
+        self.addCleanup(runtime.close)
+        self.assertFalse(runtime.source.auto_launch)
+        self.assertFalse(runtime.manager.auto_launch)
 
     def test_port_allocation_skips_an_occupied_port(self):
         occupied = socket.socket()

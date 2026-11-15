@@ -122,6 +122,21 @@ def http_score(job_id: str, jcid: str, mode: str, idempotency_key: str) -> dict:
     return body["evaluation"]
 
 
+def _kill_test_browsers(profile_root: str) -> None:
+    """Stop only Edge processes launched with this run's throwaway profile."""
+    script = (
+        "Get-CimInstance Win32_Process -Filter \"Name='msedge.exe'\" | "
+        f"Where-Object {{ $_.CommandLine -like '*{profile_root}*' }} | "
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force "
+        "-ErrorAction SilentlyContinue }")
+    try:
+        subprocess.run(["powershell", "-NoProfile", "-Command", script],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=30)
+    except Exception:
+        pass
+
+
 def main():
     from playwright.sync_api import sync_playwright
 
@@ -165,6 +180,7 @@ def main():
             # The backend shuts its CDP runtime down; give Edge a moment to
             # release profile files before removing the temp directory.
             time.sleep(1)
+            _kill_test_browsers(str(Path(temp)))
     finally:
         shutil.rmtree(temp, ignore_errors=True)
 

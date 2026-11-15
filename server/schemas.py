@@ -51,6 +51,7 @@ class ImportCandidateRequest(ApiModel):
 class ScoreRequest(ApiModel):
     scoring_mode: Literal["fast_mode", "deep_mode"] = "deep_mode"
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=200)
+    batch_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class ReviewRequest(ApiModel):
@@ -65,6 +66,7 @@ class ContactRequest(ApiModel):
 
 class SemanticPrepareRequest(ApiModel):
     job_candidate_id: str | None = Field(default=None, min_length=1, max_length=200)
+    batch_id: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class BrowserScanRequest(ApiModel):

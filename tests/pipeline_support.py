@@ -38,7 +38,8 @@ class RecordingSemantic:
         self.error = error
         self.calls = 0
 
-    def evaluate(self, context, job_id, job_candidate_id, *, preliminary=None):
+    def evaluate(self, context, job_id, job_candidate_id, *, preliminary=None,
+                 batch_id=None):
         self.calls += 1
         if self.error is not None:
             raise self.error
@@ -47,7 +48,7 @@ class RecordingSemantic:
         snapshot = self.repository.get_resume_snapshot(context, job_id, job_candidate_id,
                                                        sealed["resume_id"])
         plan = PolicyInterpreter(self.repository).load_for_candidate(
-            context, job_id, job_candidate_id).plan
+            context, job_id, job_candidate_id, batch_id=batch_id).plan
         scored = self.status == "SEMANTIC_SCORED"
         return {
             "org_id": context.org_id, "job_id": job_id,
@@ -76,11 +77,12 @@ class RecordingReview:
         self.error = error
         self.calls = 0
 
-    def evaluate(self, context, job_id, job_candidate_id):
+    def evaluate(self, context, job_id, job_candidate_id, *, batch_id=None):
         self.calls += 1
         if self.error is not None:
             raise self.error
-        return self.service.evaluate(context, job_id, job_candidate_id)
+        return self.service.evaluate(context, job_id, job_candidate_id,
+                                     batch_id=batch_id)
 
 
 def raise_if_called(message):

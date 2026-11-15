@@ -77,13 +77,21 @@ class Migration010AcceptanceTests(unittest.TestCase):
         pipeline = PolicyScoringPipeline(
             repo, semantic_service=RecordingSemantic(repo),
             review_service=RecordingReview(repo))
-        outcome = pipeline.run_and_persist(ctx, "job", jcid, scoring_mode="deep_mode")
-        evaluation = outcome["evaluation"]
+        outcome = pipeline.run(ctx, "job", jcid, scoring_mode="deep_mode")
+        evaluation = repo.save_pipeline_result(ctx, "job", outcome)
         review = repo.append_pipeline_review(ctx, "job",
                                              evaluation["pipeline_evaluation_id"],
                                              "APPROVE", "迁移验收")
-        contact = repo.append_pipeline_contact_event(
-            ctx, "job", evaluation["pipeline_evaluation_id"], "CONTACTED", "迁移验收")
+        connection = sqlite3.connect(path)
+        try:
+            connection.execute("""INSERT INTO pipeline_contact_events
+                (org_id,job_id,contact_event_id,pipeline_evaluation_id,action,note,actor_id)
+                VALUES('org','job','mig-contact',?,'CONTACTED','迁移验收','owner')""",
+                               (evaluation["pipeline_evaluation_id"],))
+            connection.commit()
+        finally:
+            connection.close()
+        contact = {"contact_event_id": "mig-contact"}
         return {"ctx": ctx, "version": version, "jcid": jcid,
                 "evaluation": evaluation, "review": review, "contact": contact}
 
@@ -111,7 +119,7 @@ class Migration010AcceptanceTests(unittest.TestCase):
         self.assertEqual(len(before["evaluations"]), 1)
         self.assertEqual(before["evaluations"][0]["scoring_mode"], "deep_mode")
 
-        upgraded = Database(path)
+        upgraded = Database(path, migration_directory=_migration_dir(self.root, 10))
         result = upgraded.migrate()
         self.assertEqual(result["schema_version"], 10)
         self.assertEqual(result["applied"], ["010_pipeline_scoring_mode.sql"])
@@ -160,8 +168,6 @@ class Migration010AcceptanceTests(unittest.TestCase):
         pipeline = PolicyScoringPipeline(
             repo, semantic_service=RecordingSemantic(repo),
             review_service=RecordingReview(repo))
-        fast = repo.create_pipeline_task(ctx, "job", seed["jcid"], "fast_mode")
-        repo.update_pipeline_task(ctx, "job", fast["pipeline_task_id"], status="RUNNING")
         fast_result = pipeline.run(ctx, "job", seed["jcid"], scoring_mode="fast_mode")
         repo.save_pipeline_result(ctx, "job", fast_result)
         rows = repo.list_pipeline_results(ctx, "job", seed["jcid"])
@@ -193,7 +199,8 @@ class Migration010AcceptanceTests(unittest.TestCase):
         self.assertNotIn("broken_partial", tables)
         self.assertEqual(self._snapshot(path), before)
         # Recovery: the correct migration set still upgrades the same file.
-        recovered = Database(path).migrate()
+        recovered = Database(
+            path, migration_directory=_migration_dir(self.root, 10)).migrate()
         self.assertEqual(recovered["schema_version"], 10)
         self.assertEqual(self._snapshot(path), before)
 

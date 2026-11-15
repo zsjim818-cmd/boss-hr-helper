@@ -101,7 +101,8 @@ class PolicyScoringPipeline:
                                "不能以其他维度高分掩盖")
         return (not reasons), reasons
 
-    def run(self, context, job_id, job_candidate_id, *, scoring_mode="deep_mode"):
+    def run(self, context, job_id, job_candidate_id, *, scoring_mode="deep_mode",
+            batch_id=None):
         if scoring_mode not in ("fast_mode", "deep_mode"):
             raise PipelineError("Unsupported scoring mode")
         self._scoring_mode = scoring_mode
@@ -109,10 +110,11 @@ class PolicyScoringPipeline:
         self._candidate_key = candidate["candidate_key"]
         preliminary = PreliminaryScreeningEngine(
             self.repository, interpreter=self.interpreter).evaluate(
-            context, job_id, job_candidate_id)
+            context, job_id, job_candidate_id, batch_id=batch_id)
         if scoring_mode == "fast_mode":
             return self._fast_mode(preliminary)
-        return self._deep_mode(context, job_id, job_candidate_id, preliminary)
+        return self._deep_mode(context, job_id, job_candidate_id, preliminary,
+                               batch_id=batch_id)
 
     def _fast_mode(self, preliminary):
         if preliminary.scoring_status == "HARD_FILTERED":
@@ -128,7 +130,8 @@ class PolicyScoringPipeline:
                             total_score=preliminary.preliminary_score,
                             review_reasons=["fast_mode仅完成Tier0/Tier1；未调用语义/终审模型"])
 
-    def _deep_mode(self, context, job_id, job_candidate_id, preliminary):
+    def _deep_mode(self, context, job_id, job_candidate_id, preliminary,
+                   *, batch_id=None):
         if preliminary.scoring_status == "HARD_FILTERED":
             return self._result(preliminary, status="HARD_FILTERED",
                                 review_reasons=["Tier0硬条件明确不满足；未调用语义/终审模型"])
@@ -140,7 +143,8 @@ class PolicyScoringPipeline:
             # never spend a Tier 3 call on an unresolved hard condition.
             try:
                 semantic = _dump(self._semantic_service().evaluate(
-                    context, job_id, job_candidate_id, preliminary=preliminary))
+                    context, job_id, job_candidate_id, preliminary=preliminary,
+                    batch_id=batch_id))
             except Exception as exc:  # technical failure of the semantic stage
                 return self._technical(preliminary, exc, stage="tier2")
             return self._result(preliminary, status="NEEDS_REVIEW", semantic=semantic,
@@ -152,7 +156,8 @@ class PolicyScoringPipeline:
                                 review_reasons=["Tier1规则初筛分低于本岗位粗排门槛；未调用语义/终审模型"])
         try:
             semantic = _dump(self._semantic_service().evaluate(
-                context, job_id, job_candidate_id, preliminary=preliminary))
+                context, job_id, job_candidate_id, preliminary=preliminary,
+                batch_id=batch_id))
         except Exception as exc:
             return self._technical(preliminary, exc, stage="tier2")
         if semantic.get("scoring_status") in ("DATA_INCOMPLETE", "ASSET_INCOMPLETE", "SCORING_FAILED"):
@@ -164,7 +169,8 @@ class PolicyScoringPipeline:
             return self._result(preliminary, status="NEEDS_REVIEW", semantic=semantic,
                                 review_reasons=[*reasons, "语义证据不完整；未调用终审模型"])
         try:
-            tier3 = self._review_service().evaluate(context, job_id, job_candidate_id)
+            tier3 = self._review_service().evaluate(
+                context, job_id, job_candidate_id, batch_id=batch_id)
         except Exception as exc:
             return self._technical(preliminary, exc, stage="tier3", semantic=semantic)
         return self._result(preliminary, status="DEEP_SCORED", semantic=semantic,
@@ -181,36 +187,42 @@ class PolicyScoringPipeline:
                             technical_failure=failure)
 
     # -------------------------------------------------------- persistence API
-    def _current_binding(self, context, job_id, job_candidate_id):
-        candidate = self.repository.get_job_candidate(context, job_id, job_candidate_id)
-        return candidate
+    def _current_binding(self, context, job_id, job_candidate_id, batch_id=None):
+        return self.repository.expected_candidate_policy(
+            context, job_id, job_candidate_id, batch_id)
 
-    def reusable_result(self, context, job_id, job_candidate_id, scoring_mode):
-        """A deep formal result satisfies every request; a fast result only a
-        fast request.  This is what makes fast -> deep an *upgrade* rather than
-        a silent reuse of the shallower stage."""
+    def reusable_result(self, context, job_id, job_candidate_id, scoring_mode,
+                        batch_id=None):
+        """Reuse only results of the same scoring context (batch Policy)."""
         if scoring_mode not in ("fast_mode", "deep_mode"):
             raise PipelineError("Unsupported scoring mode")
+        expected = self._current_binding(context, job_id, job_candidate_id, batch_id)
         deep = self.repository.pipeline_result_for_mode(
-            context, job_id, job_candidate_id, "deep_mode")
+            context, job_id, job_candidate_id, "deep_mode",
+            policy_id=expected["policy_id"],
+            policy_version=expected["policy_version"])
         if deep is not None:
             return deep
         if scoring_mode == "fast_mode":
             return self.repository.pipeline_result_for_mode(
-                context, job_id, job_candidate_id, "fast_mode")
+                context, job_id, job_candidate_id, "fast_mode",
+                policy_id=expected["policy_id"],
+                policy_version=expected["policy_version"])
         return None
 
     def run_and_persist(self, context, job_id, job_candidate_id, *, scoring_mode="deep_mode",
-                        idempotency_key=None, task_id=None):
+                        idempotency_key=None, task_id=None, batch_id=None):
         """Idempotent execution: existing formal result/task wins, no re-scoring."""
-        candidate = self._current_binding(context, job_id, job_candidate_id)
-        existing = self.reusable_result(context, job_id, job_candidate_id, scoring_mode)
+        candidate = self._current_binding(context, job_id, job_candidate_id, batch_id)
+        existing = self.reusable_result(context, job_id, job_candidate_id, scoring_mode,
+                                        batch_id=batch_id)
         if (existing is not None and existing["policy_id"] == candidate["policy_id"]
                 and existing["policy_version"] == candidate["policy_version"]):
             return {"task": None, "evaluation": existing, "reused": True}
         if task_id is None:
             task = self.repository.create_pipeline_task(
-                context, job_id, job_candidate_id, scoring_mode, idempotency_key=idempotency_key)
+                context, job_id, job_candidate_id, scoring_mode,
+                idempotency_key=idempotency_key, batch_id=batch_id)
         else:
             task = self.repository.get_pipeline_task(context, job_id, task_id)
         # Identity binding is re-verified for reused tasks as well: a task may
@@ -219,8 +231,13 @@ class PolicyScoringPipeline:
             raise PipelineConflict(
                 "Pipeline task identity does not match the requested candidate/scoring mode")
         if task["status"] == "SUCCEEDED" and task["pipeline_evaluation_id"]:
-            return {"task": task, "evaluation": self.repository.get_pipeline_result(
-                context, job_id, task["pipeline_evaluation_id"]), "reused": True}
+            evaluation = self.repository.get_pipeline_result(
+                context, job_id, task["pipeline_evaluation_id"])
+            if (evaluation["policy_id"], evaluation["policy_version"]) != (
+                    candidate["policy_id"], candidate["policy_version"]):
+                raise PipelineConflict(
+                    "Task is bound to another Policy version than the scoring batch")
+            return {"task": task, "evaluation": evaluation, "reused": True}
         if task["status"] == "RUNNING":
             return {"task": task, "evaluation": None, "reused": True, "in_progress": True}
         claimed = self._claim_task(context, job_id, task)
@@ -229,7 +246,8 @@ class PolicyScoringPipeline:
             return {"task": current, "evaluation": None, "reused": True, "in_progress": True}
         task = claimed
         try:
-            result = self.run(context, job_id, job_candidate_id, scoring_mode=scoring_mode)
+            result = self.run(context, job_id, job_candidate_id,
+                              scoring_mode=scoring_mode, batch_id=batch_id)
         except Exception as exc:  # identity/sealed-input/authorization errors
             task = self.repository.update_pipeline_task(
                 context, job_id, task["pipeline_task_id"], status="FAILED",
@@ -244,7 +262,8 @@ class PolicyScoringPipeline:
                 error_type=(result.technical_failure or {}).get("error_type", "TechnicalFailure"),
                 error_message=(result.technical_failure or {}).get("message"))
             return {"task": task, "evaluation": None, "reused": False}
-        saved = self.repository.save_pipeline_result(context, job_id, result)
+        saved = self.repository.save_pipeline_result(
+            context, job_id, result, batch_id=batch_id)
         self.repository.append_pipeline_result_attempt(
             context, job_id, result, status="SUCCEEDED", metrics=metrics)
         task = self.repository.update_pipeline_task(
