@@ -1,0 +1,742 @@
+{
+  "input_origin": "Synthetic JD written for acceptance, not external job listings",
+  "model_calls": "REAL_QWEN_API",
+  "compiler_output": "Qwen extraction plus audited deterministic compilation",
+  "automatic_publication": false,
+  "cases": [
+    {
+      "case_id": "ai_automation",
+      "job_id": "feea4ce1a73942faad4db76e8ef0e273",
+      "draft_id": "f24303ed769842f598946347408eda51",
+      "run_id": "ab22e31439004091b75e2f599c7039ac",
+      "draft_hash": "216ceb63a9cc701a10a77a4d3d7dd51de87b4b6bd72274cc7978bc8fcf6e16d0",
+      "metrics": {
+        "status": "DRAFT_READY",
+        "stage": "completed",
+        "model": "qwen3.8-27b",
+        "timeout_seconds": 90,
+        "max_tokens": 12288,
+        "temperature": 0,
+        "strict_schema": true,
+        "enable_thinking": false,
+        "sdk_max_retries": 0,
+        "system_chars": 2597,
+        "user_chars": 685,
+        "schema_chars": 8786,
+        "prompt_hash": "5bfa6b13d00592a63269136c0673ea7ab80b6d493ac237fb7c2d9971a2ff7abc",
+        "schema_hash": "d6a14e6b793d23c10822a6bc5300d5e2e179c9766098ebd51c68e154cad17df1",
+        "usage": {
+          "completion_tokens": 4646,
+          "prompt_tokens": 4540,
+          "total_tokens": 9186,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": null,
+            "reasoning_tokens": null,
+            "rejected_prediction_tokens": null,
+            "text_tokens": null
+          },
+          "prompt_tokens_details": {
+            "audio_tokens": null,
+            "cache_write_tokens": null,
+            "cached_tokens": 0,
+            "image_tokens": null,
+            "text_tokens": 4540
+          }
+        },
+        "reasoning_tokens": null,
+        "pydantic_valid": true,
+        "business_valid": true,
+        "finish_reason": "stop",
+        "api_elapsed_seconds": 83.9676,
+        "request_id": "4f4bbf35-d9fe-9fb2-934e-15d7b7aa37af",
+        "response_model": "qwen3.8-27b",
+        "response_chars": 13094,
+        "raw_response_sha256": "afd89f42d74f4e582693559889f4e91376f0be0405dd765233f4e285e9c8ad0d",
+        "normalizer_version": "policy-normalizer-v1",
+        "policy_normalized": true,
+        "normalization_actions": [
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword 'Python': removed aliases [\"python3\", \"py\"]",
+            "requirement_ids": [
+              "req_py_01"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword '异常处理': removed aliases [\"exception handling\", \"try-except\", \"错误捕获\"]",
+            "requirement_ids": [
+              "req_exc_01",
+              "req_api_test_01"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword '接口测试': removed aliases [\"API testing\", \"pytest\", \"unittest\"]",
+            "requirement_ids": [
+              "req_exc_01",
+              "req_api_test_01"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword 'RAG': removed aliases [\"Retrieval-Augmented Generation\", \"知识检索\", \"向量数据库\"]",
+            "requirement_ids": [
+              "req_route_a_tool_01",
+              "req_route_a_rag_01"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword '数据采集': removed aliases [\"爬虫\", \"scraping\", \"数据抓取\"]",
+            "requirement_ids": [
+              "req_route_b_web_01",
+              "req_route_b_retry_01"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword '重试机制': removed aliases [\"retry\", \"任务恢复\", \"断点续传\"]",
+            "requirement_ids": [
+              "req_route_b_web_01",
+              "req_route_b_retry_01"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword 'Docker': removed aliases [\"docker-compose\", \"容器化\"]",
+            "requirement_ids": [
+              "req_docker_01",
+              "req_n8n_01"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword 'n8n': removed aliases [\"n8n workflow\", \"工作流引擎\"]",
+            "requirement_ids": [
+              "req_docker_01",
+              "req_n8n_01"
+            ]
+          },
+          {
+            "code": "LOWERED_EXPLICIT_ALTERNATIVE",
+            "severity": "WARNING",
+            "message": "Lowered '使用LangGraph或LangChain实现多步骤工具调用' to ANY with original source tokens 'LangGraph' and 'LangChain'",
+            "requirement_ids": [
+              "alt_360e9d0fcbe7eff84718d116",
+              "alt_5861852725e342467607aac3"
+            ]
+          },
+          {
+            "code": "LOWERED_EXPLICIT_ALTERNATIVE",
+            "severity": "WARNING",
+            "message": "Lowered '使用Playwright或Selenium实现网页操作和数据采集' to ANY with original source tokens 'Playwright' and 'Selenium'",
+            "requirement_ids": [
+              "alt_38a80e9c81143eb55a79ffb5",
+              "alt_3ebe7802549a648b3fe141ef"
+            ]
+          }
+        ],
+        "compiled_policy_sha256": "a766427f40e7dd741d0bb3c4d1805210d3f90fe4db7c580949fbba57c7f4c457",
+        "needs_confirmation": false,
+        "diagnostic_codes": [
+          "DUPLICATE_KEYWORD_ALIAS",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "LOWERED_EXPLICIT_ALTERNATIVE",
+          "LOWERED_EXPLICIT_ALTERNATIVE"
+        ],
+        "elapsed_seconds": 83.9986
+      },
+      "diagnostics": [
+        {
+          "code": "DUPLICATE_KEYWORD_ALIAS",
+          "severity": "WARNING",
+          "message": "Repeated aliases will require canonical deduplication",
+          "requirement_ids": []
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword 'Python': removed aliases [\"python3\", \"py\"]",
+          "requirement_ids": [
+            "req_py_01"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword '异常处理': removed aliases [\"exception handling\", \"try-except\", \"错误捕获\"]",
+          "requirement_ids": [
+            "req_exc_01",
+            "req_api_test_01"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword '接口测试': removed aliases [\"API testing\", \"pytest\", \"unittest\"]",
+          "requirement_ids": [
+            "req_exc_01",
+            "req_api_test_01"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword 'RAG': removed aliases [\"Retrieval-Augmented Generation\", \"知识检索\", \"向量数据库\"]",
+          "requirement_ids": [
+            "req_route_a_tool_01",
+            "req_route_a_rag_01"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword '数据采集': removed aliases [\"爬虫\", \"scraping\", \"数据抓取\"]",
+          "requirement_ids": [
+            "req_route_b_web_01",
+            "req_route_b_retry_01"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword '重试机制': removed aliases [\"retry\", \"任务恢复\", \"断点续传\"]",
+          "requirement_ids": [
+            "req_route_b_web_01",
+            "req_route_b_retry_01"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword 'Docker': removed aliases [\"docker-compose\", \"容器化\"]",
+          "requirement_ids": [
+            "req_docker_01",
+            "req_n8n_01"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword 'n8n': removed aliases [\"n8n workflow\", \"工作流引擎\"]",
+          "requirement_ids": [
+            "req_docker_01",
+            "req_n8n_01"
+          ]
+        },
+        {
+          "code": "LOWERED_EXPLICIT_ALTERNATIVE",
+          "severity": "WARNING",
+          "message": "Lowered '使用LangGraph或LangChain实现多步骤工具调用' to ANY with original source tokens 'LangGraph' and 'LangChain'",
+          "requirement_ids": [
+            "alt_360e9d0fcbe7eff84718d116",
+            "alt_5861852725e342467607aac3"
+          ]
+        },
+        {
+          "code": "LOWERED_EXPLICIT_ALTERNATIVE",
+          "severity": "WARNING",
+          "message": "Lowered '使用Playwright或Selenium实现网页操作和数据采集' to ANY with original source tokens 'Playwright' and 'Selenium'",
+          "requirement_ids": [
+            "alt_38a80e9c81143eb55a79ffb5",
+            "alt_3ebe7802549a648b3fe141ef"
+          ]
+        }
+      ],
+      "publishable": true,
+      "generality": {
+        "case_id": "ai_automation",
+        "hard_filters": [
+          {
+            "field": "education_level",
+            "operator": "GTE",
+            "value_text": "大专",
+            "value_number": null,
+            "unit": "level"
+          },
+          {
+            "field": "expected_salary",
+            "operator": "LTE",
+            "value_text": null,
+            "value_number": 18.0,
+            "unit": "month"
+          }
+        ],
+        "required_all_groups": [
+          "grp_core_reqs",
+          "grp_route_a",
+          "grp_route_b"
+        ],
+        "required_any_groups": [
+          "grp_alt_routes",
+          "req_route_a_tool_01",
+          "req_route_b_web_01"
+        ],
+        "keyword_groups": [
+          "Python编程",
+          "可靠性与测试",
+          "LLM应用开发",
+          "Web自动化",
+          "部署与工作流"
+        ],
+        "keywords": [
+          "Python",
+          "异常处理",
+          "接口测试",
+          "LangGraph",
+          "LangChain",
+          "RAG",
+          "Playwright",
+          "Selenium",
+          "数据采集",
+          "重试机制",
+          "Docker",
+          "n8n"
+        ],
+        "anchors": [
+          "描述了具体的项目背景，说明了如何使用Python结合特定框架（如LangChain或Playwright）解决实际问题，并提供了代码结构或架构设计的细节。",
+          "详细阐述了在系统运行中遇到网络波动或服务不可用时的具体异常处理策略，包括重试逻辑、状态保存和任务恢复的实现方式。",
+          "仅罗列了技术栈名称（如Python, LangChain, Selenium），但没有描述任何具体的实现过程、遇到的挑战或最终的交付成果。",
+          "虽然提到了开发自动化脚本，但完全未提及如何处理执行过程中的异常情况，缺乏对程序健壮性的考量。"
+        ],
+        "dimensions": [
+          {
+            "dimension_id": "dim_delivery",
+            "label": "应用交付",
+            "weight": 0.5,
+            "rubric": [
+              "仅有技术名词堆砌，无具体项目描述，无法证明具备独立交付能力。",
+              "能描述简单脚本或单一功能模块的实现，但缺乏对整体架构或复杂业务场景的处理经验。",
+              "有完整的端到端项目交付经验，能清晰阐述从需求分析到代码实现的全过程，且项目具有实际业务价值。"
+            ]
+          },
+          {
+            "dimension_id": "dim_reliability",
+            "label": "程序可靠性",
+            "weight": 0.25,
+            "rubric": [
+              "未提及任何异常处理或测试策略，程序可能因单次错误而崩溃。",
+              "了解基本的try-except用法，但缺乏针对网络超时、数据不一致等复杂场景的系统性处理方案。",
+              "具备完善的容错机制设计，包括指数退避重试、状态持久化、自动化测试覆盖，能确保长时运行任务的可靠性。"
+            ]
+          },
+          {
+            "dimension_id": "dim_efficiency",
+            "label": "流程提效",
+            "weight": 0.15,
+            "rubric": [
+              "无法说明自动化如何具体节省人力或时间，缺乏量化指标。",
+              "能描述简单的重复性工作自动化，但对流程瓶颈识别和优化效果评估不足。",
+              "深入理解业务痛点，通过RAG或Web自动化显著提升了关键流程的效率，并能提供具体的ROI分析。"
+            ]
+          },
+          {
+            "dimension_id": "dim_understanding",
+            "label": "需求理解",
+            "weight": 0.1,
+            "rubric": [
+              "被动接受指令，无法主动澄清需求边界或潜在风险。",
+              "能准确复述需求，但在面对变更或歧义时缺乏独立的判断力。",
+              "能从业务目标出发反推技术实现，主动识别需求中的隐含约束，并提出建设性的技术方案。"
+            ]
+          }
+        ],
+        "thresholds": [
+          52.0,
+          68.0,
+          90.0
+        ],
+        "hard_requirement_sources": [
+          "硬性要求：大专及以上学历，期望月薪不高于18K。",
+          "硬性要求：大专及以上学历，期望月薪不高于18K。"
+        ]
+      },
+      "acceptance_passed": true
+    },
+    {
+      "case_id": "java_backend",
+      "job_id": "9a148a5822e24f38b11e8adaf8753f96",
+      "acceptance_passed": false,
+      "metrics": {
+        "status": "FAILED",
+        "stage": "api_call",
+        "model": "qwen3.8-27b",
+        "timeout_seconds": 90,
+        "max_tokens": 12288,
+        "temperature": 0,
+        "strict_schema": true,
+        "enable_thinking": false,
+        "sdk_max_retries": 0,
+        "system_chars": 2597,
+        "user_chars": 651,
+        "schema_chars": 8786,
+        "prompt_hash": "56e8fe62d006c1e62c8a5bb046586153e074e3b61397586ef53e8af951225ce6",
+        "schema_hash": "d6a14e6b793d23c10822a6bc5300d5e2e179c9766098ebd51c68e154cad17df1",
+        "usage": null,
+        "reasoning_tokens": null,
+        "pydantic_valid": false,
+        "business_valid": false,
+        "finish_reason": null,
+        "failure_type": "APITimeoutError",
+        "http_status": null,
+        "api_elapsed_seconds": 90.0106,
+        "cause_chain": [
+          "APITimeoutError",
+          "ReadTimeout",
+          "ReadTimeout"
+        ],
+        "elapsed_seconds": 90.0107
+      },
+      "error_type": "CompilationError"
+    },
+    {
+      "case_id": "b2b_sales",
+      "job_id": "c9c1f96d7b0441e1ba8ce10e83a63d9b",
+      "draft_id": "2d4cc8a17b924722acf05445e070f0fa",
+      "run_id": "606e7990820e42ad81c93cfcfad7c12a",
+      "draft_hash": "b5b68c3ab1046bc615bfb234916275e81e56a2e7fa4c3667482ea386d05098e5",
+      "metrics": {
+        "status": "DRAFT_READY",
+        "stage": "completed",
+        "model": "qwen3.8-27b",
+        "timeout_seconds": 90,
+        "max_tokens": 12288,
+        "temperature": 0,
+        "strict_schema": true,
+        "enable_thinking": false,
+        "sdk_max_retries": 0,
+        "system_chars": 2597,
+        "user_chars": 620,
+        "schema_chars": 8786,
+        "prompt_hash": "41a89cd2b2c7aecf5ad36a93f8150002f384fd312e281876809a6489e7e6f75d",
+        "schema_hash": "d6a14e6b793d23c10822a6bc5300d5e2e179c9766098ebd51c68e154cad17df1",
+        "usage": {
+          "completion_tokens": 3993,
+          "prompt_tokens": 4520,
+          "total_tokens": 8513,
+          "completion_tokens_details": {
+            "accepted_prediction_tokens": null,
+            "audio_tokens": null,
+            "reasoning_tokens": null,
+            "rejected_prediction_tokens": null,
+            "text_tokens": null
+          },
+          "prompt_tokens_details": {
+            "audio_tokens": null,
+            "cache_write_tokens": null,
+            "cached_tokens": 3328,
+            "image_tokens": null,
+            "text_tokens": 4520
+          }
+        },
+        "reasoning_tokens": null,
+        "pydantic_valid": true,
+        "business_valid": true,
+        "finish_reason": "stop",
+        "api_elapsed_seconds": 73.0511,
+        "request_id": "bfcf17b6-68cd-9c0f-aa66-f68471533aea",
+        "response_model": "qwen3.8-27b",
+        "response_chars": 11345,
+        "raw_response_sha256": "da85021825699a2ca13238b1947efefbc86c5264de3a553c02b69e5f1af6fea2",
+        "normalizer_version": "policy-normalizer-v1",
+        "policy_normalized": true,
+        "normalization_actions": [
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword '商机开拓': removed aliases [\"线索挖掘\", \"新客户开发\", \"市场拓展\"]",
+            "requirement_ids": [
+              "req_skill_interview",
+              "req_exp_direct_sales",
+              "req_exp_channel_sales"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword '企业客户': removed aliases [\"B2B销售\", \"大客户销售\", \"To B\"]",
+            "requirement_ids": [
+              "req_skill_interview",
+              "req_exp_direct_sales",
+              "req_exp_channel_sales"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword '需求访谈': removed aliases [\"需求调研\", \"痛点分析\", \"解决方案设计\"]",
+            "requirement_ids": [
+              "req_skill_interview"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword '办公软件': removed aliases [\"SaaS\", \"企业服务\", \"数字化办公\"]",
+            "requirement_ids": [
+              "req_skill_interview"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword '商务谈判': removed aliases [\"价格谈判\", \"条款协商\", \"合同签署\"]",
+            "requirement_ids": [
+              "req_skill_negotiation",
+              "req_evidence_deal"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword '签约': removed aliases [\"成单\", \"订单转化\", \"合同落地\"]",
+            "requirement_ids": [
+              "req_skill_negotiation",
+              "req_evidence_deal"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword '回款跟进': removed aliases [\"应收账款管理\", \"账期催收\", \"资金回收\"]",
+            "requirement_ids": [
+              "req_skill_funnel",
+              "req_evidence_deal"
+            ]
+          },
+          {
+            "code": "ALIASES_REMOVED_UNGROUNDED",
+            "severity": "WARNING",
+            "message": "Keyword '销售漏斗': removed aliases [\"Pipeline管理\", \"销售阶段跟踪\", \"转化率优化\"]",
+            "requirement_ids": [
+              "req_skill_funnel",
+              "req_evidence_deal"
+            ]
+          }
+        ],
+        "compiled_policy_sha256": "d2cbfd2319c26008c824f3a1c0ed6afeaaa916dc26b39b721c5e9634520038ac",
+        "needs_confirmation": false,
+        "diagnostic_codes": [
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED",
+          "ALIASES_REMOVED_UNGROUNDED"
+        ],
+        "elapsed_seconds": 73.0709
+      },
+      "diagnostics": [
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword '商机开拓': removed aliases [\"线索挖掘\", \"新客户开发\", \"市场拓展\"]",
+          "requirement_ids": [
+            "req_skill_interview",
+            "req_exp_direct_sales",
+            "req_exp_channel_sales"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword '企业客户': removed aliases [\"B2B销售\", \"大客户销售\", \"To B\"]",
+          "requirement_ids": [
+            "req_skill_interview",
+            "req_exp_direct_sales",
+            "req_exp_channel_sales"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword '需求访谈': removed aliases [\"需求调研\", \"痛点分析\", \"解决方案设计\"]",
+          "requirement_ids": [
+            "req_skill_interview"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword '办公软件': removed aliases [\"SaaS\", \"企业服务\", \"数字化办公\"]",
+          "requirement_ids": [
+            "req_skill_interview"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword '商务谈判': removed aliases [\"价格谈判\", \"条款协商\", \"合同签署\"]",
+          "requirement_ids": [
+            "req_skill_negotiation",
+            "req_evidence_deal"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword '签约': removed aliases [\"成单\", \"订单转化\", \"合同落地\"]",
+          "requirement_ids": [
+            "req_skill_negotiation",
+            "req_evidence_deal"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword '回款跟进': removed aliases [\"应收账款管理\", \"账期催收\", \"资金回收\"]",
+          "requirement_ids": [
+            "req_skill_funnel",
+            "req_evidence_deal"
+          ]
+        },
+        {
+          "code": "ALIASES_REMOVED_UNGROUNDED",
+          "severity": "WARNING",
+          "message": "Keyword '销售漏斗': removed aliases [\"Pipeline管理\", \"销售阶段跟踪\", \"转化率优化\"]",
+          "requirement_ids": [
+            "req_skill_funnel",
+            "req_evidence_deal"
+          ]
+        }
+      ],
+      "publishable": true,
+      "generality": {
+        "case_id": "b2b_sales",
+        "hard_filters": [
+          {
+            "field": "work_years",
+            "operator": "GTE",
+            "value_text": null,
+            "value_number": 2.0,
+            "unit": "year"
+          },
+          {
+            "field": "expected_salary",
+            "operator": "LTE",
+            "value_text": null,
+            "value_number": 20.0,
+            "unit": "month"
+          }
+        ],
+        "required_all_groups": [
+          "grp_core_skills"
+        ],
+        "required_any_groups": [
+          "grp_business_routes"
+        ],
+        "keyword_groups": [
+          "客户开拓与商机挖掘",
+          "需求分析与方案沟通",
+          "商务谈判与签约推进",
+          "回款管理与流程控制"
+        ],
+        "keywords": [
+          "商机开拓",
+          "企业客户",
+          "需求访谈",
+          "办公软件",
+          "商务谈判",
+          "签约",
+          "回款跟进",
+          "销售漏斗"
+        ],
+        "anchors": [
+          "描述过直接面对企业客户完成从需求确认到合同签署的全过程，并提供了具体的签约金额或客户名称作为证据。",
+          "阐述过如何管理渠道合作伙伴的销售漏斗，包括对代理商的赋能、业绩追踪及最终的回款闭环管理。",
+          "详细说明了在复杂商务场景下如何处理价格异议、调整合同条款以促成双方达成一致的谈判策略。",
+          "仅罗列了“销售”、“谈判”等通用术语，但未提供任何具体的签约案例、回款数据或漏斗管理的具体动作细节。"
+        ],
+        "dimensions": [
+          {
+            "dimension_id": "dim_customer_dev",
+            "label": "客户开拓",
+            "weight": 0.25,
+            "rubric": [
+              "缺乏明确的企业客户开发经历，或无法说明具体的获客渠道和方法。",
+              "有基本的客户开发经验，能说出常用的拓客手段，但缺乏量化成果或系统性策略。",
+              "拥有成熟的企业客户开拓体系，能提供高价值新客户的开发案例及具体的转化率数据。"
+            ]
+          },
+          {
+            "dimension_id": "dim_solution_comm",
+            "label": "需求与方案沟通",
+            "weight": 0.2,
+            "rubric": [
+              "沟通停留在表面，无法深入挖掘客户痛点，缺乏需求访谈的结构化方法。",
+              "能进行常规的需求询问，但将需求转化为具体产品方案的逻辑不够清晰。",
+              "擅长通过深度访谈识别隐性需求，并能设计出高度匹配客户业务场景的定制化解决方案。"
+            ]
+          },
+          {
+            "dimension_id": "dim_commercial_push",
+            "label": "商务推进",
+            "weight": 0.35,
+            "rubric": [
+              "缺乏独立的商务谈判经验，或在关键条款上依赖上级支持，无成功签约案例。",
+              "能处理常规的商务流程，但在复杂的价格或条款博弈中表现被动，签约周期较长。",
+              "具备极强的谈判技巧，能在保护公司利益的前提下灵活破局，快速推动大额合同签署。"
+            ]
+          },
+          {
+            "dimension_id": "dim_collection_mgmt",
+            "label": "回款管理",
+            "weight": 0.2,
+            "rubric": [
+              "只关注签单而忽视回款，缺乏对应收账款的风险意识和管理手段。",
+              "能配合财务进行基本的回款提醒，但对长期拖欠款项缺乏有效的催收策略。",
+              "建立完善的回款预警机制，能将回款率纳入销售漏斗考核，确保现金流健康。"
+            ]
+          }
+        ],
+        "thresholds": [
+          48.0,
+          65.0,
+          88.0
+        ],
+        "hard_requirement_sources": [
+          "硬性要求：至少2年工作经验，期望月薪不高于20K，学历不限。",
+          "硬性要求：至少2年工作经验，期望月薪不高于20K，学历不限。"
+        ]
+      },
+      "acceptance_passed": true
+    }
+  ],
+  "ok": false,
+  "database_check": {
+    "ok": true,
+    "database": "D:\\Boss-project\\boss-qhr-helper-dev\\reports\\phase1_7_stage3\\live\\normalized_v1_2\\drafts.sqlite3",
+    "schema_version": 7,
+    "pragmas": {
+      "foreign_keys": 1,
+      "recursive_triggers": 1,
+      "journal_mode": "wal",
+      "busy_timeout": 5000
+    },
+    "integrity_check": [
+      "ok"
+    ],
+    "foreign_key_violations": [],
+    "pending_migrations": [],
+    "issues": []
+  }
+}

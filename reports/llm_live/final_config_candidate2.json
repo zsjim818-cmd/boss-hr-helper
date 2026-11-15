@@ -1,0 +1,559 @@
+{
+  "scope": "tier3_only_diagnostic",
+  "skipped_stages": [
+    "tier1",
+    "tier2"
+  ],
+  "metrics": {
+    "request": {
+      "model": "qwen3.8-27b",
+      "timeout_seconds": 45,
+      "temperature": 0,
+      "max_tokens": null,
+      "max_completion_tokens": null,
+      "extra_body": {
+        "enable_thinking": false
+      },
+      "stream": false,
+      "response_format": "json_schema",
+      "strict": true,
+      "system_chars": 1500,
+      "user_chars": 560,
+      "schema_chars": 1317,
+      "body_utf8_bytes": 5808,
+      "prompt_sha256": "7daab228fef679663047af25450a198aae72397ec7f59cce144eec869912511a",
+      "schema_sha256": "9078cf914295822191cae20d86114d65076ec965365f8e297cb3f9b58a94c298"
+    },
+    "sdk_max_retries": 0,
+    "status": "SUCCEEDED",
+    "stage": "completed",
+    "usage": {
+      "completion_tokens": 809,
+      "prompt_tokens": 1477,
+      "total_tokens": 2286,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": null,
+        "rejected_prediction_tokens": null,
+        "text_tokens": null
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": null,
+        "cache_write_tokens": null,
+        "cached_tokens": 0,
+        "image_tokens": null,
+        "text_tokens": 1477
+      }
+    },
+    "reasoning_tokens": null,
+    "finish_reason": "stop",
+    "pydantic_valid": true,
+    "evidence_valid": true,
+    "api_elapsed_seconds": 14.8416,
+    "request_id": "d5849073-5234-9f49-8bf6-43962f6d91a4",
+    "response_model": "qwen3.8-27b",
+    "response_content_chars": 1883,
+    "response_reasoning_chars": 0,
+    "response_json_type": "dict",
+    "response_json_keys": [
+      "ai_automation",
+      "efficiency",
+      "engineering",
+      "highlights",
+      "job_fit",
+      "risk_point"
+    ],
+    "validation_elapsed_seconds": 0.0006,
+    "elapsed_seconds": 14.8428
+  },
+  "evaluation": {
+    "candidate_key": "job_1:geek_chen",
+    "name": "陈同学 (样本2: Coze工作流+RPA专员)",
+    "passed_hard_filter": true,
+    "passed_tier2_coarse": false,
+    "coarse_score": 0.0,
+    "total_score": 60.5,
+    "scoring_mode": "deep_mode",
+    "scoring_status": "DEEP_SCORED",
+    "routing_decision": "PENDING_REVIEW",
+    "matched_tags": [],
+    "semantic_similarity": {},
+    "dimension_scores": {
+      "ai_automation_practice": 26.0,
+      "engineering_foundation": 13.5,
+      "automation_efficiency": 12.0,
+      "objective_job_fit": 9.0
+    },
+    "highlights": [
+      "基于 Dify 和 Coze 搭建客服邮件自动分类与回复草稿生成工作流，接入 DeepSeek API，人工审核耗时降低 60%。",
+      "使用 影刀RPA 与 Python Playwright 编写跨平台数据采集与自动上架脚本，每日自动处理 2000+ 商品表单。"
+    ],
+    "risk_point": "工程基础（如异常处理、部署）证据不足；提效效果为自述，缺乏可核验的客观交付物证明。",
+    "debug_trace": {
+      "hard_filter_status": "PASS",
+      "hard_filter_checks": {
+        "degree": [
+          "PASS",
+          "最高明确学历符合要求"
+        ],
+        "salary": [
+          "PASS",
+          "薪资区间存在预算内空间；原周期=month，下限=7.0K，12薪；额外薪数不擅自换算"
+        ],
+        "job_status": [
+          "PASS",
+          "求职状态符合"
+        ]
+      },
+      "route_reason": "仅Tier3真实诊断；Tier1/Tier2未运行；仅人工核验，不具备自动发送资格",
+      "hard_filter_passed": true,
+      "hard_filter_reason": "通过",
+      "tier1_raw_score": 0.0,
+      "tier1_capped_score": 0.0,
+      "tier1_hit_details": [],
+      "tier2_semantic_score": 0.0,
+      "tier2_penalty_applied": 0.0,
+      "tier2_chunk_details": [],
+      "tier3_llm_raw_scores": {
+        "ai_automation": 65.0,
+        "engineering": 45.0,
+        "efficiency": 60.0,
+        "job_fit": 90.0
+      },
+      "tier3_dimension_evidence": {
+        "ai_automation": {
+          "score": 65.0,
+          "evidence": [
+            {
+              "source_path": "work_experience[0].responsibility",
+              "quote": "• 使用 影刀RPA 与 Python Playwright 编写跨平台数据采集与自动上架脚本，每日自动处理 2000+ 商品表单。\n• 基于 Dify 和 Coze 搭建客服邮件自动分类与回复草稿生成工作流，接入 DeepSeek API，人工审核耗时降低 60%。"
+            },
+            {
+              "source_path": "skills",
+              "quote": "Python, Playwright, 影刀RPA, Coze, Dify, Cursor"
+            }
+          ],
+          "missing_evidence": [
+            "未提供具体的Agent节点设计、提示词优化细节或RAG检索准确率等AI应用深度证据"
+          ],
+          "confidence": 0.85
+        },
+        "engineering": {
+          "score": 45.0,
+          "evidence": [
+            {
+              "source_path": "work_experience[0].responsibility",
+              "quote": "• 使用 影刀RPA 与 Python Playwright 编写跨平台数据采集与自动上架脚本，每日自动处理 2000+ 商品表单。"
+            }
+          ],
+          "missing_evidence": [
+            "缺乏关于代码架构、异常处理机制、数据持久化方案及测试流程的具体描述"
+          ],
+          "confidence": 0.7
+        },
+        "efficiency": {
+          "score": 60.0,
+          "evidence": [
+            {
+              "source_path": "work_experience[0].responsibility",
+              "quote": "• 使用 影刀RPA 与 Python Playwright 编写跨平台数据采集与自动上架脚本，每日自动处理 2000+ 商品表单。\n• 基于 Dify 和 Coze 搭建客服邮件自动分类与回复草稿生成工作流，接入 DeepSeek API，人工审核耗时降低 60%。"
+            }
+          ],
+          "missing_evidence": [
+            "“人工审核耗时降低 60%”为自述量化结果，缺乏第三方验证或具体对比基准"
+          ],
+          "confidence": 0.8
+        },
+        "job_fit": {
+          "score": 90.0,
+          "evidence": [
+            {
+              "source_path": "degree",
+              "quote": "本科"
+            },
+            {
+              "source_path": "expectation.salary",
+              "quote": "7-9K"
+            },
+            {
+              "source_path": "advantage",
+              "quote": "1年Python自动化与AI工作流搭建经验，熟练使用Coze、Dify搭建业务智能体，精通影刀RPA与Playwright网页自动化脚本。"
+            }
+          ],
+          "missing_evidence": [],
+          "confidence": 0.95
+        }
+      }
+    },
+    "evidence_details": [],
+    "data_issues": [],
+    "data_completeness": "COMPLETE",
+    "version_info": {
+      "prompt_version": "rubric-v2.1-object-v1",
+      "job_config_version": "beed864a9f43a74ed2e9d7fbdd10650dacd6bfa2d0016814e1101bf1f15179e4",
+      "llm_model_version": "qwen3.8-27b",
+      "assessment_scope": "tier3_only_diagnostic",
+      "embedding_model_version": "NOT_RUN"
+    },
+    "resume_content_hash": "",
+    "cache_hit": false,
+    "cache_key": ""
+  },
+  "model_response_content": "{\n  \"ai_automation\": {\n    \"score\": 65,\n    \"evidence\": [\n      {\n        \"source_path\": \"work_experience[0].responsibility\",\n        \"quote\": \"• 使用 影刀RPA 与 Python Playwright 编写跨平台数据采集与自动上架脚本，每日自动处理 2000+ 商品表单。\\n• 基于 Dify 和 Coze 搭建客服邮件自动分类与回复草稿生成工作流，接入 DeepSeek API，人工审核耗时降低 60%。\"\n      },\n      {\n        \"source_path\": \"skills\",\n        \"quote\": \"Python, Playwright, 影刀RPA, Coze, Dify, Cursor\"\n      }\n    ],\n    \"missing_evidence\": [\n      \"未提供具体的Agent节点设计、提示词优化细节或RAG检索准确率等AI应用深度证据\"\n    ],\n    \"confidence\": 0.85\n  },\n  \"engineering\": {\n    \"score\": 45,\n    \"evidence\": [\n      {\n        \"source_path\": \"work_experience[0].responsibility\",\n        \"quote\": \"• 使用 影刀RPA 与 Python Playwright 编写跨平台数据采集与自动上架脚本，每日自动处理 2000+ 商品表单。\"\n      }\n    ],\n    \"missing_evidence\": [\n      \"缺乏关于代码架构、异常处理机制、数据持久化方案及测试流程的具体描述\"\n    ],\n    \"confidence\": 0.7\n  },\n  \"efficiency\": {\n    \"score\": 60,\n    \"evidence\": [\n      {\n        \"source_path\": \"work_experience[0].responsibility\",\n        \"quote\": \"• 使用 影刀RPA 与 Python Playwright 编写跨平台数据采集与自动上架脚本，每日自动处理 2000+ 商品表单。\\n• 基于 Dify 和 Coze 搭建客服邮件自动分类与回复草稿生成工作流，接入 DeepSeek API，人工审核耗时降低 60%。\"\n      }\n    ],\n    \"missing_evidence\": [\n      \"“人工审核耗时降低 60%”为自述量化结果，缺乏第三方验证或具体对比基准\"\n    ],\n    \"confidence\": 0.8\n  },\n  \"job_fit\": {\n    \"score\": 90,\n    \"evidence\": [\n      {\n        \"source_path\": \"degree\",\n        \"quote\": \"本科\"\n      },\n      {\n        \"source_path\": \"expectation.salary\",\n        \"quote\": \"7-9K\"\n      },\n      {\n        \"source_path\": \"advantage\",\n        \"quote\": \"1年Python自动化与AI工作流搭建经验，熟练使用Coze、Dify搭建业务智能体，精通影刀RPA与Playwright网页自动化脚本。\"\n      }\n    ],\n    \"missing_evidence\": [],\n    \"confidence\": 0.95\n  },\n  \"highlights\": [\n    \"基于 Dify 和 Coze 搭建客服邮件自动分类与回复草稿生成工作流，接入 DeepSeek API，人工审核耗时降低 60%。\",\n    \"使用 影刀RPA 与 Python Playwright 编写跨平台数据采集与自动上架脚本，每日自动处理 2000+ 商品表单。\"\n  ],\n  \"risk_point\": \"工程基础（如异常处理、部署）证据不足；提效效果为自述，缺乏可核验的客观交付物证明。\"\n}",
+  "execution": "REAL_LLM",
+  "captured_at_utc": "2026-11-14T07:49:00.350089+00:00",
+  "http": {
+    "attempts": [
+      {
+        "elapsed_seconds": 0.1496,
+        "timeout": {
+          "connect": 45,
+          "read": 45,
+          "write": 45,
+          "pool": 45
+        },
+        "body_bytes": 5793,
+        "wire_parameters": {
+          "model": "qwen3.8-27b",
+          "temperature": 0,
+          "enable_thinking": false
+        },
+        "wire_strict": true,
+        "wire_schema_root_type": "object"
+      }
+    ],
+    "responses": [
+      {
+        "headers_elapsed_seconds": 14.9278,
+        "status_code": 200
+      }
+    ]
+  },
+  "config_snapshot": {
+    "job_target": {
+      "job_title": "AI自动化开发助理/专员",
+      "raw_jd_text": "1. 负责公司内部业务流程的AI自动化改造，使用Dify、Coze、n8n或LangChain/LangGraph搭建智能体工作流；\n2. 编写Python自动化脚本或使用Playwright/影刀RPA完成跨系统数据抓取、清洗与自动填报；\n3. 参与企业知识库（RAG）构建与大模型API接口联调，持续优化提示词与检索准确率。",
+      "hr_custom_requirements": "1. 必须要有真实的AI相关项目开发经验（如Agent、工作流、RAG、接入大模型API）或明确的AI提效/RPA脚本开发经验；\n2. 仅在简历里写熟悉ChatGPT写文案、做PPT、Midjourney画图的非技术人员直接淘汰；\n3. 本科及以上学历，期望薪资上限12K以内。"
+    },
+    "quotas_and_switches": {
+      "batch_scan_limit": 30,
+      "daily_greet_limit": 100,
+      "enable_auto_greet": true,
+      "auto_mark_unsuitable": false,
+      "scoring_mode": "deep_mode"
+    },
+    "hard_filters": {
+      "min_degree": "本科",
+      "max_expected_salary_k": 12,
+      "exclude_job_status": [
+        "在职-暂不考虑"
+      ],
+      "exclude_position_keywords": [
+        "销售",
+        "客服",
+        "行政",
+        "财务",
+        "地产",
+        "电销"
+      ],
+      "salary_budget_period": "month"
+    },
+    "scoring_config": {
+      "thresholds": {
+        "coarse_pass_score": 52,
+        "review_threshold": 60,
+        "auto_greet_threshold": 82
+      },
+      "dimension_weights": {
+        "ai_automation_practice": 0.4,
+        "engineering_foundation": 0.3,
+        "automation_efficiency": 0.2,
+        "objective_job_fit": 0.1
+      },
+      "keyword_rules": {
+        "high_value_tags": [
+          {
+            "word": "LangGraph",
+            "score": 14
+          },
+          {
+            "word": "LangChain",
+            "score": 12
+          },
+          {
+            "word": "Coze",
+            "score": 12
+          },
+          {
+            "word": "Dify",
+            "score": 12
+          },
+          {
+            "word": "n8n",
+            "score": 12
+          },
+          {
+            "word": "RAG",
+            "score": 12
+          },
+          {
+            "word": "Agent",
+            "score": 10
+          },
+          {
+            "word": "智能体",
+            "score": 8
+          },
+          {
+            "word": "Playwright",
+            "score": 12
+          },
+          {
+            "word": "影刀",
+            "score": 10
+          },
+          {
+            "word": "RPA",
+            "score": 10
+          },
+          {
+            "word": "LiteLLM",
+            "score": 10
+          }
+        ],
+        "medium_value_tags": [
+          {
+            "word": "Python",
+            "score": 8
+          },
+          {
+            "word": "FastAPI",
+            "score": 6
+          },
+          {
+            "word": "BGE",
+            "score": 6
+          },
+          {
+            "word": "PgVector",
+            "score": 6
+          },
+          {
+            "word": "Redis",
+            "score": 4
+          },
+          {
+            "word": "Docker",
+            "score": 4
+          },
+          {
+            "word": "Bash",
+            "score": 4
+          },
+          {
+            "word": "Cursor",
+            "score": 6
+          },
+          {
+            "word": "Claude",
+            "score": 5
+          },
+          {
+            "word": "Ollama",
+            "score": 5
+          },
+          {
+            "word": "DeepSeek",
+            "score": 5
+          }
+        ]
+      },
+      "semantic_anchors": {
+        "negative_anchors": [
+          "负责新媒体内容运营与文案策划，日常使用ChatGPT、豆包、文心一言撰写小红书文案、公众号推文与短视频脚本",
+          "使用Midjourney、Stable Diffusion生成电商海报与宣传图片，使用AI工具辅助制作PPT与会议纪要总结"
+        ],
+        "positive_anchor_groups": {
+          "agent": [
+            "参与Agent智能体服务研发，基于LangChain、LangGraph、Coze或Dify搭建图工作流，封装大模型API与工具调用链路",
+            "构建RAG向量检索知识库问答系统，使用Embedding模型与向量数据库实现文档语义检索与上下文增强",
+            "使用FastAPI开发异步流式接口，通过LiteLLM或Ollama本地部署管理多模型调用，编写自动化脚本提升研发效率"
+          ],
+          "rpa": [
+            "使用Python、Playwright、Selenium或影刀RPA开发自动化脚本，实现网页数据自动抓取、清洗与业务流程提效"
+          ]
+        }
+      },
+      "keyword_aggregation": {
+        "aliases": {
+          "Agent": [
+            "智能体",
+            "Agents"
+          ],
+          "LangChain": [
+            "Lang Chain"
+          ],
+          "LangGraph": [
+            "Lang Graph"
+          ],
+          "影刀": [
+            "影刀RPA"
+          ],
+          "PgVector": [
+            "pg_vector",
+            "pg-vector"
+          ]
+        },
+        "categories": {
+          "development_practice": {
+            "cap": 28,
+            "scale": 35,
+            "keywords": [
+              "LangGraph",
+              "LangChain",
+              "Coze",
+              "Dify",
+              "n8n",
+              "RAG",
+              "Agent",
+              "Playwright",
+              "Selenium",
+              "影刀",
+              "RPA",
+              "LiteLLM"
+            ]
+          },
+          "engineering": {
+            "cap": 12,
+            "scale": 18,
+            "keywords": [
+              "Python",
+              "FastAPI",
+              "BGE",
+              "PgVector",
+              "Redis",
+              "Docker",
+              "Bash",
+              "Ollama",
+              "DeepSeek"
+            ]
+          },
+          "efficiency": {
+            "cap": 5,
+            "scale": 8,
+            "keywords": [
+              "Cursor",
+              "Claude"
+            ]
+          }
+        },
+        "default_category": "engineering"
+      },
+      "semantic_scoring": {
+        "max_score": 55,
+        "similarity_min": 0.42,
+        "similarity_max": 0.8,
+        "top_k": 3,
+        "top_k_weights": [
+          0.65,
+          0.25,
+          0.1
+        ],
+        "chunk_chars": 320,
+        "min_chunk_chars": 8,
+        "penalty_threshold": 0.62,
+        "penalty_margin": 0.04,
+        "penalty_baseline": 0.55,
+        "penalty_weight": 80,
+        "penalty_cap": 12,
+        "source_weights": {
+          "work": 1,
+          "project": 1,
+          "thesis": 0.9,
+          "work_tags": 0.15,
+          "skills": 0.2,
+          "advantage": 0.3
+        }
+      },
+      "evidence_source_weights": {
+        "work": 1.2,
+        "project": 1.2,
+        "thesis": 1.0,
+        "work_tags": 0.35,
+        "skills": 0.5,
+        "advantage": 0.4
+      },
+      "llm_review": {
+        "temperature": 0,
+        "timeout_seconds": 45,
+        "max_unsupported_score": 20,
+        "max_unsupported_confidence": 0.35,
+        "practice_required_above": 50,
+        "auto_greet_min_confidence": 0.7,
+        "min_practice_quote_chars": 16,
+        "enable_thinking": false
+      },
+      "evidence_quality": {
+        "detect_label_only_practice": true,
+        "label_only_max_token_chars": 32,
+        "label_prefixes": [
+          "技术栈",
+          "技术标签",
+          "技能",
+          "关键词",
+          "tech stack",
+          "skills",
+          "熟练掌握",
+          "熟练使用",
+          "熟悉",
+          "精通",
+          "掌握",
+          "了解"
+        ],
+        "proficiency_prefixes": [
+          "熟练掌握",
+          "熟练使用",
+          "熟悉",
+          "精通",
+          "掌握",
+          "了解"
+        ],
+        "implementation_terms": [
+          "负责",
+          "实现",
+          "开发",
+          "设计",
+          "构建",
+          "搭建",
+          "编写",
+          "重构",
+          "接入",
+          "部署",
+          "封装",
+          "维护",
+          "优化",
+          "上线",
+          "集成",
+          "built",
+          "implemented",
+          "developed",
+          "designed",
+          "deployed",
+          "integrated",
+          "maintained"
+        ]
+      }
+    },
+    "config_version": "scoring-v2.1",
+    "model_versions": {
+      "embedding": "bge-large-zh-v1.5-local-unpinned",
+      "llm": "provider-alias-unpinned"
+    },
+    "cache": {
+      "enabled": true,
+      "directory": ".scoring_cache"
+    }
+  },
+  "input_content_hash": "30f933353798dd779c2c607bea9b8ebf6e38da9906749e8de35f06a0871ce3d8"
+}

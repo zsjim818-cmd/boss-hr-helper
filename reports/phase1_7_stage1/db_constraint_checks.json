@@ -1,0 +1,195 @@
+{
+  "scope": "Design-only temporary SQLite prototype extracted from database_design.md; NOT application implementation or migration",
+  "sqlite_version": "3.50.4",
+  "checks": [
+    {
+      "case": "SQLite JSON1 and foreign keys available",
+      "result": "PASS"
+    },
+    {
+      "case": "Published policy UPDATE blocked",
+      "result": "PASS",
+      "rejected_as": "immutable historical row"
+    },
+    {
+      "case": "Published policy DELETE blocked",
+      "result": "PASS",
+      "rejected_as": "immutable historical row"
+    },
+    {
+      "case": "Policy REPLACE blocked with recursive_triggers=0",
+      "result": "PASS",
+      "rejected_as": "immutable policy conflict"
+    },
+    {
+      "case": "Policy REPLACE blocked with recursive_triggers=1",
+      "result": "PASS",
+      "rejected_as": "immutable policy conflict"
+    },
+    {
+      "case": "Policy version-number collision blocked",
+      "result": "PASS",
+      "rejected_as": "immutable policy conflict"
+    },
+    {
+      "case": "Policy JSON array rejected",
+      "result": "PASS",
+      "rejected_as": "CHECK constraint failed: json_valid(policy_json) AND json_type(policy_json)='object'"
+    },
+    {
+      "case": "Fractional policy version rejected",
+      "result": "PASS",
+      "rejected_as": "CHECK constraint failed: typeof(version_no)='integer' AND version_no>0"
+    },
+    {
+      "case": "Cannot activate an unpublished version",
+      "result": "PASS",
+      "rejected_as": "activation requires a newer published version"
+    },
+    {
+      "case": "Old unscored association still pins p1",
+      "result": "PASS"
+    },
+    {
+      "case": "Old unscored candidate can seal p1 input after p2 publication",
+      "result": "PASS"
+    },
+    {
+      "case": "New candidate pins p2",
+      "result": "PASS"
+    },
+    {
+      "case": "Duplicate acquisition insert is a no-op and keeps p1",
+      "result": "PASS"
+    },
+    {
+      "case": "Association rebind UPDATE blocked",
+      "result": "PASS",
+      "rejected_as": "immutable historical row"
+    },
+    {
+      "case": "Association REPLACE blocked with recursive_triggers=0",
+      "result": "PASS",
+      "rejected_as": "immutable association conflict"
+    },
+    {
+      "case": "Association REPLACE blocked with recursive_triggers=1",
+      "result": "PASS",
+      "rejected_as": "immutable association conflict"
+    },
+    {
+      "case": "New candidate cannot select archived p1",
+      "result": "PASS",
+      "rejected_as": "new association must bind current published policy"
+    },
+    {
+      "case": "Another job policy cannot be bound",
+      "result": "PASS",
+      "rejected_as": "new association must bind current published policy"
+    },
+    {
+      "case": "Cross-organization candidate cannot be bound",
+      "result": "PASS",
+      "rejected_as": "FOREIGN KEY constraint failed"
+    },
+    {
+      "case": "Sealed input UPDATE blocked",
+      "result": "PASS",
+      "rejected_as": "immutable historical row"
+    },
+    {
+      "case": "Evaluation cannot swap policy to p2",
+      "result": "PASS",
+      "rejected_as": "FOREIGN KEY constraint failed"
+    },
+    {
+      "case": "Evaluation cannot silently use newer resume",
+      "result": "PASS",
+      "rejected_as": "FOREIGN KEY constraint failed"
+    },
+    {
+      "case": "Evaluation cannot swap job",
+      "result": "PASS",
+      "rejected_as": "FOREIGN KEY constraint failed"
+    },
+    {
+      "case": "Valid old-policy deep result accepted",
+      "result": "PASS"
+    },
+    {
+      "case": "Historical score UPDATE blocked",
+      "result": "PASS",
+      "rejected_as": "immutable historical row"
+    },
+    {
+      "case": "Historical score DELETE blocked",
+      "result": "PASS",
+      "rejected_as": "immutable historical row"
+    },
+    {
+      "case": "Historical result REPLACE blocked even without recursive triggers",
+      "result": "PASS",
+      "rejected_as": "immutable result conflict"
+    },
+    {
+      "case": "Second official deep result cannot override by new ID",
+      "result": "PASS",
+      "rejected_as": "immutable result conflict"
+    },
+    {
+      "case": "Fast mode cannot publish deep score",
+      "result": "PASS",
+      "rejected_as": "CHECK constraint failed: (scoring_status='DEEP_SCORED' AND scoring_mode='deep_mode'\n         AND final_score IS NOT NULL AND typeof(final_score) IN ('real','integer')\n         AND final_score BETWEEN 0 AND 100)\n     OR (scoring_status IN ('COARSE_ONLY','HARD_FILTERED') AND final_score IS NULL)"
+    },
+    {
+      "case": "Failure status cannot publish formal score",
+      "result": "PASS",
+      "rejected_as": "CHECK constraint failed: (scoring_status='DEEP_SCORED' AND scoring_mode='deep_mode'\n         AND final_score IS NOT NULL AND typeof(final_score) IN ('real','integer')\n         AND final_score BETWEEN 0 AND 100)\n     OR (scoring_status IN ('COARSE_ONLY','HARD_FILTERED') AND final_score IS NULL)"
+    },
+    {
+      "case": "Fast and deep records are separate and preserved",
+      "result": "PASS"
+    },
+    {
+      "case": "Activation cannot roll back to older version",
+      "result": "PASS",
+      "rejected_as": "activation requires a newer published version"
+    },
+    {
+      "case": "Job REPLACE cannot bypass pointer guard",
+      "result": "PASS",
+      "rejected_as": "job pointer cannot be replaced"
+    },
+    {
+      "case": "Closed job refuses new association",
+      "result": "PASS",
+      "rejected_as": "new association must bind current published policy"
+    },
+    {
+      "case": "Second writer cannot enter BEGIN IMMEDIATE concurrently",
+      "result": "PASS"
+    },
+    {
+      "case": "Next writer sees committed p2",
+      "result": "PASS"
+    },
+    {
+      "case": "All declared foreign keys consistent",
+      "result": "PASS"
+    },
+    {
+      "case": "Historical original score remains 76",
+      "result": "PASS"
+    }
+  ],
+  "passed": 38,
+  "failed": 0,
+  "not_tested": [
+    "authorization",
+    "HR confirmation gate",
+    "embedding publication manifest",
+    "retention purge",
+    "export restore",
+    "production migration"
+  ]
+}

@@ -1,0 +1,204 @@
+"""Candidate acquisition, immutable resumes and first complete scoring inputs."""
+from pydantic import ValidationError
+
+from schemas import ResumeData
+from storage.repositories.base import BaseRepository, uid, json_dump, digest
+
+
+def prepare_resume(resume):
+    raw = resume.model_dump(mode="json", by_alias=True) if isinstance(resume, ResumeData) else resume
+    if not isinstance(raw, dict):
+        raise ValueError("A resume snapshot must be a JSON object")
+    raw_json, raw_hash = json_dump(raw), digest(raw)
+    try:
+        parsed = ResumeData.model_validate(raw)
+        normalized = parsed.model_dump(mode="json", by_alias=True)
+        issues = [item.model_dump() for item in parsed.data_issues]
+        errors = parsed.collection_errors
+        completeness = parsed.data_completeness
+        content_hash = digest(parsed.model_dump(mode="json", by_alias=True, exclude={"meta"}))
+        scorable = completeness == "COMPLETE" and parsed.ok and not issues and not errors
+    except ValidationError as exc:
+        normalized, errors = {}, []
+        issues = [{"path": ".".join(map(str, error["loc"])), "kind": "MAPPING_ERROR", "message": error["type"]}
+                  for error in exc.errors(include_input=False)]
+        completeness = "COLLECTION_FAILED" if raw.get("ok") is False else "PARTIAL"
+        content_hash, scorable = raw_hash, False
+    return {"raw_resume_json": raw_json, "normalized_resume_json": json_dump(normalized),
+            "raw_hash": raw_hash, "content_hash": content_hash, "completeness": completeness,
+            "collection_errors_json": json_dump(errors), "data_issues_json": json_dump(issues),
+            "is_scorable": int(scorable)}
+
+
+class CandidateRepository(BaseRepository):
+    def create_candidate(self, ctx, job_id, display_name="", candidate_id=None):
+        with self.tx(ctx, job_id, "collect") as conn:
+            identifier = candidate_id or uid()
+            conn.execute("INSERT INTO candidates(org_id,candidate_id,display_name,created_by) VALUES(?,?,?,?)",
+                         (ctx.org_id, identifier, display_name, ctx.user_id))
+            self.audit(conn, ctx, "candidate.created", identifier, {"job_id": job_id})
+            return self.one(conn, "SELECT * FROM candidates WHERE org_id=? AND candidate_id=?", (ctx.org_id, identifier))
+
+    def get_job_candidate(self, ctx, job_id, job_candidate_id):
+        with self.read(ctx, job_id, "view") as conn:
+            return self._job_candidate(conn, ctx, job_id, job_candidate_id)
+
+    def get_sealed_input(self, ctx, job_id, job_candidate_id):
+        with self.read(ctx, job_id, "view") as conn:
+            self._job_candidate(conn, ctx, job_id, job_candidate_id)
+            return self.one(conn, "SELECT * FROM job_candidate_inputs WHERE org_id=? AND job_id=? AND job_candidate_id=?",
+                            (ctx.org_id, job_id, job_candidate_id))
+
+    def get_resume_snapshot(self, ctx, job_id, job_candidate_id, resume_id):
+        with self.read(ctx, job_id, "view") as conn:
+            candidate = self._job_candidate(conn, ctx, job_id, job_candidate_id)
+            return self.one(conn, "SELECT r.* FROM resume_snapshots r WHERE r.org_id=? AND r.candidate_id=? AND r.resume_id=? "
+                            "AND EXISTS(SELECT 1 FROM candidate_acquisitions a WHERE a.org_id=r.org_id "
+                            "AND a.candidate_id=r.candidate_id AND a.resume_id=r.resume_id AND a.job_id=? AND a.job_candidate_id=?)",
+                            (ctx.org_id, candidate["candidate_id"], resume_id, job_id, job_candidate_id))
+
+    def list_candidate_acquisitions(self, ctx, job_id, job_candidate_id):
+        with self.read(ctx, job_id, "view") as conn:
+            self._job_candidate(conn, ctx, job_id, job_candidate_id)
+            return [dict(row) for row in conn.execute("SELECT * FROM candidate_acquisitions WHERE org_id=? AND job_id=? "
+                                                    "AND job_candidate_id=? ORDER BY captured_at,acquisition_id",
+                                                    (ctx.org_id, job_id, job_candidate_id))]
+
+    def _job_candidate(self, conn, ctx, job_id, identifier):
+        return self.one(conn, "SELECT * FROM job_candidates WHERE org_id=? AND job_id=? AND job_candidate_id=?",
+                        (ctx.org_id, job_id, identifier))
+
+    def _active_batch(self, conn, ctx, job_id, batch_id):
+        row = self.one(conn, "SELECT * FROM scan_batches WHERE org_id=? AND job_id=? AND batch_id=?",
+                       (ctx.org_id, job_id, batch_id))
+        if row["status"] != "RUNNING":
+            raise ValueError("Acquisition requires an explicitly selected RUNNING scan batch")
+        return row
+
+    def _alias(self, conn, ctx, source, external_id, candidate_id):
+        hashed = digest(external_id)
+        existing = conn.execute("SELECT candidate_id FROM candidate_identity_aliases WHERE org_id=? AND source=? AND external_identity_hash=?",
+                                (ctx.org_id, source, hashed)).fetchone()
+        if existing and existing["candidate_id"] != candidate_id:
+            raise ValueError("Candidate identity alias conflicts with an existing candidate")
+        if not existing:
+            conn.execute("INSERT INTO candidate_identity_aliases(org_id,source,external_identity_hash,candidate_id,external_identity_json) "
+                         "VALUES(?,?,?,?,?)", (ctx.org_id, source, hashed, candidate_id, json_dump(external_id)))
+
+    def _resolve_candidate(self, conn, ctx, job_id, candidate_key, source, external_id, candidate_id, resume):
+        existing = conn.execute("SELECT * FROM job_candidates WHERE org_id=? AND job_id=? AND candidate_key=?",
+                                (ctx.org_id, job_id, candidate_key)).fetchone()
+        identifiers = [candidate_id] if candidate_id else []
+        if existing:
+            identifiers.append(existing["candidate_id"])
+        aliases = [(source, {"kind": "job_candidate_key", "job_id": job_id, "value": candidate_key})]
+        if external_id is not None:
+            aliases.append((source, {"kind": "stable_external_id", "value": external_id}))
+        for namespace, value in aliases:
+            alias = conn.execute("SELECT candidate_id FROM candidate_identity_aliases WHERE org_id=? AND source=? AND external_identity_hash=?",
+                                 (ctx.org_id, namespace, digest(value))).fetchone()
+            if alias:
+                identifiers.append(alias["candidate_id"])
+        if len(set(identifiers)) > 1:
+            raise ValueError("Candidate identity conflicts; manual reconciliation is required")
+        identifier = identifiers[0] if identifiers else uid()
+        if identifiers:
+            self.one(conn, "SELECT * FROM candidates WHERE org_id=? AND candidate_id=?", (ctx.org_id, identifier))
+        else:
+            name = resume.get("name", "") if isinstance(resume, dict) else getattr(resume, "name", "")
+            conn.execute("INSERT INTO candidates(org_id,candidate_id,display_name,created_by) VALUES(?,?,?,?)",
+                         (ctx.org_id, identifier, name if isinstance(name, str) else "", ctx.user_id))
+        for namespace, value in aliases:
+            self._alias(conn, ctx, namespace, value, identifier)
+        return identifier
+
+    def _snapshot(self, conn, ctx, candidate_id, resume):
+        payload = prepare_resume(resume)
+        existing = conn.execute("SELECT * FROM resume_snapshots WHERE org_id=? AND candidate_id=? AND raw_hash=?",
+                                (ctx.org_id, candidate_id, payload["raw_hash"])).fetchone()
+        if existing:
+            return dict(existing)
+        identifier = uid()
+        conn.execute("INSERT INTO resume_snapshots(org_id,candidate_id,resume_id,raw_resume_json,normalized_resume_json,content_hash,raw_hash,"
+                     "completeness,collection_errors_json,data_issues_json,is_scorable,captured_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                     (ctx.org_id, candidate_id, identifier, payload["raw_resume_json"], payload["normalized_resume_json"],
+                      payload["content_hash"], payload["raw_hash"], payload["completeness"], payload["collection_errors_json"],
+                      payload["data_issues_json"], payload["is_scorable"], ctx.user_id))
+        return self.one(conn, "SELECT * FROM resume_snapshots WHERE org_id=? AND candidate_id=? AND resume_id=?",
+                        (ctx.org_id, candidate_id, identifier))
+
+    def _acquisition(self, conn, ctx, job_id, row, batch_id, snapshot, source, capture_id=None):
+        identifier = capture_id or uid()
+        resume_id = snapshot["resume_id"] if snapshot else None
+        existing = conn.execute("SELECT * FROM candidate_acquisitions WHERE org_id=? AND job_id=? AND acquisition_id=?",
+                                (ctx.org_id, job_id, identifier)).fetchone()
+        if existing:
+            if (existing["job_candidate_id"], existing["batch_id"], existing["resume_id"], existing["source"]) != (row["job_candidate_id"], batch_id, resume_id, source):
+                raise ValueError("Acquisition idempotency key was reused for different input")
+            return dict(existing)
+        conn.execute("INSERT INTO candidate_acquisitions(org_id,job_id,acquisition_id,job_candidate_id,candidate_id,batch_id,resume_id,source,captured_by) "
+                     "VALUES(?,?,?,?,?,?,?,?,?)", (ctx.org_id, job_id, identifier, row["job_candidate_id"], row["candidate_id"],
+                                                  batch_id, resume_id, source, ctx.user_id))
+        return self.one(conn, "SELECT * FROM candidate_acquisitions WHERE org_id=? AND job_id=? AND acquisition_id=?",
+                        (ctx.org_id, job_id, identifier))
+
+    def _seal(self, conn, ctx, job_id, row, resume_id):
+        existing = conn.execute("SELECT * FROM job_candidate_inputs WHERE org_id=? AND job_id=? AND job_candidate_id=?",
+                                (ctx.org_id, job_id, row["job_candidate_id"])).fetchone()
+        if existing:
+            return dict(existing)
+        snapshot = self.one(conn, "SELECT * FROM resume_snapshots WHERE org_id=? AND candidate_id=? AND resume_id=?",
+                            (ctx.org_id, row["candidate_id"], resume_id))
+        if not snapshot["is_scorable"]:
+            raise ValueError("Only a complete, valid resume without collection or mapping errors can be sealed")
+        conn.execute("INSERT INTO job_candidate_inputs(org_id,job_id,job_candidate_id,candidate_id,policy_id,policy_version,resume_id,sealed_by) "
+                     "VALUES(?,?,?,?,?,?,?,?)", (ctx.org_id, job_id, row["job_candidate_id"], row["candidate_id"], row["policy_id"],
+                                                row["policy_version"], resume_id, ctx.user_id))
+        self.audit(conn, ctx, "candidate_input.sealed", row["job_candidate_id"], {"job_id": job_id, "resume_id": resume_id, "policy_id": row["policy_id"]})
+        return self.one(conn, "SELECT * FROM job_candidate_inputs WHERE org_id=? AND job_id=? AND job_candidate_id=?",
+                        (ctx.org_id, job_id, row["job_candidate_id"]))
+
+    def acquire_candidate_for_job(self, ctx, job_id, batch_id, candidate_key, *, source="boss", external_id=None,
+                                  resume=None, candidate_id=None, capture_id=None):
+        if not isinstance(candidate_key, str) or not candidate_key.strip() or not isinstance(source, str) or not source.strip():
+            raise ValueError("candidate_key and source must be non-empty strings")
+        if external_id is not None and (not isinstance(external_id, str) or not external_id.strip()):
+            raise ValueError("external_id must be a non-empty stable source identifier")
+        with self.tx(ctx, job_id, "collect") as conn:
+            batch = self._active_batch(conn, ctx, job_id, batch_id)
+            identifier = self._resolve_candidate(conn, ctx, job_id, candidate_key, source, external_id, candidate_id, resume)
+            existing = conn.execute("SELECT * FROM job_candidates WHERE org_id=? AND job_id=? AND candidate_id=?",
+                                    (ctx.org_id, job_id, identifier)).fetchone()
+            is_new = existing is None
+            if is_new:
+                jcid = uid()
+                conn.execute("INSERT INTO job_candidates(org_id,job_id,job_candidate_id,candidate_id,candidate_key,policy_id,policy_version,first_batch_id) "
+                             "VALUES(?,?,?,?,?,?,?,?)", (ctx.org_id, job_id, jcid, identifier, candidate_key, batch["policy_id"], batch["policy_version"], batch_id))
+                row = self._job_candidate(conn, ctx, job_id, jcid)
+            else:
+                row = dict(existing)
+            snapshot = self._snapshot(conn, ctx, identifier, resume) if resume is not None else None
+            acquisition = self._acquisition(conn, ctx, job_id, row, batch_id, snapshot, source, capture_id)
+            sealed = self._seal(conn, ctx, job_id, row, snapshot["resume_id"]) if snapshot and snapshot["is_scorable"] else None
+            if sealed is None:
+                found = conn.execute("SELECT * FROM job_candidate_inputs WHERE org_id=? AND job_id=? AND job_candidate_id=?",
+                                     (ctx.org_id, job_id, row["job_candidate_id"])).fetchone()
+                sealed = dict(found) if found else None
+            self.audit(conn, ctx, "candidate.acquired", acquisition["acquisition_id"], {"job_id": job_id, "batch_id": batch_id, "is_new": is_new})
+            return {"job_candidate": row, "acquisition": acquisition, "resume_snapshot": snapshot, "sealed_input": sealed, "is_new": is_new}
+
+    def append_resume_snapshot(self, ctx, job_id, job_candidate_id, resume, *, batch_id):
+        with self.tx(ctx, job_id, "collect") as conn:
+            self._active_batch(conn, ctx, job_id, batch_id)
+            row = self._job_candidate(conn, ctx, job_id, job_candidate_id)
+            snapshot = self._snapshot(conn, ctx, row["candidate_id"], resume)
+            self._acquisition(conn, ctx, job_id, row, batch_id, snapshot, "manual")
+            if snapshot["is_scorable"]:
+                self._seal(conn, ctx, job_id, row, snapshot["resume_id"])
+            self.audit(conn, ctx, "resume.appended", snapshot["resume_id"], {"job_id": job_id, "job_candidate_id": job_candidate_id, "batch_id": batch_id})
+            return snapshot
+
+    def seal_candidate_input(self, ctx, job_id, job_candidate_id, resume_id):
+        with self.tx(ctx, job_id, "collect") as conn:
+            row = self._job_candidate(conn, ctx, job_id, job_candidate_id)
+            return self._seal(conn, ctx, job_id, row, resume_id)

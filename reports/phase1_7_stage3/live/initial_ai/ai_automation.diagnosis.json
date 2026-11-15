@@ -1,0 +1,30 @@
+{
+  "case_id": "ai_automation",
+  "job_id": "5163abdb22b847039fcf4d39950c138d",
+  "acceptance_passed": false,
+  "metrics": {
+    "status": "FAILED",
+    "stage": "api_call",
+    "model": "qwen3.8-27b",
+    "timeout_seconds": 90,
+    "max_tokens": 12288,
+    "temperature": 0,
+    "strict_schema": true,
+    "enable_thinking": false,
+    "sdk_max_retries": 0,
+    "system_chars": 2009,
+    "user_chars": 679,
+    "schema_chars": 8786,
+    "prompt_hash": "9942c8dd0ba9161767e4f39aef1811a6042e514b566c4ff0513e2b0ff320f0ed",
+    "schema_hash": "d6a14e6b793d23c10822a6bc5300d5e2e179c9766098ebd51c68e154cad17df1",
+    "usage": null,
+    "reasoning_tokens": null,
+    "pydantic_valid": false,
+    "business_valid": false,
+    "finish_reason": null,
+    "failure_type": "APIConnectionError",
+    "http_status": null,
+    "elapsed_seconds": 0.1434
+  },
+  "error_type": "CompilationError"
+}

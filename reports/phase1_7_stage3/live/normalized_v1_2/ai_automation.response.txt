@@ -1,0 +1,520 @@
+{
+  "schema_version": "job_scoring_policy_v1",
+  "job": {
+    "title": "AI自动化应用开发工程师",
+    "summary": "面向内部业务开发AI应用或流程自动化，交付可维护、可测试的程序。"
+  },
+  "sources": {
+    "jd_text": "岗位职责：面向内部业务开发AI应用或流程自动化，交付可维护、可测试的程序。\n硬性要求：大专及以上学历，期望月薪不高于18K。\n必需能力：必须具备Python编程基础，同时能够说明异常处理和接口测试的具体做法。\n可替代实战路线：以下两条至少满足一条，不要求同时具备。路线A：使用LangGraph或LangChain实现多步骤工具调用，并完成RAG知识检索应用；路线B：使用Playwright或Selenium实现网页操作和数据采集，并处理重试与任务恢复。\n加分项：了解Docker容器部署，有n8n工作流配置经验更好，二者均不是录用必要条件。",
+    "hr_requirements": "更重视可核验的项目实现和异常恢复，不能只看工具标签。评分维度和权重为应用交付50%、程序可靠性25%、流程提效15%、需求理解10%。粗排通过阈值为52，深度评分人工核验阈值为68，深度推荐阈值为90；本次不启用自动发送。不要增加工作年限限制。"
+  },
+  "requirements": [
+    {
+      "requirement_id": "req_edu_01",
+      "label": "大专及以上学历",
+      "source_type": "JD",
+      "source_text": "硬性要求：大专及以上学历，期望月薪不高于18K。",
+      "priority": "REQUIRED",
+      "requirement_type": "EDUCATION",
+      "needs_confirmation": false
+    },
+    {
+      "requirement_id": "req_sal_01",
+      "label": "期望月薪不高于18K",
+      "source_type": "JD",
+      "source_text": "硬性要求：大专及以上学历，期望月薪不高于18K。",
+      "priority": "REQUIRED",
+      "requirement_type": "COMPENSATION",
+      "needs_confirmation": false
+    },
+    {
+      "requirement_id": "req_py_01",
+      "label": "Python编程基础",
+      "source_type": "JD",
+      "source_text": "必须具备Python编程基础",
+      "priority": "REQUIRED",
+      "requirement_type": "SKILL",
+      "needs_confirmation": false
+    },
+    {
+      "requirement_id": "req_exc_01",
+      "label": "异常处理具体做法",
+      "source_type": "JD",
+      "source_text": "同时能够说明异常处理和接口测试的具体做法",
+      "priority": "REQUIRED",
+      "requirement_type": "SKILL",
+      "needs_confirmation": false
+    },
+    {
+      "requirement_id": "req_api_test_01",
+      "label": "接口测试具体做法",
+      "source_type": "JD",
+      "source_text": "同时能够说明异常处理和接口测试的具体做法",
+      "priority": "REQUIRED",
+      "requirement_type": "SKILL",
+      "needs_confirmation": false
+    },
+    {
+      "requirement_id": "req_route_a_tool_01",
+      "label": "使用LangGraph或LangChain实现多步骤工具调用",
+      "source_type": "JD",
+      "source_text": "路线A：使用LangGraph或LangChain实现多步骤工具调用",
+      "priority": "REQUIRED",
+      "requirement_type": "EXPERIENCE",
+      "needs_confirmation": false
+    },
+    {
+      "requirement_id": "req_route_a_rag_01",
+      "label": "完成RAG知识检索应用",
+      "source_type": "JD",
+      "source_text": "并完成RAG知识检索应用",
+      "priority": "REQUIRED",
+      "requirement_type": "EXPERIENCE",
+      "needs_confirmation": false
+    },
+    {
+      "requirement_id": "req_route_b_web_01",
+      "label": "使用Playwright或Selenium实现网页操作和数据采集",
+      "source_type": "JD",
+      "source_text": "路线B：使用Playwright或Selenium实现网页操作和数据采集",
+      "priority": "REQUIRED",
+      "requirement_type": "EXPERIENCE",
+      "needs_confirmation": false
+    },
+    {
+      "requirement_id": "req_route_b_retry_01",
+      "label": "处理重试与任务恢复",
+      "source_type": "JD",
+      "source_text": "并处理重试与任务恢复",
+      "priority": "REQUIRED",
+      "requirement_type": "EXPERIENCE",
+      "needs_confirmation": false
+    },
+    {
+      "requirement_id": "req_docker_01",
+      "label": "了解Docker容器部署",
+      "source_type": "JD",
+      "source_text": "了解Docker容器部署",
+      "priority": "PREFERRED",
+      "requirement_type": "SKILL",
+      "needs_confirmation": false
+    },
+    {
+      "requirement_id": "req_n8n_01",
+      "label": "有n8n工作流配置经验",
+      "source_type": "JD",
+      "source_text": "有n8n工作流配置经验更好",
+      "priority": "PREFERRED",
+      "requirement_type": "EXPERIENCE",
+      "needs_confirmation": false
+    }
+  ],
+  "requirement_groups": [
+    {
+      "group_id": "grp_core_reqs",
+      "label": "核心硬性要求",
+      "operator": "ALL",
+      "priority": "REQUIRED",
+      "members": [
+        "req_edu_01",
+        "req_sal_01",
+        "req_py_01",
+        "req_exc_01",
+        "req_api_test_01"
+      ],
+      "source_type": "JD",
+      "source_text": "硬性要求：大专及以上学历，期望月薪不高于18K。\n必需能力：必须具备Python编程基础，同时能够说明异常处理和接口测试的具体做法。",
+      "needs_confirmation": false
+    },
+    {
+      "group_id": "grp_route_a",
+      "label": "路线A：LLM应用开发",
+      "operator": "ALL",
+      "priority": "REQUIRED",
+      "members": [
+        "req_route_a_tool_01",
+        "req_route_a_rag_01"
+      ],
+      "source_type": "JD",
+      "source_text": "路线A：使用LangGraph或LangChain实现多步骤工具调用，并完成RAG知识检索应用",
+      "needs_confirmation": false
+    },
+    {
+      "group_id": "grp_route_b",
+      "label": "路线B：Web自动化",
+      "operator": "ALL",
+      "priority": "REQUIRED",
+      "members": [
+        "req_route_b_web_01",
+        "req_route_b_retry_01"
+      ],
+      "source_type": "JD",
+      "source_text": "路线B：使用Playwright或Selenium实现网页操作和数据采集，并处理重试与任务恢复",
+      "needs_confirmation": false
+    },
+    {
+      "group_id": "grp_alt_routes",
+      "label": "可替代实战路线（任选其一）",
+      "operator": "ANY",
+      "priority": "REQUIRED",
+      "members": [
+        "grp_route_a",
+        "grp_route_b"
+      ],
+      "source_type": "JD",
+      "source_text": "以下两条至少满足一条，不要求同时具备",
+      "needs_confirmation": false
+    },
+    {
+      "group_id": "grp_bonus",
+      "label": "加分项",
+      "operator": "ANY",
+      "priority": "PREFERRED",
+      "members": [
+        "req_docker_01",
+        "req_n8n_01"
+      ],
+      "source_type": "JD",
+      "source_text": "加分项：了解Docker容器部署，有n8n工作流配置经验更好，二者均不是录用必要条件。",
+      "needs_confirmation": false
+    }
+  ],
+  "hard_filters": [
+    {
+      "filter_id": "hf_edu_01",
+      "requirement_id": "req_edu_01",
+      "field": "education_level",
+      "operator": "GTE",
+      "value_text": "大专",
+      "value_number": null,
+      "value_list": [],
+      "unit": "level",
+      "on_unknown": "REVIEW"
+    },
+    {
+      "filter_id": "hf_sal_01",
+      "requirement_id": "req_sal_01",
+      "field": "expected_salary",
+      "operator": "LTE",
+      "value_text": null,
+      "value_number": 18,
+      "value_list": [],
+      "unit": "month",
+      "on_unknown": "REVIEW"
+    }
+  ],
+  "keyword_groups": [
+    {
+      "group_id": "kwg_python",
+      "label": "Python编程",
+      "requirement_ids": [
+        "req_py_01"
+      ],
+      "keywords": [
+        {
+          "canonical": "Python",
+          "aliases": [
+            "python3",
+            "py"
+          ],
+          "weight": 100
+        }
+      ]
+    },
+    {
+      "group_id": "kwg_reliability",
+      "label": "可靠性与测试",
+      "requirement_ids": [
+        "req_exc_01",
+        "req_api_test_01"
+      ],
+      "keywords": [
+        {
+          "canonical": "异常处理",
+          "aliases": [
+            "exception handling",
+            "try-except",
+            "错误捕获"
+          ],
+          "weight": 90
+        },
+        {
+          "canonical": "接口测试",
+          "aliases": [
+            "API testing",
+            "pytest",
+            "unittest"
+          ],
+          "weight": 90
+        }
+      ]
+    },
+    {
+      "group_id": "kwg_llm_app",
+      "label": "LLM应用开发",
+      "requirement_ids": [
+        "req_route_a_tool_01",
+        "req_route_a_rag_01"
+      ],
+      "keywords": [
+        {
+          "canonical": "LangGraph",
+          "aliases": [
+            "langgraph"
+          ],
+          "weight": 80
+        },
+        {
+          "canonical": "LangChain",
+          "aliases": [
+            "langchain"
+          ],
+          "weight": 80
+        },
+        {
+          "canonical": "RAG",
+          "aliases": [
+            "Retrieval-Augmented Generation",
+            "知识检索",
+            "向量数据库"
+          ],
+          "weight": 90
+        }
+      ]
+    },
+    {
+      "group_id": "kwg_web_auto",
+      "label": "Web自动化",
+      "requirement_ids": [
+        "req_route_b_web_01",
+        "req_route_b_retry_01"
+      ],
+      "keywords": [
+        {
+          "canonical": "Playwright",
+          "aliases": [
+            "playwright"
+          ],
+          "weight": 80
+        },
+        {
+          "canonical": "Selenium",
+          "aliases": [
+            "selenium"
+          ],
+          "weight": 80
+        },
+        {
+          "canonical": "数据采集",
+          "aliases": [
+            "爬虫",
+            "scraping",
+            "数据抓取"
+          ],
+          "weight": 70
+        },
+        {
+          "canonical": "重试机制",
+          "aliases": [
+            "retry",
+            "任务恢复",
+            "断点续传"
+          ],
+          "weight": 90
+        }
+      ]
+    },
+    {
+      "group_id": "kwg_devops",
+      "label": "部署与工作流",
+      "requirement_ids": [
+        "req_docker_01",
+        "req_n8n_01"
+      ],
+      "keywords": [
+        {
+          "canonical": "Docker",
+          "aliases": [
+            "docker-compose",
+            "容器化"
+          ],
+          "weight": 60
+        },
+        {
+          "canonical": "n8n",
+          "aliases": [
+            "n8n workflow",
+            "工作流引擎"
+          ],
+          "weight": 60
+        }
+      ]
+    }
+  ],
+  "semantic_anchors": [
+    {
+      "anchor_id": "sa_pos_delivery",
+      "requirement_ids": [
+        "req_py_01",
+        "req_route_a_tool_01",
+        "req_route_b_web_01"
+      ],
+      "polarity": "POSITIVE",
+      "text": "描述了具体的项目背景，说明了如何使用Python结合特定框架（如LangChain或Playwright）解决实际问题，并提供了代码结构或架构设计的细节。"
+    },
+    {
+      "anchor_id": "sa_pos_reliability",
+      "requirement_ids": [
+        "req_exc_01",
+        "req_route_b_retry_01"
+      ],
+      "polarity": "POSITIVE",
+      "text": "详细阐述了在系统运行中遇到网络波动或服务不可用时的具体异常处理策略，包括重试逻辑、状态保存和任务恢复的实现方式。"
+    },
+    {
+      "anchor_id": "sa_neg_label_only",
+      "requirement_ids": [
+        "req_py_01",
+        "req_route_a_tool_01",
+        "req_route_b_web_01"
+      ],
+      "polarity": "NEGATIVE",
+      "text": "仅罗列了技术栈名称（如Python, LangChain, Selenium），但没有描述任何具体的实现过程、遇到的挑战或最终的交付成果。"
+    },
+    {
+      "anchor_id": "sa_neg_no_error_handling",
+      "requirement_ids": [
+        "req_exc_01"
+      ],
+      "polarity": "NEGATIVE",
+      "text": "虽然提到了开发自动化脚本，但完全未提及如何处理执行过程中的异常情况，缺乏对程序健壮性的考量。"
+    }
+  ],
+  "scoring_dimensions": [
+    {
+      "dimension_id": "dim_delivery",
+      "label": "应用交付",
+      "description": "评估候选人是否具备将需求转化为可维护、可测试的AI应用或自动化流程的能力，重点考察项目实现的完整性和复杂度。",
+      "requirement_ids": [
+        "req_py_01",
+        "req_route_a_tool_01",
+        "req_route_a_rag_01",
+        "req_route_b_web_01"
+      ],
+      "weight": 0.5,
+      "rubric": [
+        {
+          "min_score": 0,
+          "max_score": 40,
+          "description": "仅有技术名词堆砌，无具体项目描述，无法证明具备独立交付能力。"
+        },
+        {
+          "min_score": 41,
+          "max_score": 70,
+          "description": "能描述简单脚本或单一功能模块的实现，但缺乏对整体架构或复杂业务场景的处理经验。"
+        },
+        {
+          "min_score": 71,
+          "max_score": 100,
+          "description": "有完整的端到端项目交付经验，能清晰阐述从需求分析到代码实现的全过程，且项目具有实际业务价值。"
+        }
+      ]
+    },
+    {
+      "dimension_id": "dim_reliability",
+      "label": "程序可靠性",
+      "description": "评估候选人在异常处理、接口测试及任务恢复方面的具体实践，确保程序在生产环境中的稳定性。",
+      "requirement_ids": [
+        "req_exc_01",
+        "req_api_test_01",
+        "req_route_b_retry_01"
+      ],
+      "weight": 0.25,
+      "rubric": [
+        {
+          "min_score": 0,
+          "max_score": 40,
+          "description": "未提及任何异常处理或测试策略，程序可能因单次错误而崩溃。"
+        },
+        {
+          "min_score": 41,
+          "max_score": 70,
+          "description": "了解基本的try-except用法，但缺乏针对网络超时、数据不一致等复杂场景的系统性处理方案。"
+        },
+        {
+          "min_score": 71,
+          "max_score": 100,
+          "description": "具备完善的容错机制设计，包括指数退避重试、状态持久化、自动化测试覆盖，能确保长时运行任务的可靠性。"
+        }
+      ]
+    },
+    {
+      "dimension_id": "dim_efficiency",
+      "label": "流程提效",
+      "description": "评估候选人利用AI或自动化手段优化业务流程、提升效率的实际案例和方法论。",
+      "requirement_ids": [
+        "req_route_a_rag_01",
+        "req_route_b_web_01",
+        "req_n8n_01"
+      ],
+      "weight": 0.15,
+      "rubric": [
+        {
+          "min_score": 0,
+          "max_score": 40,
+          "description": "无法说明自动化如何具体节省人力或时间，缺乏量化指标。"
+        },
+        {
+          "min_score": 41,
+          "max_score": 70,
+          "description": "能描述简单的重复性工作自动化，但对流程瓶颈识别和优化效果评估不足。"
+        },
+        {
+          "min_score": 71,
+          "max_score": 100,
+          "description": "深入理解业务痛点，通过RAG或Web自动化显著提升了关键流程的效率，并能提供具体的ROI分析。"
+        }
+      ]
+    },
+    {
+      "dimension_id": "dim_understanding",
+      "label": "需求理解",
+      "description": "评估候选人对内部业务需求的理解深度，以及将模糊需求转化为技术规格的能力。",
+      "requirement_ids": [
+        "req_py_01",
+        "req_route_a_tool_01",
+        "req_route_b_web_01"
+      ],
+      "weight": 0.1,
+      "rubric": [
+        {
+          "min_score": 0,
+          "max_score": 40,
+          "description": "被动接受指令，无法主动澄清需求边界或潜在风险。"
+        },
+        {
+          "min_score": 41,
+          "max_score": 70,
+          "description": "能准确复述需求，但在面对变更或歧义时缺乏独立的判断力。"
+        },
+        {
+          "min_score": 71,
+          "max_score": 100,
+          "description": "能从业务目标出发反推技术实现，主动识别需求中的隐含约束，并提出建设性的技术方案。"
+        }
+      ]
+    }
+  ],
+  "thresholds": {
+    "coarse_pass": 52,
+    "deep_review": 68,
+    "deep_recommend": 90
+  },
+  "diagnostics": [],
+  "provenance": {
+    "compiler_version": "job-policy-compiler-v1.1",
+    "prompt_version": "job-policy-prompt-v1.2",
+    "validator_version": "policy-validator-v1.1",
+    "model_version": "qwen3.8-27b"
+  }
+}

@@ -1,0 +1,447 @@
+{
+  "scope": "tier3_only_diagnostic",
+  "skipped_stages": [
+    "tier1",
+    "tier2"
+  ],
+  "metrics": {
+    "request": {
+      "model": "qwen3.8-27b",
+      "timeout_seconds": 45,
+      "temperature": 0,
+      "max_tokens": null,
+      "max_completion_tokens": null,
+      "extra_body": {},
+      "stream": false,
+      "response_format": "json_schema",
+      "strict": true,
+      "system_chars": 1332,
+      "user_chars": 1360,
+      "schema_chars": 1317,
+      "body_utf8_bytes": 6798,
+      "prompt_sha256": "0393735295d2d7e5558159f715f4b0b7aaa5853dd399b07a8ea67f8dd9f3ece2",
+      "schema_sha256": "9078cf914295822191cae20d86114d65076ec965365f8e297cb3f9b58a94c298"
+    },
+    "sdk_max_retries": 0,
+    "status": "FAILED",
+    "stage": "api_call",
+    "usage": null,
+    "reasoning_tokens": null,
+    "finish_reason": null,
+    "pydantic_valid": false,
+    "evidence_valid": false,
+    "failure_type": "APITimeoutError",
+    "cause_chain": [
+      "APITimeoutError",
+      "ReadTimeout",
+      "ReadTimeout"
+    ],
+    "http_status": null,
+    "api_elapsed_seconds": 45.3009,
+    "elapsed_seconds": 45.3011
+  },
+  "evaluation": {
+    "candidate_key": "job_1:geek_zhongsheng",
+    "name": "钟盛 (样本1: 截图真实简历-Agent实战)",
+    "passed_hard_filter": true,
+    "passed_tier2_coarse": false,
+    "coarse_score": 0.0,
+    "total_score": null,
+    "scoring_mode": "deep_mode",
+    "scoring_status": "SCORING_FAILED",
+    "routing_decision": "PENDING_REVIEW",
+    "matched_tags": [],
+    "semantic_similarity": {},
+    "dimension_scores": {},
+    "highlights": [],
+    "risk_point": "Tier3诊断失败:APITimeoutError；无正式分；不回退粗排",
+    "debug_trace": {
+      "hard_filter_status": "PASS",
+      "hard_filter_checks": {
+        "degree": [
+          "PASS",
+          "最高明确学历符合要求"
+        ],
+        "salary": [
+          "PASS",
+          "薪资区间存在预算内空间；原周期=month，下限=4.0K，12薪；额外薪数不擅自换算"
+        ],
+        "job_status": [
+          "PASS",
+          "求职状态符合"
+        ]
+      },
+      "route_reason": "仅Tier3真实诊断；Tier1/Tier2未运行；仅人工核验，不具备自动发送资格",
+      "hard_filter_passed": true,
+      "hard_filter_reason": "通过",
+      "tier1_raw_score": 0.0,
+      "tier1_capped_score": 0.0,
+      "tier1_hit_details": [],
+      "tier2_semantic_score": 0.0,
+      "tier2_penalty_applied": 0.0,
+      "tier2_chunk_details": [],
+      "tier3_llm_raw_scores": {},
+      "tier3_dimension_evidence": {}
+    },
+    "evidence_details": [],
+    "data_issues": [],
+    "data_completeness": "COMPLETE",
+    "version_info": {
+      "prompt_version": "rubric-v2.1",
+      "job_config_version": "381c81562ae7d159f7a2922386fab668b6eb3e34f6db0d918641bf8129a97d63",
+      "llm_model_version": "qwen3.8-27b",
+      "assessment_scope": "tier3_only_diagnostic",
+      "embedding_model_version": "NOT_RUN"
+    },
+    "resume_content_hash": "",
+    "cache_hit": false,
+    "cache_key": ""
+  },
+  "execution": "REAL_LLM",
+  "captured_at_utc": "2026-11-14T07:42:59.744864+00:00",
+  "http": {
+    "attempts": [
+      {
+        "elapsed_seconds": 0.2056,
+        "timeout": {
+          "connect": 45,
+          "read": 45,
+          "write": 45,
+          "pool": 45
+        },
+        "body_bytes": 6798,
+        "wire_parameters": {
+          "model": "qwen3.8-27b",
+          "temperature": 0
+        },
+        "wire_strict": true
+      }
+    ],
+    "responses": []
+  },
+  "config_snapshot": {
+    "job_target": {
+      "job_title": "AI自动化开发助理/专员",
+      "raw_jd_text": "1. 负责公司内部业务流程的AI自动化改造，使用Dify、Coze、n8n或LangChain/LangGraph搭建智能体工作流；\n2. 编写Python自动化脚本或使用Playwright/影刀RPA完成跨系统数据抓取、清洗与自动填报；\n3. 参与企业知识库（RAG）构建与大模型API接口联调，持续优化提示词与检索准确率。",
+      "hr_custom_requirements": "1. 必须要有真实的AI相关项目开发经验（如Agent、工作流、RAG、接入大模型API）或明确的AI提效/RPA脚本开发经验；\n2. 仅在简历里写熟悉ChatGPT写文案、做PPT、Midjourney画图的非技术人员直接淘汰；\n3. 本科及以上学历，期望薪资上限12K以内。"
+    },
+    "quotas_and_switches": {
+      "batch_scan_limit": 30,
+      "daily_greet_limit": 100,
+      "enable_auto_greet": true,
+      "auto_mark_unsuitable": false,
+      "scoring_mode": "deep_mode"
+    },
+    "hard_filters": {
+      "min_degree": "本科",
+      "max_expected_salary_k": 12,
+      "exclude_job_status": [
+        "在职-暂不考虑"
+      ],
+      "exclude_position_keywords": [
+        "销售",
+        "客服",
+        "行政",
+        "财务",
+        "地产",
+        "电销"
+      ],
+      "salary_budget_period": "month"
+    },
+    "scoring_config": {
+      "thresholds": {
+        "coarse_pass_score": 52,
+        "review_threshold": 60,
+        "auto_greet_threshold": 82
+      },
+      "dimension_weights": {
+        "ai_automation_practice": 0.4,
+        "engineering_foundation": 0.3,
+        "automation_efficiency": 0.2,
+        "objective_job_fit": 0.1
+      },
+      "keyword_rules": {
+        "high_value_tags": [
+          {
+            "word": "LangGraph",
+            "score": 14
+          },
+          {
+            "word": "LangChain",
+            "score": 12
+          },
+          {
+            "word": "Coze",
+            "score": 12
+          },
+          {
+            "word": "Dify",
+            "score": 12
+          },
+          {
+            "word": "n8n",
+            "score": 12
+          },
+          {
+            "word": "RAG",
+            "score": 12
+          },
+          {
+            "word": "Agent",
+            "score": 10
+          },
+          {
+            "word": "智能体",
+            "score": 8
+          },
+          {
+            "word": "Playwright",
+            "score": 12
+          },
+          {
+            "word": "影刀",
+            "score": 10
+          },
+          {
+            "word": "RPA",
+            "score": 10
+          },
+          {
+            "word": "LiteLLM",
+            "score": 10
+          }
+        ],
+        "medium_value_tags": [
+          {
+            "word": "Python",
+            "score": 8
+          },
+          {
+            "word": "FastAPI",
+            "score": 6
+          },
+          {
+            "word": "BGE",
+            "score": 6
+          },
+          {
+            "word": "PgVector",
+            "score": 6
+          },
+          {
+            "word": "Redis",
+            "score": 4
+          },
+          {
+            "word": "Docker",
+            "score": 4
+          },
+          {
+            "word": "Bash",
+            "score": 4
+          },
+          {
+            "word": "Cursor",
+            "score": 6
+          },
+          {
+            "word": "Claude",
+            "score": 5
+          },
+          {
+            "word": "Ollama",
+            "score": 5
+          },
+          {
+            "word": "DeepSeek",
+            "score": 5
+          }
+        ]
+      },
+      "semantic_anchors": {
+        "negative_anchors": [
+          "负责新媒体内容运营与文案策划，日常使用ChatGPT、豆包、文心一言撰写小红书文案、公众号推文与短视频脚本",
+          "使用Midjourney、Stable Diffusion生成电商海报与宣传图片，使用AI工具辅助制作PPT与会议纪要总结"
+        ],
+        "positive_anchor_groups": {
+          "agent": [
+            "参与Agent智能体服务研发，基于LangChain、LangGraph、Coze或Dify搭建图工作流，封装大模型API与工具调用链路",
+            "构建RAG向量检索知识库问答系统，使用Embedding模型与向量数据库实现文档语义检索与上下文增强",
+            "使用FastAPI开发异步流式接口，通过LiteLLM或Ollama本地部署管理多模型调用，编写自动化脚本提升研发效率"
+          ],
+          "rpa": [
+            "使用Python、Playwright、Selenium或影刀RPA开发自动化脚本，实现网页数据自动抓取、清洗与业务流程提效"
+          ]
+        }
+      },
+      "keyword_aggregation": {
+        "aliases": {
+          "Agent": [
+            "智能体",
+            "Agents"
+          ],
+          "LangChain": [
+            "Lang Chain"
+          ],
+          "LangGraph": [
+            "Lang Graph"
+          ],
+          "影刀": [
+            "影刀RPA"
+          ],
+          "PgVector": [
+            "pg_vector",
+            "pg-vector"
+          ]
+        },
+        "categories": {
+          "development_practice": {
+            "cap": 28,
+            "scale": 35,
+            "keywords": [
+              "LangGraph",
+              "LangChain",
+              "Coze",
+              "Dify",
+              "n8n",
+              "RAG",
+              "Agent",
+              "Playwright",
+              "Selenium",
+              "影刀",
+              "RPA",
+              "LiteLLM"
+            ]
+          },
+          "engineering": {
+            "cap": 12,
+            "scale": 18,
+            "keywords": [
+              "Python",
+              "FastAPI",
+              "BGE",
+              "PgVector",
+              "Redis",
+              "Docker",
+              "Bash",
+              "Ollama",
+              "DeepSeek"
+            ]
+          },
+          "efficiency": {
+            "cap": 5,
+            "scale": 8,
+            "keywords": [
+              "Cursor",
+              "Claude"
+            ]
+          }
+        },
+        "default_category": "engineering"
+      },
+      "semantic_scoring": {
+        "max_score": 55,
+        "similarity_min": 0.42,
+        "similarity_max": 0.8,
+        "top_k": 3,
+        "top_k_weights": [
+          0.65,
+          0.25,
+          0.1
+        ],
+        "chunk_chars": 320,
+        "min_chunk_chars": 8,
+        "penalty_threshold": 0.62,
+        "penalty_margin": 0.04,
+        "penalty_baseline": 0.55,
+        "penalty_weight": 80,
+        "penalty_cap": 12,
+        "source_weights": {
+          "work": 1,
+          "project": 1,
+          "thesis": 0.9,
+          "work_tags": 0.15,
+          "skills": 0.2,
+          "advantage": 0.3
+        }
+      },
+      "evidence_source_weights": {
+        "work": 1.2,
+        "project": 1.2,
+        "thesis": 1.0,
+        "work_tags": 0.35,
+        "skills": 0.5,
+        "advantage": 0.4
+      },
+      "llm_review": {
+        "temperature": 0,
+        "timeout_seconds": 45,
+        "max_unsupported_score": 20,
+        "max_unsupported_confidence": 0.35,
+        "practice_required_above": 50,
+        "auto_greet_min_confidence": 0.7,
+        "min_practice_quote_chars": 16
+      },
+      "evidence_quality": {
+        "detect_label_only_practice": true,
+        "label_only_max_token_chars": 32,
+        "label_prefixes": [
+          "技术栈",
+          "技术标签",
+          "技能",
+          "关键词",
+          "tech stack",
+          "skills",
+          "熟练掌握",
+          "熟练使用",
+          "熟悉",
+          "精通",
+          "掌握",
+          "了解"
+        ],
+        "proficiency_prefixes": [
+          "熟练掌握",
+          "熟练使用",
+          "熟悉",
+          "精通",
+          "掌握",
+          "了解"
+        ],
+        "implementation_terms": [
+          "负责",
+          "实现",
+          "开发",
+          "设计",
+          "构建",
+          "搭建",
+          "编写",
+          "重构",
+          "接入",
+          "部署",
+          "封装",
+          "维护",
+          "优化",
+          "上线",
+          "集成",
+          "built",
+          "implemented",
+          "developed",
+          "designed",
+          "deployed",
+          "integrated",
+          "maintained"
+        ]
+      }
+    },
+    "config_version": "scoring-v2.1",
+    "model_versions": {
+      "embedding": "bge-large-zh-v1.5-local-unpinned",
+      "llm": "provider-alias-unpinned"
+    },
+    "cache": {
+      "enabled": true,
+      "directory": ".scoring_cache"
+    }
+  },
+  "input_content_hash": "c7df3ac03ea10528731157f0a9479c11c8c49b58a022703fddbb2f7e062220ba"
+}

@@ -1,0 +1,178 @@
+{
+  "case_id": "java_backend",
+  "job_id": "85e6991f737545e5b2bda825717037ad",
+  "draft_id": "219b62e3a7354f78ab076187a63c18de",
+  "run_id": "115574cd85bf4f0fbc08b99479caa505",
+  "draft_hash": "19806749b519a7d2862fe28a2ead4f8fc9315889572d854e1fa04725f5ee445a",
+  "metrics": {
+    "status": "DRAFT_READY",
+    "stage": "completed",
+    "model": "qwen3.8-27b",
+    "timeout_seconds": 90,
+    "max_tokens": 12288,
+    "temperature": 0,
+    "strict_schema": true,
+    "enable_thinking": false,
+    "sdk_max_retries": 0,
+    "system_chars": 2597,
+    "user_chars": 647,
+    "schema_chars": 8786,
+    "prompt_hash": "4039357f599709b534bf37b0a20c7cd5ac9f6ee00bbcaee71dc593ad8b819e31",
+    "schema_hash": "d6a14e6b793d23c10822a6bc5300d5e2e179c9766098ebd51c68e154cad17df1",
+    "usage": {
+      "completion_tokens": 4627,
+      "prompt_tokens": 4519,
+      "total_tokens": 9146,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": null,
+        "rejected_prediction_tokens": null,
+        "text_tokens": null
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": null,
+        "cache_write_tokens": null,
+        "cached_tokens": 0,
+        "image_tokens": null,
+        "text_tokens": 4519
+      }
+    },
+    "reasoning_tokens": null,
+    "pydantic_valid": true,
+    "business_valid": true,
+    "finish_reason": "stop",
+    "api_elapsed_seconds": 65.8838,
+    "request_id": "8ce6f66f-d489-9958-8ebc-335dccad05fd",
+    "response_model": "qwen3.8-27b",
+    "response_chars": 13251,
+    "needs_confirmation": false,
+    "diagnostic_codes": [],
+    "elapsed_seconds": 65.8871
+  },
+  "diagnostics": [],
+  "publishable": true,
+  "generality": {
+    "case_id": "java_backend",
+    "hard_filters": [
+      {
+        "field": "education_level",
+        "operator": "GTE",
+        "value_text": "本科",
+        "value_number": null,
+        "unit": "level"
+      },
+      {
+        "field": "work_years",
+        "operator": "GTE",
+        "value_text": null,
+        "value_number": 3.0,
+        "unit": "year"
+      },
+      {
+        "field": "expected_salary",
+        "operator": "LTE",
+        "value_text": null,
+        "value_number": 30.0,
+        "unit": "month"
+      }
+    ],
+    "required_all_groups": [
+      "grp_core_skills"
+    ],
+    "required_any_groups": [
+      "grp_framework_route"
+    ],
+    "keyword_groups": [
+      "Java服务端开发",
+      "数据库与事务",
+      "接口自动化测试",
+      "微服务框架",
+      "中间件与容器化"
+    ],
+    "keywords": [
+      "Java",
+      "并发编程",
+      "内存模型",
+      "SQL优化",
+      "事务管理",
+      "分库分表",
+      "JUnit",
+      "Mockito",
+      "Postman",
+      "Spring Boot",
+      "Quarkus",
+      "Kafka",
+      "Kubernetes"
+    ],
+    "anchors": [
+      "候选人主导设计了高并发的订单状态机流转逻辑，通过引入乐观锁和数据库唯一索引解决了重复扣款问题，并在生产环境验证了数据一致性。",
+      "简历中仅罗列了Java、Spring等关键词，但在面试中无法解释其项目中具体的类结构设计、异常处理策略或性能瓶颈的解决过程。",
+      "曾通过Arthas和JProfiler定位到线上CPU飙高的根因是某个正则表达式回溯导致的死循环，并重构代码后使响应时间从秒级降至毫秒级。",
+      "搭建了基于RestAssured的接口自动化测试框架，覆盖了核心支付链路的95%以上场景，并在CI/CD流水线中实现了每日回归测试。"
+    ],
+    "dimensions": [
+      {
+        "dimension_id": "dim_service_design",
+        "label": "服务设计",
+        "weight": 0.3,
+        "rubric": [
+          "缺乏独立设计经验，只能按既定模板编码，对系统整体结构无清晰认知。",
+          "能参与模块设计，理解分层架构，但对复杂场景下的解耦和扩展性考虑不足。",
+          "主导过核心服务设计，能权衡技术选型，具备高可用、幂等性和容错设计的实战经验。"
+        ]
+      },
+      {
+        "dimension_id": "dim_data_correctness",
+        "label": "数据正确性",
+        "weight": 0.3,
+        "rubric": [
+          "仅会编写基础CRUD SQL，不理解事务隔离级别，无法处理并发下的数据冲突。",
+          "熟悉常用索引优化手段，能处理简单的事务回滚场景，但对分布式一致性缺乏深入理解。",
+          "精通SQL调优，能设计复杂的事务补偿机制，有解决脏读、幻读及资金安全问题的成功案例。"
+        ]
+      },
+      {
+        "dimension_id": "dim_troubleshooting",
+        "label": "故障排查",
+        "weight": 0.2,
+        "rubric": [
+          "依赖日志打印进行盲目排查，缺乏使用专业诊断工具的经验，定位效率低。",
+          "能熟练使用常见监控工具查看指标，能根据堆栈信息初步判断问题方向，但缺乏深层原理支撑。",
+          "具备全链路排查能力，能结合JVM参数、网络抓包及代码逻辑快速锁定根因，并有预防性监控建设经验。"
+        ]
+      },
+      {
+        "dimension_id": "dim_test_quality",
+        "label": "测试质量",
+        "weight": 0.15,
+        "rubric": [
+          "几乎不写单元测试，依赖手工测试，对测试覆盖率无概念。",
+          "能编写基本的单元测试和接口测试，但用例设计较为单一，缺乏对异常路径的覆盖。",
+          "建立了完善的自动化测试金字塔，注重Mock策略和边界值测试，能有效拦截回归缺陷。"
+        ]
+      },
+      {
+        "dimension_id": "dim_communication",
+        "label": "业务沟通",
+        "weight": 0.05,
+        "rubric": [
+          "沟通被动，难以准确理解业务意图，常需反复确认才能开始工作。",
+          "能清晰表达技术观点，配合度良好，但在跨部门协作中主动性稍显不足。",
+          "具备优秀的业务洞察力，能将技术语言转化为业务价值，主动推动项目进展并协调资源。"
+        ]
+      }
+    ],
+    "thresholds": [
+      60.0,
+      72.0,
+      92.0
+    ],
+    "hard_requirement_sources": [
+      "硬性要求：本科及以上学历，至少3年工作经验，期望月薪不高于30K。",
+      "硬性要求：本科及以上学历，至少3年工作经验，期望月薪不高于30K。",
+      "硬性要求：本科及以上学历，至少3年工作经验，期望月薪不高于30K。"
+    ]
+  },
+  "acceptance_passed": true
+}

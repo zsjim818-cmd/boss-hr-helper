@@ -1,0 +1,853 @@
+{
+  "sqlite_version": "3.50.4",
+  "tables": [
+    "audit_events",
+    "candidate_acquisitions",
+    "candidate_identity_aliases",
+    "candidates",
+    "data_operations",
+    "evaluation_attempts",
+    "evaluation_tasks",
+    "evaluations",
+    "execution_profiles",
+    "hr_review_events",
+    "job_access_grants",
+    "job_candidate_inputs",
+    "job_candidates",
+    "job_policy_versions",
+    "jobs",
+    "organization_memberships",
+    "organizations",
+    "policy_activation_events",
+    "policy_drafts",
+    "policy_publications",
+    "resume_snapshots",
+    "retention_policy_versions",
+    "scan_batches",
+    "schema_migrations",
+    "users"
+  ],
+  "table_count_including_migration_ledger": 25,
+  "trigger_count": 93,
+  "schema": [
+    {
+      "type": "index",
+      "name": "idx_acquisitions_batch",
+      "tbl_name": "candidate_acquisitions",
+      "sql": "CREATE INDEX idx_acquisitions_batch ON candidate_acquisitions(org_id,job_id,batch_id)"
+    },
+    {
+      "type": "index",
+      "name": "idx_acquisitions_candidate",
+      "tbl_name": "candidate_acquisitions",
+      "sql": "CREATE INDEX idx_acquisitions_candidate ON candidate_acquisitions(org_id,job_id,job_candidate_id,captured_at)"
+    },
+    {
+      "type": "index",
+      "name": "idx_alias_candidate",
+      "tbl_name": "candidate_identity_aliases",
+      "sql": "CREATE INDEX idx_alias_candidate ON candidate_identity_aliases(org_id,candidate_id)"
+    },
+    {
+      "type": "index",
+      "name": "idx_attempt_task",
+      "tbl_name": "evaluation_attempts",
+      "sql": "CREATE INDEX idx_attempt_task ON evaluation_attempts(org_id,job_id,task_id,attempt_no)"
+    },
+    {
+      "type": "index",
+      "name": "idx_audit_created",
+      "tbl_name": "audit_events",
+      "sql": "CREATE INDEX idx_audit_created ON audit_events(org_id,created_at)"
+    },
+    {
+      "type": "index",
+      "name": "idx_batches_status",
+      "tbl_name": "scan_batches",
+      "sql": "CREATE INDEX idx_batches_status ON scan_batches(org_id,job_id,status,started_at)"
+    },
+    {
+      "type": "index",
+      "name": "idx_evaluations_candidate",
+      "tbl_name": "evaluations",
+      "sql": "CREATE INDEX idx_evaluations_candidate ON evaluations(org_id,job_id,job_candidate_id,created_at)"
+    },
+    {
+      "type": "index",
+      "name": "idx_job_candidates_batch",
+      "tbl_name": "job_candidates",
+      "sql": "CREATE INDEX idx_job_candidates_batch ON job_candidates(org_id,job_id,first_batch_id)"
+    },
+    {
+      "type": "index",
+      "name": "idx_job_candidates_seen",
+      "tbl_name": "job_candidates",
+      "sql": "CREATE INDEX idx_job_candidates_seen ON job_candidates(org_id,job_id,first_seen_at)"
+    },
+    {
+      "type": "index",
+      "name": "idx_jobs_creator",
+      "tbl_name": "jobs",
+      "sql": "CREATE INDEX idx_jobs_creator ON jobs(org_id,created_by)"
+    },
+    {
+      "type": "index",
+      "name": "idx_policy_profile",
+      "tbl_name": "job_policy_versions",
+      "sql": "CREATE INDEX idx_policy_profile ON job_policy_versions(org_id,execution_profile_id)"
+    },
+    {
+      "type": "index",
+      "name": "idx_resume_content",
+      "tbl_name": "resume_snapshots",
+      "sql": "CREATE INDEX idx_resume_content ON resume_snapshots(org_id,candidate_id,content_hash)"
+    },
+    {
+      "type": "index",
+      "name": "idx_review_evaluation",
+      "tbl_name": "hr_review_events",
+      "sql": "CREATE INDEX idx_review_evaluation ON hr_review_events(org_id,job_id,evaluation_id,created_at)"
+    },
+    {
+      "type": "index",
+      "name": "idx_tasks_state",
+      "tbl_name": "evaluation_tasks",
+      "sql": "CREATE INDEX idx_tasks_state ON evaluation_tasks(org_id,technical_state,created_at)"
+    },
+    {
+      "type": "table",
+      "name": "audit_events",
+      "tbl_name": "audit_events",
+      "sql": "CREATE TABLE audit_events (\n org_id TEXT NOT NULL, event_id TEXT NOT NULL, actor_id TEXT NOT NULL,\n action TEXT NOT NULL, object_type TEXT NOT NULL, object_id TEXT NOT NULL,\n details_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(details_json) AND json_type(details_json)='object'),\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,event_id),\n FOREIGN KEY(org_id,actor_id) REFERENCES organization_memberships(org_id,user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "candidate_acquisitions",
+      "tbl_name": "candidate_acquisitions",
+      "sql": "CREATE TABLE candidate_acquisitions (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, acquisition_id TEXT NOT NULL,\n job_candidate_id TEXT NOT NULL, candidate_id TEXT NOT NULL, batch_id TEXT NOT NULL,\n resume_id TEXT, result TEXT NOT NULL DEFAULT 'CAPTURED', source TEXT NOT NULL DEFAULT 'manual',\n captured_by TEXT NOT NULL,\n captured_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,acquisition_id),\n FOREIGN KEY(org_id,job_id,job_candidate_id,candidate_id)\n   REFERENCES job_candidates(org_id,job_id,job_candidate_id,candidate_id),\n FOREIGN KEY(org_id,job_id,batch_id) REFERENCES scan_batches(org_id,job_id,batch_id),\n FOREIGN KEY(org_id,candidate_id,resume_id) REFERENCES resume_snapshots(org_id,candidate_id,resume_id),\n FOREIGN KEY(org_id,captured_by) REFERENCES organization_memberships(org_id,user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "candidate_identity_aliases",
+      "tbl_name": "candidate_identity_aliases",
+      "sql": "CREATE TABLE candidate_identity_aliases (\n org_id TEXT NOT NULL, source TEXT NOT NULL, external_identity_hash TEXT NOT NULL,\n candidate_id TEXT NOT NULL,\n external_identity_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(external_identity_json) AND json_type(external_identity_json)='object'),\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,source,external_identity_hash),\n FOREIGN KEY(org_id,candidate_id) REFERENCES candidates(org_id,candidate_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "candidates",
+      "tbl_name": "candidates",
+      "sql": "CREATE TABLE candidates (\n org_id TEXT NOT NULL, candidate_id TEXT NOT NULL, display_name TEXT NOT NULL DEFAULT '',\n created_by TEXT NOT NULL,\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,candidate_id),\n FOREIGN KEY(org_id,created_by) REFERENCES organization_memberships(org_id,user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "data_operations",
+      "tbl_name": "data_operations",
+      "sql": "CREATE TABLE data_operations (\n operation_id TEXT PRIMARY KEY NOT NULL, org_id TEXT,\n scope TEXT NOT NULL CHECK(scope IN ('ORG','INSTANCE')),\n kind TEXT NOT NULL CHECK(kind IN ('EXPORT','BACKUP','RESTORE','PURGE')),\n actor_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'REQUESTED'\n   CHECK(status IN ('REQUESTED','APPROVED','RUNNING','COMPLETED','FAILED','CANCELLED')),\n manifest_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(manifest_json) AND json_type(manifest_json)='object'),\n artifact_ref TEXT, expires_at TEXT,\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n CHECK((scope='ORG' AND org_id IS NOT NULL) OR (scope='INSTANCE' AND org_id IS NULL)),\n FOREIGN KEY(org_id) REFERENCES organizations(org_id), FOREIGN KEY(actor_id) REFERENCES users(user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "evaluation_attempts",
+      "tbl_name": "evaluation_attempts",
+      "sql": "CREATE TABLE evaluation_attempts (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, task_id TEXT NOT NULL, attempt_id TEXT NOT NULL,\n attempt_no INTEGER NOT NULL CHECK(typeof(attempt_no)='integer' AND attempt_no>0),\n status TEXT NOT NULL CHECK(status IN ('SUCCEEDED','FAILED')),\n result_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(result_json) AND json_type(result_json)='object'),\n error_type TEXT,\n metrics_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(metrics_json) AND json_type(metrics_json)='object'),\n started_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n completed_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,attempt_id), UNIQUE(org_id,task_id,attempt_no),\n UNIQUE(org_id,job_id,task_id,attempt_id),\n FOREIGN KEY(org_id,job_id,task_id) REFERENCES evaluation_tasks(org_id,job_id,task_id),\n CHECK((status='FAILED' AND error_type IS NOT NULL AND length(trim(error_type))>0) OR\n       (status='SUCCEEDED' AND error_type IS NULL))\n)"
+    },
+    {
+      "type": "table",
+      "name": "evaluation_tasks",
+      "tbl_name": "evaluation_tasks",
+      "sql": "CREATE TABLE evaluation_tasks (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, task_id TEXT NOT NULL,\n job_candidate_id TEXT NOT NULL, candidate_id TEXT NOT NULL,\n policy_id TEXT NOT NULL, policy_version INTEGER NOT NULL,\n resume_id TEXT NOT NULL, execution_profile_id TEXT NOT NULL,\n scoring_mode TEXT NOT NULL CHECK(scoring_mode IN ('fast_mode','deep_mode')),\n idempotency_key TEXT NOT NULL,\n technical_state TEXT NOT NULL DEFAULT 'PENDING' CHECK(technical_state IN ('PENDING','RUNNING','SUCCEEDED','FAILED')),\n created_by TEXT NOT NULL,\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n updated_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,task_id), UNIQUE(org_id,idempotency_key),\n UNIQUE(org_id,job_id,job_candidate_id,scoring_mode),\n UNIQUE(org_id,job_id,task_id),\n UNIQUE(org_id,job_id,task_id,job_candidate_id,candidate_id,policy_id,policy_version,resume_id,execution_profile_id,scoring_mode),\n FOREIGN KEY(org_id,job_id,job_candidate_id,candidate_id,policy_id,policy_version,resume_id)\n   REFERENCES job_candidate_inputs(org_id,job_id,job_candidate_id,candidate_id,policy_id,policy_version,resume_id),\n FOREIGN KEY(org_id,job_id,policy_id,policy_version,execution_profile_id)\n   REFERENCES job_policy_versions(org_id,job_id,policy_id,policy_version,execution_profile_id),\n FOREIGN KEY(org_id,created_by) REFERENCES organization_memberships(org_id,user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "evaluations",
+      "tbl_name": "evaluations",
+      "sql": "CREATE TABLE evaluations (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, evaluation_id TEXT NOT NULL,\n task_id TEXT NOT NULL, attempt_id TEXT NOT NULL,\n job_candidate_id TEXT NOT NULL, candidate_id TEXT NOT NULL,\n policy_id TEXT NOT NULL, policy_version INTEGER NOT NULL, resume_id TEXT NOT NULL,\n execution_profile_id TEXT NOT NULL,\n scoring_mode TEXT NOT NULL CHECK(scoring_mode IN ('fast_mode','deep_mode')),\n scoring_status TEXT NOT NULL CHECK(scoring_status IN ('COARSE_ONLY','HARD_FILTERED','DEEP_SCORED')),\n final_score REAL,\n tier0_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(tier0_json) AND json_type(tier0_json)='object'),\n tier1_score REAL NOT NULL DEFAULT 0 CHECK(tier1_score BETWEEN 0 AND 45),\n tier2_score REAL NOT NULL DEFAULT 0 CHECK(tier2_score BETWEEN 0 AND 55),\n dimensions_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(dimensions_json) AND json_type(dimensions_json)='object'),\n evidence_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(evidence_json) AND json_type(evidence_json)='array'),\n result_json TEXT NOT NULL CHECK(json_valid(result_json) AND json_type(result_json)='object'),\n created_by TEXT NOT NULL,\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,evaluation_id), UNIQUE(org_id,job_id,evaluation_id), UNIQUE(org_id,task_id),\n UNIQUE(org_id,job_id,job_candidate_id,scoring_mode),\n FOREIGN KEY(org_id,job_id,task_id,job_candidate_id,candidate_id,policy_id,policy_version,resume_id,execution_profile_id,scoring_mode)\n   REFERENCES evaluation_tasks(org_id,job_id,task_id,job_candidate_id,candidate_id,policy_id,policy_version,resume_id,execution_profile_id,scoring_mode),\n FOREIGN KEY(org_id,job_id,task_id,attempt_id)\n   REFERENCES evaluation_attempts(org_id,job_id,task_id,attempt_id),\n FOREIGN KEY(org_id,created_by) REFERENCES organization_memberships(org_id,user_id),\n CHECK((scoring_status='DEEP_SCORED' AND scoring_mode='deep_mode' AND final_score IS NOT NULL\n         AND typeof(final_score) IN ('real','integer') AND final_score BETWEEN 0 AND 100)\n    OR (scoring_status IN ('COARSE_ONLY','HARD_FILTERED') AND final_score IS NULL))\n)"
+    },
+    {
+      "type": "table",
+      "name": "execution_profiles",
+      "tbl_name": "execution_profiles",
+      "sql": "CREATE TABLE execution_profiles (\n org_id TEXT NOT NULL, profile_id TEXT NOT NULL,\n profile_json TEXT NOT NULL CHECK(json_valid(profile_json) AND json_type(profile_json)='object'),\n profile_hash TEXT NOT NULL, created_by TEXT NOT NULL,\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,profile_id),\n FOREIGN KEY(org_id,created_by) REFERENCES organization_memberships(org_id,user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "hr_review_events",
+      "tbl_name": "hr_review_events",
+      "sql": "CREATE TABLE hr_review_events (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, review_event_id TEXT NOT NULL,\n evaluation_id TEXT NOT NULL, actor_id TEXT NOT NULL,\n action TEXT NOT NULL CHECK(action IN ('APPROVE','REJECT','REQUEST_REVIEW','NOTE')),\n reason TEXT NOT NULL DEFAULT '',\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,review_event_id),\n FOREIGN KEY(org_id,job_id,evaluation_id) REFERENCES evaluations(org_id,job_id,evaluation_id),\n FOREIGN KEY(org_id,actor_id) REFERENCES organization_memberships(org_id,user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "job_access_grants",
+      "tbl_name": "job_access_grants",
+      "sql": "CREATE TABLE job_access_grants (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, user_id TEXT NOT NULL,\n can_view_resume INTEGER NOT NULL DEFAULT 1 CHECK(can_view_resume IN (0,1)),\n can_edit_policy INTEGER NOT NULL DEFAULT 0 CHECK(can_edit_policy IN (0,1)),\n can_publish_policy INTEGER NOT NULL DEFAULT 0 CHECK(can_publish_policy IN (0,1)),\n can_collect INTEGER NOT NULL DEFAULT 0 CHECK(can_collect IN (0,1)),\n can_score INTEGER NOT NULL DEFAULT 0 CHECK(can_score IN (0,1)),\n can_review INTEGER NOT NULL DEFAULT 0 CHECK(can_review IN (0,1)),\n can_export INTEGER NOT NULL DEFAULT 0 CHECK(can_export IN (0,1)),\n can_manage_grants INTEGER NOT NULL DEFAULT 0 CHECK(can_manage_grants IN (0,1)),\n granted_by TEXT NOT NULL,\n granted_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')), revoked_at TEXT,\n PRIMARY KEY(org_id,job_id,user_id),\n FOREIGN KEY(org_id,job_id) REFERENCES jobs(org_id,job_id),\n FOREIGN KEY(org_id,user_id) REFERENCES organization_memberships(org_id,user_id),\n FOREIGN KEY(org_id,granted_by) REFERENCES organization_memberships(org_id,user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "job_candidate_inputs",
+      "tbl_name": "job_candidate_inputs",
+      "sql": "CREATE TABLE job_candidate_inputs (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, job_candidate_id TEXT NOT NULL,\n candidate_id TEXT NOT NULL, policy_id TEXT NOT NULL, policy_version INTEGER NOT NULL,\n resume_id TEXT NOT NULL, sealed_by TEXT NOT NULL,\n sealed_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,job_id,job_candidate_id),\n UNIQUE(org_id,job_id,job_candidate_id,candidate_id,policy_id,policy_version,resume_id),\n FOREIGN KEY(org_id,job_id,job_candidate_id,candidate_id,policy_id,policy_version)\n   REFERENCES job_candidates(org_id,job_id,job_candidate_id,candidate_id,policy_id,policy_version),\n FOREIGN KEY(org_id,candidate_id,resume_id) REFERENCES resume_snapshots(org_id,candidate_id,resume_id),\n FOREIGN KEY(org_id,sealed_by) REFERENCES organization_memberships(org_id,user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "job_candidates",
+      "tbl_name": "job_candidates",
+      "sql": "CREATE TABLE job_candidates (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, job_candidate_id TEXT NOT NULL,\n candidate_id TEXT NOT NULL, candidate_key TEXT NOT NULL,\n policy_id TEXT NOT NULL, policy_version INTEGER NOT NULL, first_batch_id TEXT NOT NULL,\n first_seen_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,job_id,job_candidate_id),\n UNIQUE(org_id,job_id,candidate_id), UNIQUE(org_id,job_id,candidate_key),\n UNIQUE(org_id,job_id,job_candidate_id,candidate_id),\n UNIQUE(org_id,job_id,job_candidate_id,candidate_id,policy_id,policy_version),\n FOREIGN KEY(org_id,candidate_id) REFERENCES candidates(org_id,candidate_id),\n FOREIGN KEY(org_id,job_id,first_batch_id,policy_id,policy_version)\n   REFERENCES scan_batches(org_id,job_id,batch_id,policy_id,policy_version)\n)"
+    },
+    {
+      "type": "table",
+      "name": "job_policy_versions",
+      "tbl_name": "job_policy_versions",
+      "sql": "CREATE TABLE job_policy_versions (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, policy_id TEXT NOT NULL,\n policy_version INTEGER NOT NULL CHECK(typeof(policy_version)='integer' AND policy_version>0),\n policy_json TEXT NOT NULL CHECK(json_valid(policy_json) AND json_type(policy_json)='object'),\n policy_hash TEXT NOT NULL, original_jd TEXT NOT NULL DEFAULT '', hr_requirements TEXT NOT NULL DEFAULT '',\n execution_profile_id TEXT NOT NULL, policy_schema_version TEXT NOT NULL DEFAULT 'storage_snapshot_v1',\n source_draft_id TEXT, draft_revision INTEGER, source_draft_hash TEXT,\n source_snapshot_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(source_snapshot_json) AND json_type(source_snapshot_json)='object'),\n created_by TEXT NOT NULL,\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,job_id,policy_id), UNIQUE(org_id,job_id,policy_version),\n UNIQUE(org_id,job_id,policy_id,policy_version),\n UNIQUE(org_id,job_id,policy_id,policy_version,execution_profile_id),\n CHECK((source_draft_id IS NULL AND draft_revision IS NULL AND source_draft_hash IS NULL) OR\n       (source_draft_id IS NOT NULL AND draft_revision IS NOT NULL AND draft_revision>0 AND source_draft_hash IS NOT NULL)),\n FOREIGN KEY(org_id,job_id) REFERENCES jobs(org_id,job_id),\n FOREIGN KEY(org_id,execution_profile_id) REFERENCES execution_profiles(org_id,profile_id),\n FOREIGN KEY(org_id,created_by) REFERENCES organization_memberships(org_id,user_id),\n FOREIGN KEY(org_id,job_id,source_draft_id) REFERENCES policy_drafts(org_id,job_id,draft_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "jobs",
+      "tbl_name": "jobs",
+      "sql": "CREATE TABLE jobs (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, title TEXT NOT NULL,\n state TEXT NOT NULL DEFAULT 'OPEN' CHECK(state IN ('OPEN','CLOSED')),\n created_by TEXT NOT NULL, current_policy_id TEXT, current_policy_version INTEGER,\n next_policy_version INTEGER NOT NULL DEFAULT 1 CHECK(typeof(next_policy_version)='integer' AND next_policy_version>0),\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,job_id),\n CHECK((current_policy_id IS NULL AND current_policy_version IS NULL) OR\n       (current_policy_id IS NOT NULL AND current_policy_version IS NOT NULL)),\n FOREIGN KEY(org_id,created_by) REFERENCES organization_memberships(org_id,user_id),\n FOREIGN KEY(org_id,job_id,current_policy_id,current_policy_version)\n   REFERENCES policy_publications(org_id,job_id,policy_id,policy_version)\n   DEFERRABLE INITIALLY DEFERRED\n)"
+    },
+    {
+      "type": "table",
+      "name": "organization_memberships",
+      "tbl_name": "organization_memberships",
+      "sql": "CREATE TABLE organization_memberships (\n org_id TEXT NOT NULL, user_id TEXT NOT NULL,\n org_role TEXT NOT NULL CHECK(org_role IN ('ORG_ADMIN','HR')),\n state TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(state IN ('ACTIVE','DISABLED')),\n joined_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,user_id),\n FOREIGN KEY(org_id) REFERENCES organizations(org_id),\n FOREIGN KEY(user_id) REFERENCES users(user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "organizations",
+      "tbl_name": "organizations",
+      "sql": "CREATE TABLE organizations (\n org_id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL,\n state TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(state IN ('ACTIVE','DISABLED')),\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))\n)"
+    },
+    {
+      "type": "table",
+      "name": "policy_activation_events",
+      "tbl_name": "policy_activation_events",
+      "sql": "CREATE TABLE policy_activation_events (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, event_id TEXT NOT NULL,\n from_policy_id TEXT, to_policy_id TEXT NOT NULL, actor_id TEXT NOT NULL,\n reason TEXT NOT NULL DEFAULT 'publish',\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,event_id), UNIQUE(org_id,job_id,to_policy_id),\n FOREIGN KEY(org_id,job_id,from_policy_id) REFERENCES policy_publications(org_id,job_id,policy_id),\n FOREIGN KEY(org_id,job_id,to_policy_id) REFERENCES policy_publications(org_id,job_id,policy_id),\n FOREIGN KEY(org_id,actor_id) REFERENCES organization_memberships(org_id,user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "policy_drafts",
+      "tbl_name": "policy_drafts",
+      "sql": "CREATE TABLE policy_drafts (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, draft_id TEXT NOT NULL,\n revision INTEGER NOT NULL DEFAULT 1 CHECK(typeof(revision)='integer' AND revision>0),\n source_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(source_json) AND json_type(source_json)='object'),\n policy_json TEXT NOT NULL CHECK(json_valid(policy_json) AND json_type(policy_json)='object'),\n diagnostics_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(diagnostics_json) AND json_type(diagnostics_json)='array'),\n draft_hash TEXT NOT NULL, edited_by TEXT NOT NULL,\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n updated_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,job_id,draft_id),\n FOREIGN KEY(org_id,job_id) REFERENCES jobs(org_id,job_id),\n FOREIGN KEY(org_id,edited_by) REFERENCES organization_memberships(org_id,user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "policy_publications",
+      "tbl_name": "policy_publications",
+      "sql": "CREATE TABLE policy_publications (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, policy_id TEXT NOT NULL,\n policy_version INTEGER NOT NULL, execution_profile_id TEXT NOT NULL,\n confirmation_hash TEXT NOT NULL, published_by TEXT NOT NULL,\n published_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,job_id,policy_id), UNIQUE(org_id,job_id,policy_id,policy_version),\n FOREIGN KEY(org_id,job_id,policy_id,policy_version,execution_profile_id)\n   REFERENCES job_policy_versions(org_id,job_id,policy_id,policy_version,execution_profile_id),\n FOREIGN KEY(org_id,published_by) REFERENCES organization_memberships(org_id,user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "resume_snapshots",
+      "tbl_name": "resume_snapshots",
+      "sql": "CREATE TABLE resume_snapshots (\n org_id TEXT NOT NULL, candidate_id TEXT NOT NULL, resume_id TEXT NOT NULL,\n raw_resume_json TEXT NOT NULL CHECK(json_valid(raw_resume_json) AND json_type(raw_resume_json)='object'),\n normalized_resume_json TEXT NOT NULL CHECK(json_valid(normalized_resume_json) AND json_type(normalized_resume_json)='object'),\n content_hash TEXT NOT NULL, raw_hash TEXT NOT NULL,\n completeness TEXT NOT NULL CHECK(completeness IN ('COMPLETE','PARTIAL','COLLECTION_FAILED')),\n is_scorable INTEGER NOT NULL DEFAULT 0 CHECK(is_scorable IN (0,1)),\n collection_errors_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(collection_errors_json) AND json_type(collection_errors_json)='array'),\n data_issues_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(data_issues_json) AND json_type(data_issues_json)='array'),\n mapper_version TEXT NOT NULL DEFAULT 'resume-v2', captured_by TEXT NOT NULL,\n captured_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n retention_version_id TEXT, expires_at TEXT,\n PRIMARY KEY(org_id,candidate_id,resume_id), UNIQUE(org_id,candidate_id,raw_hash),\n FOREIGN KEY(org_id,candidate_id) REFERENCES candidates(org_id,candidate_id),\n FOREIGN KEY(org_id,captured_by) REFERENCES organization_memberships(org_id,user_id),\n FOREIGN KEY(org_id,retention_version_id) REFERENCES retention_policy_versions(org_id,retention_version_id),\n CHECK(is_scorable=0 OR (completeness='COMPLETE' AND json_array_length(collection_errors_json)=0 AND json_array_length(data_issues_json)=0))\n)"
+    },
+    {
+      "type": "table",
+      "name": "retention_policy_versions",
+      "tbl_name": "retention_policy_versions",
+      "sql": "CREATE TABLE retention_policy_versions (\n org_id TEXT NOT NULL, retention_version_id TEXT NOT NULL,\n rules_json TEXT NOT NULL CHECK(json_valid(rules_json) AND json_type(rules_json)='object'),\n created_by TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')),\n PRIMARY KEY(org_id,retention_version_id),\n FOREIGN KEY(org_id,created_by) REFERENCES organization_memberships(org_id,user_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "scan_batches",
+      "tbl_name": "scan_batches",
+      "sql": "CREATE TABLE scan_batches (\n org_id TEXT NOT NULL, job_id TEXT NOT NULL, batch_id TEXT NOT NULL,\n policy_id TEXT NOT NULL, policy_version INTEGER NOT NULL,\n created_by TEXT NOT NULL,\n status TEXT NOT NULL DEFAULT 'RUNNING' CHECK(status IN ('RUNNING','PAUSED','COMPLETED','CANCELLED')),\n started_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')), completed_at TEXT,\n PRIMARY KEY(org_id,job_id,batch_id),\n UNIQUE(org_id,job_id,batch_id,policy_id,policy_version),\n FOREIGN KEY(org_id,job_id) REFERENCES jobs(org_id,job_id),\n FOREIGN KEY(org_id,job_id,policy_id,policy_version) REFERENCES policy_publications(org_id,job_id,policy_id,policy_version),\n FOREIGN KEY(org_id,created_by) REFERENCES organization_memberships(org_id,user_id),\n CHECK((status IN ('RUNNING','PAUSED') AND completed_at IS NULL) OR\n       (status IN ('COMPLETED','CANCELLED') AND completed_at IS NOT NULL))\n)"
+    },
+    {
+      "type": "table",
+      "name": "schema_migrations",
+      "tbl_name": "schema_migrations",
+      "sql": "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY NOT NULL, name TEXT NOT NULL UNIQUE,checksum TEXT NOT NULL, schema_hash TEXT NOT NULL,applied_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now')))"
+    },
+    {
+      "type": "table",
+      "name": "users",
+      "tbl_name": "users",
+      "sql": "CREATE TABLE users (\n user_id TEXT PRIMARY KEY NOT NULL, auth_subject TEXT NOT NULL UNIQUE,\n display_name TEXT NOT NULL DEFAULT '',\n state TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(state IN ('ACTIVE','DISABLED')),\n created_at TEXT NOT NULL DEFAULT(strftime('%Y-%m-%dT%H:%M:%fZ','now'))\n)"
+    },
+    {
+      "type": "trigger",
+      "name": "acquisition_running_batch",
+      "tbl_name": "candidate_acquisitions",
+      "sql": "CREATE TRIGGER acquisition_running_batch BEFORE INSERT ON candidate_acquisitions\nWHEN NOT EXISTS(SELECT 1 FROM scan_batches b JOIN jobs j USING(org_id,job_id)\n WHERE b.org_id=NEW.org_id AND b.job_id=NEW.job_id AND b.batch_id=NEW.batch_id\n AND b.status='RUNNING' AND j.state='OPEN')\nBEGIN SELECT RAISE(ABORT,'acquisition requires a running batch in the same job'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "association_matches_batch",
+      "tbl_name": "job_candidates",
+      "sql": "CREATE TRIGGER association_matches_batch BEFORE INSERT ON job_candidates\nWHEN NOT EXISTS(SELECT 1 FROM scan_batches b JOIN jobs j USING(org_id,job_id)\n WHERE b.org_id=NEW.org_id AND b.job_id=NEW.job_id AND b.batch_id=NEW.first_batch_id\n AND b.policy_id=NEW.policy_id AND b.policy_version=NEW.policy_version\n AND b.status='RUNNING' AND j.state='OPEN')\nBEGIN SELECT RAISE(ABORT,'new candidate must bind its running first batch policy'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "attempt_running_task",
+      "tbl_name": "evaluation_attempts",
+      "sql": "CREATE TRIGGER attempt_running_task BEFORE INSERT ON evaluation_attempts\nWHEN NOT EXISTS(SELECT 1 FROM evaluation_tasks t WHERE t.org_id=NEW.org_id\n AND t.job_id=NEW.job_id AND t.task_id=NEW.task_id AND t.technical_state='RUNNING')\n OR NEW.attempt_no<>COALESCE((SELECT MAX(attempt_no)+1 FROM evaluation_attempts\n   WHERE org_id=NEW.org_id AND task_id=NEW.task_id),1)\nBEGIN SELECT RAISE(ABORT,'attempt requires a running task and sequential attempt number'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "batch_creator_permission",
+      "tbl_name": "scan_batches",
+      "sql": "CREATE TRIGGER batch_creator_permission BEFORE INSERT ON scan_batches\nWHEN NOT EXISTS(SELECT 1 FROM organization_memberships m JOIN users u USING(user_id)\n JOIN organizations o USING(org_id) WHERE m.org_id=NEW.org_id AND m.user_id=NEW.created_by\n AND m.state='ACTIVE' AND u.state='ACTIVE' AND o.state='ACTIVE'\n AND (m.org_role='ORG_ADMIN' OR EXISTS(SELECT 1 FROM job_access_grants g\n  WHERE g.org_id=NEW.org_id AND g.job_id=NEW.job_id AND g.user_id=NEW.created_by\n  AND g.can_collect=1 AND g.revoked_at IS NULL)))\nBEGIN SELECT RAISE(ABORT,'batch creator lacks collection permission'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "batch_lifecycle",
+      "tbl_name": "scan_batches",
+      "sql": "CREATE TRIGGER batch_lifecycle BEFORE UPDATE ON scan_batches\nWHEN NOT ((NEW.status=OLD.status)\n OR (OLD.status='RUNNING' AND NEW.status IN ('PAUSED','COMPLETED','CANCELLED'))\n OR (OLD.status='PAUSED' AND NEW.status IN ('RUNNING','COMPLETED','CANCELLED')))\n OR (OLD.status IN ('COMPLETED','CANCELLED') AND NEW.completed_at IS NOT OLD.completed_at)\nBEGIN SELECT RAISE(ABORT,'illegal scan batch lifecycle'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "batch_lock_current",
+      "tbl_name": "scan_batches",
+      "sql": "CREATE TRIGGER batch_lock_current BEFORE INSERT ON scan_batches\nWHEN NEW.status<>'RUNNING' OR NEW.completed_at IS NOT NULL OR NOT EXISTS(\n SELECT 1 FROM jobs WHERE org_id=NEW.org_id AND job_id=NEW.job_id AND state='OPEN'\n AND current_policy_id=NEW.policy_id AND current_policy_version=NEW.policy_version)\nBEGIN SELECT RAISE(ABORT,'new batch must lock the current published policy'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "evaluation_accepted_attempt",
+      "tbl_name": "evaluations",
+      "sql": "CREATE TRIGGER evaluation_accepted_attempt BEFORE INSERT ON evaluations\nWHEN NOT EXISTS(SELECT 1 FROM evaluation_attempts a JOIN evaluation_tasks t\n ON a.org_id=t.org_id AND a.job_id=t.job_id AND a.task_id=t.task_id\n WHERE a.org_id=NEW.org_id AND a.job_id=NEW.job_id AND a.task_id=NEW.task_id\n AND a.attempt_id=NEW.attempt_id AND a.status='SUCCEEDED' AND t.technical_state='SUCCEEDED'\n AND json(a.result_json)=json(NEW.result_json))\nBEGIN SELECT RAISE(ABORT,'formal result requires the matching successful completed attempt'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "evaluation_payload_matches_columns",
+      "tbl_name": "evaluations",
+      "sql": "CREATE TRIGGER evaluation_payload_matches_columns BEFORE INSERT ON evaluations\nWHEN json_extract(NEW.result_json,'$.candidate_key') IS NOT\n (SELECT candidate_key FROM job_candidates WHERE org_id=NEW.org_id AND job_id=NEW.job_id AND job_candidate_id=NEW.job_candidate_id)\n OR json_extract(NEW.result_json,'$.scoring_mode') IS NOT NEW.scoring_mode\n OR json_extract(NEW.result_json,'$.scoring_status') IS NOT NEW.scoring_status\n OR json_extract(NEW.result_json,'$.total_score') IS NOT NEW.final_score\n OR json_extract(NEW.result_json,'$.debug_trace.tier1_capped_score') IS NOT NEW.tier1_score\n OR json_extract(NEW.result_json,'$.debug_trace.tier2_semantic_score') IS NOT NEW.tier2_score\n OR json_extract(NEW.result_json,'$.dimension_scores') IS NOT json(NEW.dimensions_json)\n OR json_extract(NEW.result_json,'$.evidence_details') IS NOT json(NEW.evidence_json)\nBEGIN SELECT RAISE(ABORT,'formal result JSON does not match its relational columns'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_audit_events",
+      "tbl_name": "audit_events",
+      "sql": "CREATE TRIGGER no_delete_audit_events BEFORE DELETE ON audit_events\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for audit_events'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_candidate_acquisitions",
+      "tbl_name": "candidate_acquisitions",
+      "sql": "CREATE TRIGGER no_delete_candidate_acquisitions BEFORE DELETE ON candidate_acquisitions\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for candidate_acquisitions'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_candidate_identity_aliases",
+      "tbl_name": "candidate_identity_aliases",
+      "sql": "CREATE TRIGGER no_delete_candidate_identity_aliases BEFORE DELETE ON candidate_identity_aliases\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for candidate_identity_aliases'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_candidates",
+      "tbl_name": "candidates",
+      "sql": "CREATE TRIGGER no_delete_candidates BEFORE DELETE ON candidates\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for candidates'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_data_operations",
+      "tbl_name": "data_operations",
+      "sql": "CREATE TRIGGER no_delete_data_operations BEFORE DELETE ON data_operations\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for data_operations'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_evaluation_attempts",
+      "tbl_name": "evaluation_attempts",
+      "sql": "CREATE TRIGGER no_delete_evaluation_attempts BEFORE DELETE ON evaluation_attempts\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for evaluation_attempts'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_evaluation_tasks",
+      "tbl_name": "evaluation_tasks",
+      "sql": "CREATE TRIGGER no_delete_evaluation_tasks BEFORE DELETE ON evaluation_tasks\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for evaluation_tasks'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_evaluations",
+      "tbl_name": "evaluations",
+      "sql": "CREATE TRIGGER no_delete_evaluations BEFORE DELETE ON evaluations\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for evaluations'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_execution_profiles",
+      "tbl_name": "execution_profiles",
+      "sql": "CREATE TRIGGER no_delete_execution_profiles BEFORE DELETE ON execution_profiles\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for execution_profiles'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_hr_review_events",
+      "tbl_name": "hr_review_events",
+      "sql": "CREATE TRIGGER no_delete_hr_review_events BEFORE DELETE ON hr_review_events\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for hr_review_events'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_job_access_grants",
+      "tbl_name": "job_access_grants",
+      "sql": "CREATE TRIGGER no_delete_job_access_grants BEFORE DELETE ON job_access_grants\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for job_access_grants'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_job_candidate_inputs",
+      "tbl_name": "job_candidate_inputs",
+      "sql": "CREATE TRIGGER no_delete_job_candidate_inputs BEFORE DELETE ON job_candidate_inputs\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for job_candidate_inputs'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_job_candidates",
+      "tbl_name": "job_candidates",
+      "sql": "CREATE TRIGGER no_delete_job_candidates BEFORE DELETE ON job_candidates\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for job_candidates'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_job_policy_versions",
+      "tbl_name": "job_policy_versions",
+      "sql": "CREATE TRIGGER no_delete_job_policy_versions BEFORE DELETE ON job_policy_versions\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for job_policy_versions'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_jobs",
+      "tbl_name": "jobs",
+      "sql": "CREATE TRIGGER no_delete_jobs BEFORE DELETE ON jobs\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for jobs'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_organization_memberships",
+      "tbl_name": "organization_memberships",
+      "sql": "CREATE TRIGGER no_delete_organization_memberships BEFORE DELETE ON organization_memberships\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for organization_memberships'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_organizations",
+      "tbl_name": "organizations",
+      "sql": "CREATE TRIGGER no_delete_organizations BEFORE DELETE ON organizations\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for organizations'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_policy_activation_events",
+      "tbl_name": "policy_activation_events",
+      "sql": "CREATE TRIGGER no_delete_policy_activation_events BEFORE DELETE ON policy_activation_events\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for policy_activation_events'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_policy_drafts",
+      "tbl_name": "policy_drafts",
+      "sql": "CREATE TRIGGER no_delete_policy_drafts BEFORE DELETE ON policy_drafts\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for policy_drafts'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_policy_publications",
+      "tbl_name": "policy_publications",
+      "sql": "CREATE TRIGGER no_delete_policy_publications BEFORE DELETE ON policy_publications\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for policy_publications'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_resume_snapshots",
+      "tbl_name": "resume_snapshots",
+      "sql": "CREATE TRIGGER no_delete_resume_snapshots BEFORE DELETE ON resume_snapshots\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for resume_snapshots'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_retention_policy_versions",
+      "tbl_name": "retention_policy_versions",
+      "sql": "CREATE TRIGGER no_delete_retention_policy_versions BEFORE DELETE ON retention_policy_versions\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for retention_policy_versions'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_scan_batches",
+      "tbl_name": "scan_batches",
+      "sql": "CREATE TRIGGER no_delete_scan_batches BEFORE DELETE ON scan_batches\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for scan_batches'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_schema_migrations",
+      "tbl_name": "schema_migrations",
+      "sql": "CREATE TRIGGER no_delete_schema_migrations BEFORE DELETE ON schema_migrations\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for schema_migrations'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_delete_users",
+      "tbl_name": "users",
+      "sql": "CREATE TRIGGER no_delete_users BEFORE DELETE ON users\r\nBEGIN SELECT RAISE(ABORT,'ordinary deletion forbidden for users'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_rekey_data_operations",
+      "tbl_name": "data_operations",
+      "sql": "CREATE TRIGGER no_rekey_data_operations BEFORE UPDATE ON data_operations\r\nWHEN NEW.operation_id IS NOT OLD.operation_id OR NEW.org_id IS NOT OLD.org_id OR NEW.scope IS NOT OLD.scope OR NEW.kind IS NOT OLD.kind OR NEW.actor_id IS NOT OLD.actor_id OR NEW.created_at IS NOT OLD.created_at\r\nBEGIN SELECT RAISE(ABORT,'immutable identity in data_operations'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_rekey_evaluation_tasks",
+      "tbl_name": "evaluation_tasks",
+      "sql": "CREATE TRIGGER no_rekey_evaluation_tasks BEFORE UPDATE ON evaluation_tasks\r\nWHEN NEW.org_id IS NOT OLD.org_id OR NEW.job_id IS NOT OLD.job_id OR NEW.task_id IS NOT OLD.task_id OR NEW.job_candidate_id IS NOT OLD.job_candidate_id OR NEW.candidate_id IS NOT OLD.candidate_id OR NEW.policy_id IS NOT OLD.policy_id OR NEW.policy_version IS NOT OLD.policy_version OR NEW.resume_id IS NOT OLD.resume_id OR NEW.execution_profile_id IS NOT OLD.execution_profile_id OR NEW.scoring_mode IS NOT OLD.scoring_mode OR NEW.idempotency_key IS NOT OLD.idempotency_key OR NEW.created_by IS NOT OLD.created_by OR NEW.created_at IS NOT OLD.created_at\r\nBEGIN SELECT RAISE(ABORT,'immutable identity in evaluation_tasks'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_rekey_job_access_grants",
+      "tbl_name": "job_access_grants",
+      "sql": "CREATE TRIGGER no_rekey_job_access_grants BEFORE UPDATE ON job_access_grants\r\nWHEN NEW.org_id IS NOT OLD.org_id OR NEW.job_id IS NOT OLD.job_id OR NEW.user_id IS NOT OLD.user_id\r\nBEGIN SELECT RAISE(ABORT,'immutable identity in job_access_grants'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_rekey_jobs",
+      "tbl_name": "jobs",
+      "sql": "CREATE TRIGGER no_rekey_jobs BEFORE UPDATE ON jobs\r\nWHEN NEW.org_id IS NOT OLD.org_id OR NEW.job_id IS NOT OLD.job_id OR NEW.created_by IS NOT OLD.created_by OR NEW.created_at IS NOT OLD.created_at\r\nBEGIN SELECT RAISE(ABORT,'immutable identity in jobs'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_rekey_organization_memberships",
+      "tbl_name": "organization_memberships",
+      "sql": "CREATE TRIGGER no_rekey_organization_memberships BEFORE UPDATE ON organization_memberships\r\nWHEN NEW.org_id IS NOT OLD.org_id OR NEW.user_id IS NOT OLD.user_id OR NEW.joined_at IS NOT OLD.joined_at\r\nBEGIN SELECT RAISE(ABORT,'immutable identity in organization_memberships'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_rekey_organizations",
+      "tbl_name": "organizations",
+      "sql": "CREATE TRIGGER no_rekey_organizations BEFORE UPDATE ON organizations\r\nWHEN NEW.org_id IS NOT OLD.org_id OR NEW.created_at IS NOT OLD.created_at\r\nBEGIN SELECT RAISE(ABORT,'immutable identity in organizations'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_rekey_policy_drafts",
+      "tbl_name": "policy_drafts",
+      "sql": "CREATE TRIGGER no_rekey_policy_drafts BEFORE UPDATE ON policy_drafts\r\nWHEN NEW.org_id IS NOT OLD.org_id OR NEW.job_id IS NOT OLD.job_id OR NEW.draft_id IS NOT OLD.draft_id OR NEW.created_at IS NOT OLD.created_at\r\nBEGIN SELECT RAISE(ABORT,'immutable identity in policy_drafts'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_rekey_scan_batches",
+      "tbl_name": "scan_batches",
+      "sql": "CREATE TRIGGER no_rekey_scan_batches BEFORE UPDATE ON scan_batches\r\nWHEN NEW.org_id IS NOT OLD.org_id OR NEW.job_id IS NOT OLD.job_id OR NEW.batch_id IS NOT OLD.batch_id OR NEW.policy_id IS NOT OLD.policy_id OR NEW.policy_version IS NOT OLD.policy_version OR NEW.created_by IS NOT OLD.created_by OR NEW.started_at IS NOT OLD.started_at\r\nBEGIN SELECT RAISE(ABORT,'immutable identity in scan_batches'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_rekey_users",
+      "tbl_name": "users",
+      "sql": "CREATE TRIGGER no_rekey_users BEFORE UPDATE ON users\r\nWHEN NEW.user_id IS NOT OLD.user_id OR NEW.auth_subject IS NOT OLD.auth_subject OR NEW.created_at IS NOT OLD.created_at\r\nBEGIN SELECT RAISE(ABORT,'immutable identity in users'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_audit_events",
+      "tbl_name": "audit_events",
+      "sql": "CREATE TRIGGER no_replace_audit_events BEFORE INSERT ON audit_events\r\nWHEN EXISTS(SELECT 1 FROM audit_events WHERE org_id=NEW.org_id AND event_id=NEW.event_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing audit_events'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_candidate_acquisitions",
+      "tbl_name": "candidate_acquisitions",
+      "sql": "CREATE TRIGGER no_replace_candidate_acquisitions BEFORE INSERT ON candidate_acquisitions\r\nWHEN EXISTS(SELECT 1 FROM candidate_acquisitions WHERE org_id=NEW.org_id AND acquisition_id=NEW.acquisition_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing candidate_acquisitions'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_candidate_identity_aliases",
+      "tbl_name": "candidate_identity_aliases",
+      "sql": "CREATE TRIGGER no_replace_candidate_identity_aliases BEFORE INSERT ON candidate_identity_aliases\r\nWHEN EXISTS(SELECT 1 FROM candidate_identity_aliases WHERE org_id=NEW.org_id AND source=NEW.source AND external_identity_hash=NEW.external_identity_hash)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing candidate_identity_aliases'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_candidates",
+      "tbl_name": "candidates",
+      "sql": "CREATE TRIGGER no_replace_candidates BEFORE INSERT ON candidates\r\nWHEN EXISTS(SELECT 1 FROM candidates WHERE org_id=NEW.org_id AND candidate_id=NEW.candidate_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing candidates'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_data_operations",
+      "tbl_name": "data_operations",
+      "sql": "CREATE TRIGGER no_replace_data_operations BEFORE INSERT ON data_operations\r\nWHEN EXISTS(SELECT 1 FROM data_operations WHERE operation_id=NEW.operation_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing data_operations'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_evaluation_attempts",
+      "tbl_name": "evaluation_attempts",
+      "sql": "CREATE TRIGGER no_replace_evaluation_attempts BEFORE INSERT ON evaluation_attempts\r\nWHEN EXISTS(SELECT 1 FROM evaluation_attempts WHERE org_id=NEW.org_id AND (attempt_id=NEW.attempt_id OR (task_id=NEW.task_id AND attempt_no=NEW.attempt_no)))\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing evaluation_attempts'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_evaluation_tasks",
+      "tbl_name": "evaluation_tasks",
+      "sql": "CREATE TRIGGER no_replace_evaluation_tasks BEFORE INSERT ON evaluation_tasks\r\nWHEN EXISTS(SELECT 1 FROM evaluation_tasks WHERE org_id=NEW.org_id AND (task_id=NEW.task_id OR idempotency_key=NEW.idempotency_key OR (job_id=NEW.job_id AND job_candidate_id=NEW.job_candidate_id AND scoring_mode=NEW.scoring_mode)))\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing evaluation_tasks'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_evaluations",
+      "tbl_name": "evaluations",
+      "sql": "CREATE TRIGGER no_replace_evaluations BEFORE INSERT ON evaluations\r\nWHEN EXISTS(SELECT 1 FROM evaluations WHERE org_id=NEW.org_id AND (evaluation_id=NEW.evaluation_id OR task_id=NEW.task_id OR (job_id=NEW.job_id AND job_candidate_id=NEW.job_candidate_id AND scoring_mode=NEW.scoring_mode)))\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing evaluations'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_execution_profiles",
+      "tbl_name": "execution_profiles",
+      "sql": "CREATE TRIGGER no_replace_execution_profiles BEFORE INSERT ON execution_profiles\r\nWHEN EXISTS(SELECT 1 FROM execution_profiles WHERE org_id=NEW.org_id AND profile_id=NEW.profile_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing execution_profiles'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_hr_review_events",
+      "tbl_name": "hr_review_events",
+      "sql": "CREATE TRIGGER no_replace_hr_review_events BEFORE INSERT ON hr_review_events\r\nWHEN EXISTS(SELECT 1 FROM hr_review_events WHERE org_id=NEW.org_id AND review_event_id=NEW.review_event_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing hr_review_events'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_job_access_grants",
+      "tbl_name": "job_access_grants",
+      "sql": "CREATE TRIGGER no_replace_job_access_grants BEFORE INSERT ON job_access_grants\r\nWHEN EXISTS(SELECT 1 FROM job_access_grants WHERE org_id=NEW.org_id AND job_id=NEW.job_id AND user_id=NEW.user_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing job_access_grants'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_job_candidate_inputs",
+      "tbl_name": "job_candidate_inputs",
+      "sql": "CREATE TRIGGER no_replace_job_candidate_inputs BEFORE INSERT ON job_candidate_inputs\r\nWHEN EXISTS(SELECT 1 FROM job_candidate_inputs WHERE org_id=NEW.org_id AND job_id=NEW.job_id AND job_candidate_id=NEW.job_candidate_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing job_candidate_inputs'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_job_candidates",
+      "tbl_name": "job_candidates",
+      "sql": "CREATE TRIGGER no_replace_job_candidates BEFORE INSERT ON job_candidates\r\nWHEN EXISTS(SELECT 1 FROM job_candidates WHERE org_id=NEW.org_id AND job_id=NEW.job_id AND (job_candidate_id=NEW.job_candidate_id OR candidate_id=NEW.candidate_id OR candidate_key=NEW.candidate_key))\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing job_candidates'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_job_policy_versions",
+      "tbl_name": "job_policy_versions",
+      "sql": "CREATE TRIGGER no_replace_job_policy_versions BEFORE INSERT ON job_policy_versions\r\nWHEN EXISTS(SELECT 1 FROM job_policy_versions WHERE org_id=NEW.org_id AND job_id=NEW.job_id AND (policy_id=NEW.policy_id OR policy_version=NEW.policy_version))\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing job_policy_versions'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_jobs",
+      "tbl_name": "jobs",
+      "sql": "CREATE TRIGGER no_replace_jobs BEFORE INSERT ON jobs\r\nWHEN EXISTS(SELECT 1 FROM jobs WHERE org_id=NEW.org_id AND job_id=NEW.job_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing jobs'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_organization_memberships",
+      "tbl_name": "organization_memberships",
+      "sql": "CREATE TRIGGER no_replace_organization_memberships BEFORE INSERT ON organization_memberships\r\nWHEN EXISTS(SELECT 1 FROM organization_memberships WHERE org_id=NEW.org_id AND user_id=NEW.user_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing organization_memberships'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_organizations",
+      "tbl_name": "organizations",
+      "sql": "CREATE TRIGGER no_replace_organizations BEFORE INSERT ON organizations\r\nWHEN EXISTS(SELECT 1 FROM organizations WHERE org_id=NEW.org_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing organizations'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_policy_activation_events",
+      "tbl_name": "policy_activation_events",
+      "sql": "CREATE TRIGGER no_replace_policy_activation_events BEFORE INSERT ON policy_activation_events\r\nWHEN EXISTS(SELECT 1 FROM policy_activation_events WHERE org_id=NEW.org_id AND (event_id=NEW.event_id OR (job_id=NEW.job_id AND to_policy_id=NEW.to_policy_id)))\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing policy_activation_events'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_policy_drafts",
+      "tbl_name": "policy_drafts",
+      "sql": "CREATE TRIGGER no_replace_policy_drafts BEFORE INSERT ON policy_drafts\r\nWHEN EXISTS(SELECT 1 FROM policy_drafts WHERE org_id=NEW.org_id AND job_id=NEW.job_id AND draft_id=NEW.draft_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing policy_drafts'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_policy_publications",
+      "tbl_name": "policy_publications",
+      "sql": "CREATE TRIGGER no_replace_policy_publications BEFORE INSERT ON policy_publications\r\nWHEN EXISTS(SELECT 1 FROM policy_publications WHERE org_id=NEW.org_id AND job_id=NEW.job_id AND (policy_id=NEW.policy_id OR policy_version=NEW.policy_version))\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing policy_publications'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_resume_snapshots",
+      "tbl_name": "resume_snapshots",
+      "sql": "CREATE TRIGGER no_replace_resume_snapshots BEFORE INSERT ON resume_snapshots\r\nWHEN EXISTS(SELECT 1 FROM resume_snapshots WHERE org_id=NEW.org_id AND candidate_id=NEW.candidate_id AND (resume_id=NEW.resume_id OR raw_hash=NEW.raw_hash))\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing resume_snapshots'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_retention_policy_versions",
+      "tbl_name": "retention_policy_versions",
+      "sql": "CREATE TRIGGER no_replace_retention_policy_versions BEFORE INSERT ON retention_policy_versions\r\nWHEN EXISTS(SELECT 1 FROM retention_policy_versions WHERE org_id=NEW.org_id AND retention_version_id=NEW.retention_version_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing retention_policy_versions'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_scan_batches",
+      "tbl_name": "scan_batches",
+      "sql": "CREATE TRIGGER no_replace_scan_batches BEFORE INSERT ON scan_batches\r\nWHEN EXISTS(SELECT 1 FROM scan_batches WHERE org_id=NEW.org_id AND job_id=NEW.job_id AND batch_id=NEW.batch_id)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing scan_batches'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_schema_migrations",
+      "tbl_name": "schema_migrations",
+      "sql": "CREATE TRIGGER no_replace_schema_migrations BEFORE INSERT ON schema_migrations\r\nWHEN EXISTS(SELECT 1 FROM schema_migrations WHERE version=NEW.version OR name=NEW.name)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing schema_migrations'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_replace_users",
+      "tbl_name": "users",
+      "sql": "CREATE TRIGGER no_replace_users BEFORE INSERT ON users\r\nWHEN EXISTS(SELECT 1 FROM users WHERE user_id=NEW.user_id OR auth_subject=NEW.auth_subject)\r\nBEGIN SELECT RAISE(ABORT,'conflict would replace existing users'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_audit_events",
+      "tbl_name": "audit_events",
+      "sql": "CREATE TRIGGER no_update_audit_events BEFORE UPDATE ON audit_events\r\nBEGIN SELECT RAISE(ABORT,'immutable audit_events'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_candidate_acquisitions",
+      "tbl_name": "candidate_acquisitions",
+      "sql": "CREATE TRIGGER no_update_candidate_acquisitions BEFORE UPDATE ON candidate_acquisitions\r\nBEGIN SELECT RAISE(ABORT,'immutable candidate_acquisitions'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_candidate_identity_aliases",
+      "tbl_name": "candidate_identity_aliases",
+      "sql": "CREATE TRIGGER no_update_candidate_identity_aliases BEFORE UPDATE ON candidate_identity_aliases\r\nBEGIN SELECT RAISE(ABORT,'immutable candidate_identity_aliases'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_candidates",
+      "tbl_name": "candidates",
+      "sql": "CREATE TRIGGER no_update_candidates BEFORE UPDATE ON candidates\r\nBEGIN SELECT RAISE(ABORT,'immutable candidates'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_evaluation_attempts",
+      "tbl_name": "evaluation_attempts",
+      "sql": "CREATE TRIGGER no_update_evaluation_attempts BEFORE UPDATE ON evaluation_attempts\r\nBEGIN SELECT RAISE(ABORT,'immutable evaluation_attempts'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_evaluations",
+      "tbl_name": "evaluations",
+      "sql": "CREATE TRIGGER no_update_evaluations BEFORE UPDATE ON evaluations\r\nBEGIN SELECT RAISE(ABORT,'immutable evaluations'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_execution_profiles",
+      "tbl_name": "execution_profiles",
+      "sql": "CREATE TRIGGER no_update_execution_profiles BEFORE UPDATE ON execution_profiles\r\nBEGIN SELECT RAISE(ABORT,'immutable execution_profiles'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_hr_review_events",
+      "tbl_name": "hr_review_events",
+      "sql": "CREATE TRIGGER no_update_hr_review_events BEFORE UPDATE ON hr_review_events\r\nBEGIN SELECT RAISE(ABORT,'immutable hr_review_events'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_job_candidate_inputs",
+      "tbl_name": "job_candidate_inputs",
+      "sql": "CREATE TRIGGER no_update_job_candidate_inputs BEFORE UPDATE ON job_candidate_inputs\r\nBEGIN SELECT RAISE(ABORT,'immutable job_candidate_inputs'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_job_candidates",
+      "tbl_name": "job_candidates",
+      "sql": "CREATE TRIGGER no_update_job_candidates BEFORE UPDATE ON job_candidates\r\nBEGIN SELECT RAISE(ABORT,'immutable job_candidates'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_job_policy_versions",
+      "tbl_name": "job_policy_versions",
+      "sql": "CREATE TRIGGER no_update_job_policy_versions BEFORE UPDATE ON job_policy_versions\r\nBEGIN SELECT RAISE(ABORT,'immutable job_policy_versions'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_policy_activation_events",
+      "tbl_name": "policy_activation_events",
+      "sql": "CREATE TRIGGER no_update_policy_activation_events BEFORE UPDATE ON policy_activation_events\r\nBEGIN SELECT RAISE(ABORT,'immutable policy_activation_events'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_policy_publications",
+      "tbl_name": "policy_publications",
+      "sql": "CREATE TRIGGER no_update_policy_publications BEFORE UPDATE ON policy_publications\r\nBEGIN SELECT RAISE(ABORT,'immutable policy_publications'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_resume_snapshots",
+      "tbl_name": "resume_snapshots",
+      "sql": "CREATE TRIGGER no_update_resume_snapshots BEFORE UPDATE ON resume_snapshots\r\nBEGIN SELECT RAISE(ABORT,'immutable resume_snapshots'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_retention_policy_versions",
+      "tbl_name": "retention_policy_versions",
+      "sql": "CREATE TRIGGER no_update_retention_policy_versions BEFORE UPDATE ON retention_policy_versions\r\nBEGIN SELECT RAISE(ABORT,'immutable retention_policy_versions'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "no_update_schema_migrations",
+      "tbl_name": "schema_migrations",
+      "sql": "CREATE TRIGGER no_update_schema_migrations BEFORE UPDATE ON schema_migrations\r\nBEGIN SELECT RAISE(ABORT,'immutable schema_migrations'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "policy_activated",
+      "tbl_name": "policy_publications",
+      "sql": "CREATE TRIGGER policy_activated AFTER INSERT ON policy_publications\nBEGIN\n INSERT INTO policy_activation_events(org_id,job_id,event_id,from_policy_id,to_policy_id,actor_id)\n SELECT NEW.org_id,NEW.job_id,lower(hex(randomblob(16))),current_policy_id,NEW.policy_id,NEW.published_by\n FROM jobs WHERE org_id=NEW.org_id AND job_id=NEW.job_id;\n UPDATE jobs SET current_policy_id=NEW.policy_id,current_policy_version=NEW.policy_version\n WHERE org_id=NEW.org_id AND job_id=NEW.job_id;\nEND"
+    },
+    {
+      "type": "trigger",
+      "name": "policy_draft_revision",
+      "tbl_name": "policy_drafts",
+      "sql": "CREATE TRIGGER policy_draft_revision BEFORE UPDATE ON policy_drafts\nWHEN NEW.revision<>OLD.revision+1\nBEGIN SELECT RAISE(ABORT,'draft update requires the next revision'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "policy_pointer_forward",
+      "tbl_name": "jobs",
+      "sql": "CREATE TRIGGER policy_pointer_forward BEFORE UPDATE OF current_policy_id,current_policy_version ON jobs\nWHEN (NEW.current_policy_id IS NOT OLD.current_policy_id OR NEW.current_policy_version IS NOT OLD.current_policy_version)\n AND (NOT EXISTS(SELECT 1 FROM policy_publications p WHERE p.org_id=NEW.org_id AND p.job_id=NEW.job_id\n   AND p.policy_id=NEW.current_policy_id AND p.policy_version=NEW.current_policy_version)\n OR (OLD.current_policy_version IS NOT NULL AND NEW.current_policy_version<=OLD.current_policy_version))\nBEGIN SELECT RAISE(ABORT,'current policy requires a forward published version'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "policy_publication_gate",
+      "tbl_name": "policy_publications",
+      "sql": "CREATE TRIGGER policy_publication_gate BEFORE INSERT ON policy_publications\nWHEN NOT EXISTS(SELECT 1 FROM job_policy_versions v JOIN jobs j USING(org_id,job_id)\n WHERE v.org_id=NEW.org_id AND v.job_id=NEW.job_id AND v.policy_id=NEW.policy_id\n AND v.policy_version=NEW.policy_version AND v.execution_profile_id=NEW.execution_profile_id\n AND ((v.source_draft_id IS NULL AND v.policy_hash=NEW.confirmation_hash)\n   OR (v.source_draft_id IS NOT NULL AND v.source_draft_hash=NEW.confirmation_hash))\n AND j.state='OPEN'\n AND (j.current_policy_version IS NULL OR NEW.policy_version>j.current_policy_version)\n AND (v.source_draft_id IS NULL OR EXISTS(SELECT 1 FROM policy_drafts d\n   WHERE d.org_id=v.org_id AND d.job_id=v.job_id AND d.draft_id=v.source_draft_id\n   AND d.revision=v.draft_revision AND d.draft_hash=v.source_draft_hash\n   AND d.policy_json=v.policy_json AND d.source_json=v.source_snapshot_json\n   AND json_array_length(d.diagnostics_json)=0)))\nBEGIN SELECT RAISE(ABORT,'publication requires matching confirmed policy and current draft'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "policy_publication_permission",
+      "tbl_name": "policy_publications",
+      "sql": "CREATE TRIGGER policy_publication_permission BEFORE INSERT ON policy_publications\nWHEN NOT EXISTS(SELECT 1 FROM organization_memberships m JOIN users u USING(user_id)\n JOIN organizations o USING(org_id) WHERE m.org_id=NEW.org_id AND m.user_id=NEW.published_by\n AND m.state='ACTIVE' AND u.state='ACTIVE' AND o.state='ACTIVE'\n AND (m.org_role='ORG_ADMIN' OR EXISTS(SELECT 1 FROM job_access_grants g\n   WHERE g.org_id=NEW.org_id AND g.job_id=NEW.job_id AND g.user_id=NEW.published_by\n   AND g.can_publish_policy=1 AND g.revoked_at IS NULL)))\nBEGIN SELECT RAISE(ABORT,'publisher lacks active publication permission'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "policy_version_allocated",
+      "tbl_name": "job_policy_versions",
+      "sql": "CREATE TRIGGER policy_version_allocated AFTER INSERT ON job_policy_versions\nBEGIN UPDATE jobs SET next_policy_version=NEW.policy_version+1\n WHERE org_id=NEW.org_id AND job_id=NEW.job_id; END"
+    },
+    {
+      "type": "trigger",
+      "name": "policy_version_sequence",
+      "tbl_name": "job_policy_versions",
+      "sql": "CREATE TRIGGER policy_version_sequence BEFORE INSERT ON job_policy_versions\nWHEN NEW.policy_version <> COALESCE((SELECT MAX(policy_version)+1 FROM job_policy_versions\n WHERE org_id=NEW.org_id AND job_id=NEW.job_id),1)\nBEGIN SELECT RAISE(ABORT,'policy version must advance by one within its job'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "seal_complete_acquired_resume",
+      "tbl_name": "job_candidate_inputs",
+      "sql": "CREATE TRIGGER seal_complete_acquired_resume BEFORE INSERT ON job_candidate_inputs\nWHEN NOT EXISTS(SELECT 1 FROM resume_snapshots r WHERE r.org_id=NEW.org_id\n AND r.candidate_id=NEW.candidate_id AND r.resume_id=NEW.resume_id\n AND r.completeness='COMPLETE' AND r.is_scorable=1\n AND json_array_length(r.collection_errors_json)=0 AND json_array_length(r.data_issues_json)=0)\n OR NOT EXISTS(SELECT 1 FROM candidate_acquisitions a WHERE a.org_id=NEW.org_id\n AND a.job_id=NEW.job_id AND a.job_candidate_id=NEW.job_candidate_id\n AND a.candidate_id=NEW.candidate_id AND a.resume_id=NEW.resume_id)\nBEGIN SELECT RAISE(ABORT,'input requires a complete scorable resume acquired for this candidate/job'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "task_initial_state",
+      "tbl_name": "evaluation_tasks",
+      "sql": "CREATE TRIGGER task_initial_state BEFORE INSERT ON evaluation_tasks\nWHEN NEW.technical_state<>'PENDING'\nBEGIN SELECT RAISE(ABORT,'evaluation task must start pending'); END"
+    },
+    {
+      "type": "trigger",
+      "name": "task_lifecycle",
+      "tbl_name": "evaluation_tasks",
+      "sql": "CREATE TRIGGER task_lifecycle BEFORE UPDATE OF technical_state ON evaluation_tasks\nWHEN NOT (NEW.technical_state=OLD.technical_state\n OR (OLD.technical_state IN ('PENDING','FAILED') AND NEW.technical_state='RUNNING')\n OR (OLD.technical_state='RUNNING' AND NEW.technical_state IN ('SUCCEEDED','FAILED')))\n OR (NEW.technical_state='SUCCEEDED' AND NOT EXISTS(SELECT 1 FROM evaluation_attempts\n   WHERE org_id=NEW.org_id AND task_id=NEW.task_id AND status='SUCCEEDED'))\n OR (NEW.technical_state='FAILED' AND NOT EXISTS(SELECT 1 FROM evaluation_attempts\n   WHERE org_id=NEW.org_id AND task_id=NEW.task_id AND status='FAILED'))\nBEGIN SELECT RAISE(ABORT,'illegal evaluation task state or missing completed attempt'); END"
+    }
+  ],
+  "row_counts": {
+    "audit_events": 0,
+    "candidate_acquisitions": 0,
+    "candidate_identity_aliases": 0,
+    "candidates": 0,
+    "data_operations": 0,
+    "evaluation_attempts": 0,
+    "evaluation_tasks": 0,
+    "evaluations": 0,
+    "execution_profiles": 0,
+    "hr_review_events": 0,
+    "job_access_grants": 0,
+    "job_candidate_inputs": 0,
+    "job_candidates": 0,
+    "job_policy_versions": 0,
+    "jobs": 0,
+    "organization_memberships": 0,
+    "organizations": 0,
+    "policy_activation_events": 0,
+    "policy_drafts": 0,
+    "policy_publications": 0,
+    "resume_snapshots": 0,
+    "retention_policy_versions": 0,
+    "scan_batches": 0,
+    "schema_migrations": 5,
+    "users": 0
+  }
+}

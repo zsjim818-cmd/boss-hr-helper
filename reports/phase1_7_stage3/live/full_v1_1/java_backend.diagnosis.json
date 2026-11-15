@@ -1,0 +1,58 @@
+{
+  "case_id": "java_backend",
+  "job_id": "bf565301028b443cb17a1fdd4cf83e81",
+  "acceptance_passed": false,
+  "metrics": {
+    "status": "FAILED",
+    "stage": "pydantic_validation",
+    "model": "qwen3.8-27b",
+    "timeout_seconds": 90,
+    "max_tokens": 12288,
+    "temperature": 0,
+    "strict_schema": true,
+    "enable_thinking": false,
+    "sdk_max_retries": 0,
+    "system_chars": 2407,
+    "user_chars": 647,
+    "schema_chars": 8786,
+    "prompt_hash": "4bc532c389c7ed14a2e1b07b0e25e9b2ca6098889f536f09b0b7e03b8296582e",
+    "schema_hash": "d6a14e6b793d23c10822a6bc5300d5e2e179c9766098ebd51c68e154cad17df1",
+    "usage": {
+      "completion_tokens": 4790,
+      "prompt_tokens": 4438,
+      "total_tokens": 9228,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": null,
+        "rejected_prediction_tokens": null,
+        "text_tokens": null
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": null,
+        "cache_write_tokens": null,
+        "cached_tokens": 0,
+        "image_tokens": null,
+        "text_tokens": 4438
+      }
+    },
+    "reasoning_tokens": null,
+    "pydantic_valid": false,
+    "business_valid": false,
+    "finish_reason": "stop",
+    "api_elapsed_seconds": 75.3065,
+    "request_id": "cbc39b1c-62c9-9c19-a29b-b3126b54dac1",
+    "response_model": "qwen3.8-27b",
+    "response_chars": 13683,
+    "failure_type": "ValidationError",
+    "http_status": null,
+    "validation_errors": [
+      {
+        "path": "semantic_anchors.3.requirement_ids",
+        "type": "too_short"
+      }
+    ],
+    "elapsed_seconds": 75.3138
+  },
+  "error_type": "CompilationError"
+}

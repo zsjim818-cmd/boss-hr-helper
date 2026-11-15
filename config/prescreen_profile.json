@@ -1,0 +1,7 @@
+{
+  "profile_version": "prescreen-rules-v1",
+  "formula_version": "coverage-exp-quality-v1",
+  "source_weights": {"work": 1.2, "project": 1.2, "thesis": 1.0, "work_tags": 0.35, "skills": 0.5, "advantage": 0.4},
+  "city_basis": "expected",
+  "salary_implicit_period": null
+}

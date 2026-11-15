@@ -1,0 +1,366 @@
+{
+  "case_id": "ai_automation",
+  "job_id": "feea4ce1a73942faad4db76e8ef0e273",
+  "draft_id": "f24303ed769842f598946347408eda51",
+  "run_id": "ab22e31439004091b75e2f599c7039ac",
+  "draft_hash": "216ceb63a9cc701a10a77a4d3d7dd51de87b4b6bd72274cc7978bc8fcf6e16d0",
+  "metrics": {
+    "status": "DRAFT_READY",
+    "stage": "completed",
+    "model": "qwen3.8-27b",
+    "timeout_seconds": 90,
+    "max_tokens": 12288,
+    "temperature": 0,
+    "strict_schema": true,
+    "enable_thinking": false,
+    "sdk_max_retries": 0,
+    "system_chars": 2597,
+    "user_chars": 685,
+    "schema_chars": 8786,
+    "prompt_hash": "5bfa6b13d00592a63269136c0673ea7ab80b6d493ac237fb7c2d9971a2ff7abc",
+    "schema_hash": "d6a14e6b793d23c10822a6bc5300d5e2e179c9766098ebd51c68e154cad17df1",
+    "usage": {
+      "completion_tokens": 4646,
+      "prompt_tokens": 4540,
+      "total_tokens": 9186,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": null,
+        "audio_tokens": null,
+        "reasoning_tokens": null,
+        "rejected_prediction_tokens": null,
+        "text_tokens": null
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": null,
+        "cache_write_tokens": null,
+        "cached_tokens": 0,
+        "image_tokens": null,
+        "text_tokens": 4540
+      }
+    },
+    "reasoning_tokens": null,
+    "pydantic_valid": true,
+    "business_valid": true,
+    "finish_reason": "stop",
+    "api_elapsed_seconds": 83.9676,
+    "request_id": "4f4bbf35-d9fe-9fb2-934e-15d7b7aa37af",
+    "response_model": "qwen3.8-27b",
+    "response_chars": 13094,
+    "raw_response_sha256": "afd89f42d74f4e582693559889f4e91376f0be0405dd765233f4e285e9c8ad0d",
+    "normalizer_version": "policy-normalizer-v1",
+    "policy_normalized": true,
+    "normalization_actions": [
+      {
+        "code": "ALIASES_REMOVED_UNGROUNDED",
+        "severity": "WARNING",
+        "message": "Keyword 'Python': removed aliases [\"python3\", \"py\"]",
+        "requirement_ids": [
+          "req_py_01"
+        ]
+      },
+      {
+        "code": "ALIASES_REMOVED_UNGROUNDED",
+        "severity": "WARNING",
+        "message": "Keyword '异常处理': removed aliases [\"exception handling\", \"try-except\", \"错误捕获\"]",
+        "requirement_ids": [
+          "req_exc_01",
+          "req_api_test_01"
+        ]
+      },
+      {
+        "code": "ALIASES_REMOVED_UNGROUNDED",
+        "severity": "WARNING",
+        "message": "Keyword '接口测试': removed aliases [\"API testing\", \"pytest\", \"unittest\"]",
+        "requirement_ids": [
+          "req_exc_01",
+          "req_api_test_01"
+        ]
+      },
+      {
+        "code": "ALIASES_REMOVED_UNGROUNDED",
+        "severity": "WARNING",
+        "message": "Keyword 'RAG': removed aliases [\"Retrieval-Augmented Generation\", \"知识检索\", \"向量数据库\"]",
+        "requirement_ids": [
+          "req_route_a_tool_01",
+          "req_route_a_rag_01"
+        ]
+      },
+      {
+        "code": "ALIASES_REMOVED_UNGROUNDED",
+        "severity": "WARNING",
+        "message": "Keyword '数据采集': removed aliases [\"爬虫\", \"scraping\", \"数据抓取\"]",
+        "requirement_ids": [
+          "req_route_b_web_01",
+          "req_route_b_retry_01"
+        ]
+      },
+      {
+        "code": "ALIASES_REMOVED_UNGROUNDED",
+        "severity": "WARNING",
+        "message": "Keyword '重试机制': removed aliases [\"retry\", \"任务恢复\", \"断点续传\"]",
+        "requirement_ids": [
+          "req_route_b_web_01",
+          "req_route_b_retry_01"
+        ]
+      },
+      {
+        "code": "ALIASES_REMOVED_UNGROUNDED",
+        "severity": "WARNING",
+        "message": "Keyword 'Docker': removed aliases [\"docker-compose\", \"容器化\"]",
+        "requirement_ids": [
+          "req_docker_01",
+          "req_n8n_01"
+        ]
+      },
+      {
+        "code": "ALIASES_REMOVED_UNGROUNDED",
+        "severity": "WARNING",
+        "message": "Keyword 'n8n': removed aliases [\"n8n workflow\", \"工作流引擎\"]",
+        "requirement_ids": [
+          "req_docker_01",
+          "req_n8n_01"
+        ]
+      },
+      {
+        "code": "LOWERED_EXPLICIT_ALTERNATIVE",
+        "severity": "WARNING",
+        "message": "Lowered '使用LangGraph或LangChain实现多步骤工具调用' to ANY with original source tokens 'LangGraph' and 'LangChain'",
+        "requirement_ids": [
+          "alt_360e9d0fcbe7eff84718d116",
+          "alt_5861852725e342467607aac3"
+        ]
+      },
+      {
+        "code": "LOWERED_EXPLICIT_ALTERNATIVE",
+        "severity": "WARNING",
+        "message": "Lowered '使用Playwright或Selenium实现网页操作和数据采集' to ANY with original source tokens 'Playwright' and 'Selenium'",
+        "requirement_ids": [
+          "alt_38a80e9c81143eb55a79ffb5",
+          "alt_3ebe7802549a648b3fe141ef"
+        ]
+      }
+    ],
+    "compiled_policy_sha256": "a766427f40e7dd741d0bb3c4d1805210d3f90fe4db7c580949fbba57c7f4c457",
+    "needs_confirmation": false,
+    "diagnostic_codes": [
+      "DUPLICATE_KEYWORD_ALIAS",
+      "ALIASES_REMOVED_UNGROUNDED",
+      "ALIASES_REMOVED_UNGROUNDED",
+      "ALIASES_REMOVED_UNGROUNDED",
+      "ALIASES_REMOVED_UNGROUNDED",
+      "ALIASES_REMOVED_UNGROUNDED",
+      "ALIASES_REMOVED_UNGROUNDED",
+      "ALIASES_REMOVED_UNGROUNDED",
+      "ALIASES_REMOVED_UNGROUNDED",
+      "LOWERED_EXPLICIT_ALTERNATIVE",
+      "LOWERED_EXPLICIT_ALTERNATIVE"
+    ],
+    "elapsed_seconds": 83.9986
+  },
+  "diagnostics": [
+    {
+      "code": "DUPLICATE_KEYWORD_ALIAS",
+      "severity": "WARNING",
+      "message": "Repeated aliases will require canonical deduplication",
+      "requirement_ids": []
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "severity": "WARNING",
+      "message": "Keyword 'Python': removed aliases [\"python3\", \"py\"]",
+      "requirement_ids": [
+        "req_py_01"
+      ]
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "severity": "WARNING",
+      "message": "Keyword '异常处理': removed aliases [\"exception handling\", \"try-except\", \"错误捕获\"]",
+      "requirement_ids": [
+        "req_exc_01",
+        "req_api_test_01"
+      ]
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "severity": "WARNING",
+      "message": "Keyword '接口测试': removed aliases [\"API testing\", \"pytest\", \"unittest\"]",
+      "requirement_ids": [
+        "req_exc_01",
+        "req_api_test_01"
+      ]
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "severity": "WARNING",
+      "message": "Keyword 'RAG': removed aliases [\"Retrieval-Augmented Generation\", \"知识检索\", \"向量数据库\"]",
+      "requirement_ids": [
+        "req_route_a_tool_01",
+        "req_route_a_rag_01"
+      ]
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "severity": "WARNING",
+      "message": "Keyword '数据采集': removed aliases [\"爬虫\", \"scraping\", \"数据抓取\"]",
+      "requirement_ids": [
+        "req_route_b_web_01",
+        "req_route_b_retry_01"
+      ]
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "severity": "WARNING",
+      "message": "Keyword '重试机制': removed aliases [\"retry\", \"任务恢复\", \"断点续传\"]",
+      "requirement_ids": [
+        "req_route_b_web_01",
+        "req_route_b_retry_01"
+      ]
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "severity": "WARNING",
+      "message": "Keyword 'Docker': removed aliases [\"docker-compose\", \"容器化\"]",
+      "requirement_ids": [
+        "req_docker_01",
+        "req_n8n_01"
+      ]
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "severity": "WARNING",
+      "message": "Keyword 'n8n': removed aliases [\"n8n workflow\", \"工作流引擎\"]",
+      "requirement_ids": [
+        "req_docker_01",
+        "req_n8n_01"
+      ]
+    },
+    {
+      "code": "LOWERED_EXPLICIT_ALTERNATIVE",
+      "severity": "WARNING",
+      "message": "Lowered '使用LangGraph或LangChain实现多步骤工具调用' to ANY with original source tokens 'LangGraph' and 'LangChain'",
+      "requirement_ids": [
+        "alt_360e9d0fcbe7eff84718d116",
+        "alt_5861852725e342467607aac3"
+      ]
+    },
+    {
+      "code": "LOWERED_EXPLICIT_ALTERNATIVE",
+      "severity": "WARNING",
+      "message": "Lowered '使用Playwright或Selenium实现网页操作和数据采集' to ANY with original source tokens 'Playwright' and 'Selenium'",
+      "requirement_ids": [
+        "alt_38a80e9c81143eb55a79ffb5",
+        "alt_3ebe7802549a648b3fe141ef"
+      ]
+    }
+  ],
+  "publishable": true,
+  "generality": {
+    "case_id": "ai_automation",
+    "hard_filters": [
+      {
+        "field": "education_level",
+        "operator": "GTE",
+        "value_text": "大专",
+        "value_number": null,
+        "unit": "level"
+      },
+      {
+        "field": "expected_salary",
+        "operator": "LTE",
+        "value_text": null,
+        "value_number": 18.0,
+        "unit": "month"
+      }
+    ],
+    "required_all_groups": [
+      "grp_core_reqs",
+      "grp_route_a",
+      "grp_route_b"
+    ],
+    "required_any_groups": [
+      "grp_alt_routes",
+      "req_route_a_tool_01",
+      "req_route_b_web_01"
+    ],
+    "keyword_groups": [
+      "Python编程",
+      "可靠性与测试",
+      "LLM应用开发",
+      "Web自动化",
+      "部署与工作流"
+    ],
+    "keywords": [
+      "Python",
+      "异常处理",
+      "接口测试",
+      "LangGraph",
+      "LangChain",
+      "RAG",
+      "Playwright",
+      "Selenium",
+      "数据采集",
+      "重试机制",
+      "Docker",
+      "n8n"
+    ],
+    "anchors": [
+      "描述了具体的项目背景，说明了如何使用Python结合特定框架（如LangChain或Playwright）解决实际问题，并提供了代码结构或架构设计的细节。",
+      "详细阐述了在系统运行中遇到网络波动或服务不可用时的具体异常处理策略，包括重试逻辑、状态保存和任务恢复的实现方式。",
+      "仅罗列了技术栈名称（如Python, LangChain, Selenium），但没有描述任何具体的实现过程、遇到的挑战或最终的交付成果。",
+      "虽然提到了开发自动化脚本，但完全未提及如何处理执行过程中的异常情况，缺乏对程序健壮性的考量。"
+    ],
+    "dimensions": [
+      {
+        "dimension_id": "dim_delivery",
+        "label": "应用交付",
+        "weight": 0.5,
+        "rubric": [
+          "仅有技术名词堆砌，无具体项目描述，无法证明具备独立交付能力。",
+          "能描述简单脚本或单一功能模块的实现，但缺乏对整体架构或复杂业务场景的处理经验。",
+          "有完整的端到端项目交付经验，能清晰阐述从需求分析到代码实现的全过程，且项目具有实际业务价值。"
+        ]
+      },
+      {
+        "dimension_id": "dim_reliability",
+        "label": "程序可靠性",
+        "weight": 0.25,
+        "rubric": [
+          "未提及任何异常处理或测试策略，程序可能因单次错误而崩溃。",
+          "了解基本的try-except用法，但缺乏针对网络超时、数据不一致等复杂场景的系统性处理方案。",
+          "具备完善的容错机制设计，包括指数退避重试、状态持久化、自动化测试覆盖，能确保长时运行任务的可靠性。"
+        ]
+      },
+      {
+        "dimension_id": "dim_efficiency",
+        "label": "流程提效",
+        "weight": 0.15,
+        "rubric": [
+          "无法说明自动化如何具体节省人力或时间，缺乏量化指标。",
+          "能描述简单的重复性工作自动化，但对流程瓶颈识别和优化效果评估不足。",
+          "深入理解业务痛点，通过RAG或Web自动化显著提升了关键流程的效率，并能提供具体的ROI分析。"
+        ]
+      },
+      {
+        "dimension_id": "dim_understanding",
+        "label": "需求理解",
+        "weight": 0.1,
+        "rubric": [
+          "被动接受指令，无法主动澄清需求边界或潜在风险。",
+          "能准确复述需求，但在面对变更或歧义时缺乏独立的判断力。",
+          "能从业务目标出发反推技术实现，主动识别需求中的隐含约束，并提出建设性的技术方案。"
+        ]
+      }
+    ],
+    "thresholds": [
+      52.0,
+      68.0,
+      90.0
+    ],
+    "hard_requirement_sources": [
+      "硬性要求：大专及以上学历，期望月薪不高于18K。",
+      "硬性要求：大专及以上学历，期望月薪不高于18K。"
+    ]
+  },
+  "acceptance_passed": true
+}

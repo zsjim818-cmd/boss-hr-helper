@@ -1,0 +1,101 @@
+{
+  "label": "Executed offline V1 baseline with deterministic Mock models; NOT BGE or Qwen scores",
+  "captured_date": "2026-11-14",
+  "source_sha256": {
+    "scoring_engine.py": "fc3a2846bbc4e38ad327edb9db37bad6f7acde9b3ae06c2ea6a9e991eaa7d7d8",
+    "schemas.py": "d0ea9fd95fc2a72d34bde8226f54ed835ef1be83aa8cff4c2c9101cb417359bb",
+    "config.json": "8b8e561b6b5d0ae8066c95a3e9a095c2a914e2c4e283e241b247c8aef745b9f8",
+    "test_benchmark.py": "5c87d2170a507203cc19e4274836202660ba5384964aee8615b08f02bc515be4"
+  },
+  "embedding_version": "mock-feature-v1",
+  "llm_version": "mock-llm-v1",
+  "mock_llm_fixed_dimensions": [
+    90,
+    85,
+    80,
+    90
+  ],
+  "warning": "Mock embeddings only test algorithm mechanics. Fixed LLM fixture is not an assessment. Historical documentation scores are not reproduced.",
+  "thresholds": {
+    "coarse_pass_score": 52,
+    "review_threshold": 60,
+    "auto_greet_threshold": 82
+  },
+  "candidates": [
+    {
+      "candidate_key": "job_1:geek_zhongsheng",
+      "name": "钟盛 (样本1: 截图真实简历-Agent实战)",
+      "tier0_passed": true,
+      "tier0_reason": "通过硬性过滤",
+      "tier1_raw": 134.1,
+      "tier1_capped": 45.0,
+      "tier2_semantic": 55.0,
+      "tier2_penalty": 0.0,
+      "coarse_score": 100.0,
+      "deep_total_mock": 86.5,
+      "deep_route_old": "AUTO_GREET",
+      "fast_route_old": "AUTO_GREET"
+    },
+    {
+      "candidate_key": "job_1:geek_chen",
+      "name": "陈同学 (样本2: Coze工作流+RPA专员)",
+      "tier0_passed": true,
+      "tier0_reason": "通过硬性过滤",
+      "tier1_raw": 93.3,
+      "tier1_capped": 45.0,
+      "tier2_semantic": 55.0,
+      "tier2_penalty": 0.0,
+      "coarse_score": 100.0,
+      "deep_total_mock": 86.5,
+      "deep_route_old": "AUTO_GREET",
+      "fast_route_old": "AUTO_GREET"
+    },
+    {
+      "candidate_key": "job_1:geek_liu",
+      "name": "刘同学 (样本3: 传统Python开发+AI提效)",
+      "tier0_passed": true,
+      "tier0_reason": "通过硬性过滤",
+      "tier1_raw": 33.75,
+      "tier1_capped": 33.75,
+      "tier2_semantic": 48.32,
+      "tier2_penalty": 0.0,
+      "coarse_score": 82.07,
+      "deep_total_mock": 86.5,
+      "deep_route_old": "AUTO_GREET",
+      "fast_route_old": "AUTO_GREET"
+    },
+    {
+      "candidate_key": "job_1:geek_wang",
+      "name": "王同学 (样本4: 伪AI文案运营-应被拦截)",
+      "tier0_passed": true,
+      "tier0_reason": "通过硬性过滤",
+      "tier1_raw": 3.75,
+      "tier1_capped": 3.75,
+      "tier2_semantic": 0.0,
+      "tier2_penalty": 21.65,
+      "coarse_score": 3.75,
+      "deep_total_mock": 3.75,
+      "deep_route_old": "REJECT",
+      "fast_route_old": "REJECT"
+    },
+    {
+      "candidate_key": "job_1:geek_zhao",
+      "name": "赵同学 (样本5: 薪资超上限-应被Tier0秒拒)",
+      "tier0_passed": false,
+      "tier0_reason": "薪资超预算：候选人期望【18-25K】(下限18.0K) 高于上限 12.0K",
+      "tier1_raw": 0.0,
+      "tier1_capped": 0.0,
+      "tier2_semantic": 0.0,
+      "tier2_penalty": 0.0,
+      "coarse_score": 0.0,
+      "deep_total_mock": 0.0,
+      "deep_route_old": "REJECT",
+      "fast_route_old": "REJECT"
+    }
+  ],
+  "timeout_old_behavior": {
+    "coarse_score": 100.0,
+    "total_score": 100.0,
+    "route": "AUTO_GREET"
+  }
+}

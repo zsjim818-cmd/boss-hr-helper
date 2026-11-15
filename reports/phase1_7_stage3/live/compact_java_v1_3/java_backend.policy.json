@@ -1,0 +1,551 @@
+{
+  "diagnostics": [
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "message": "Keyword '微服务架构': removed aliases [\"分布式系统\", \"高可用设计\"]",
+      "requirement_ids": [
+        "req_java_dev",
+        "req_spring_boot",
+        "req_quarkus"
+      ],
+      "severity": "WARNING"
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "message": "Keyword 'Spring Boot': removed aliases [\"Spring Cloud\"]",
+      "requirement_ids": [
+        "req_java_dev",
+        "req_spring_boot",
+        "req_quarkus"
+      ],
+      "severity": "WARNING"
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "message": "Keyword 'ACID事务': removed aliases [\"两阶段提交\", \"最终一致性\"]",
+      "requirement_ids": [
+        "req_sql_txn"
+      ],
+      "severity": "WARNING"
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "message": "Keyword 'SQL优化': removed aliases [\"索引调优\", \"慢查询分析\"]",
+      "requirement_ids": [
+        "req_sql_txn"
+      ],
+      "severity": "WARNING"
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "message": "Keyword '并发控制': removed aliases [\"锁机制\", \"死锁处理\"]",
+      "requirement_ids": [
+        "req_sql_txn"
+      ],
+      "severity": "WARNING"
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "message": "Keyword '接口自动化测试': removed aliases [\"Postman\", \"JMeter\"]",
+      "requirement_ids": [
+        "req_auto_test"
+      ],
+      "severity": "WARNING"
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "message": "Keyword '单元测试': removed aliases [\"JUnit\", \"Mockito\"]",
+      "requirement_ids": [
+        "req_auto_test"
+      ],
+      "severity": "WARNING"
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "message": "Keyword '代码覆盖率': removed aliases [\"JaCoCo\"]",
+      "requirement_ids": [
+        "req_auto_test"
+      ],
+      "severity": "WARNING"
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "message": "Keyword 'Kafka': removed aliases [\"消息队列\", \"异步解耦\"]",
+      "requirement_ids": [
+        "req_kafka",
+        "req_k8s"
+      ],
+      "severity": "WARNING"
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "message": "Keyword 'Kubernetes': removed aliases [\"K8s\", \"容器编排\"]",
+      "requirement_ids": [
+        "req_kafka",
+        "req_k8s"
+      ],
+      "severity": "WARNING"
+    },
+    {
+      "code": "ALIASES_REMOVED_UNGROUNDED",
+      "message": "Keyword '链路追踪': removed aliases [\"SkyWalking\", \"Prometheus\"]",
+      "requirement_ids": [
+        "req_kafka",
+        "req_k8s"
+      ],
+      "severity": "WARNING"
+    }
+  ],
+  "hard_filters": [
+    {
+      "field": "education_level",
+      "filter_id": "hf_edu",
+      "on_unknown": "REVIEW",
+      "operator": "GTE",
+      "requirement_id": "req_edu_bachelor",
+      "unit": "level",
+      "value_list": [],
+      "value_number": null,
+      "value_text": "本科"
+    },
+    {
+      "field": "work_years",
+      "filter_id": "hf_exp",
+      "on_unknown": "REVIEW",
+      "operator": "GTE",
+      "requirement_id": "req_exp_3yrs",
+      "unit": "year",
+      "value_list": [],
+      "value_number": 3.0,
+      "value_text": null
+    },
+    {
+      "field": "expected_salary",
+      "filter_id": "hf_salary",
+      "on_unknown": "REVIEW",
+      "operator": "LTE",
+      "requirement_id": "req_salary_30k",
+      "unit": "month",
+      "value_list": [],
+      "value_number": 30.0,
+      "value_text": null
+    }
+  ],
+  "job": {
+    "summary": "负责订单与支付后台服务建设，维护业务接口与关系型数据库，定位线上性能及一致性问题。",
+    "title": "Java后端开发工程师"
+  },
+  "keyword_groups": [
+    {
+      "group_id": "kw_service_design",
+      "keywords": [
+        {
+          "aliases": [],
+          "canonical": "微服务架构",
+          "weight": 80.0
+        },
+        {
+          "aliases": [],
+          "canonical": "Spring Boot",
+          "weight": 90.0
+        },
+        {
+          "aliases": [],
+          "canonical": "Quarkus",
+          "weight": 85.0
+        }
+      ],
+      "label": "服务架构与设计",
+      "requirement_ids": [
+        "req_java_dev",
+        "req_spring_boot",
+        "req_quarkus"
+      ]
+    },
+    {
+      "group_id": "kw_data_consistency",
+      "keywords": [
+        {
+          "aliases": [],
+          "canonical": "ACID事务",
+          "weight": 95.0
+        },
+        {
+          "aliases": [],
+          "canonical": "SQL优化",
+          "weight": 85.0
+        },
+        {
+          "aliases": [],
+          "canonical": "并发控制",
+          "weight": 80.0
+        }
+      ],
+      "label": "数据一致性与事务",
+      "requirement_ids": [
+        "req_sql_txn"
+      ]
+    },
+    {
+      "group_id": "kw_testing_quality",
+      "keywords": [
+        {
+          "aliases": [],
+          "canonical": "接口自动化测试",
+          "weight": 90.0
+        },
+        {
+          "aliases": [],
+          "canonical": "单元测试",
+          "weight": 80.0
+        },
+        {
+          "aliases": [],
+          "canonical": "代码覆盖率",
+          "weight": 70.0
+        }
+      ],
+      "label": "测试与质量保障",
+      "requirement_ids": [
+        "req_auto_test"
+      ]
+    },
+    {
+      "group_id": "kw_ops_monitoring",
+      "keywords": [
+        {
+          "aliases": [],
+          "canonical": "Kafka",
+          "weight": 75.0
+        },
+        {
+          "aliases": [],
+          "canonical": "Kubernetes",
+          "weight": 75.0
+        },
+        {
+          "aliases": [],
+          "canonical": "链路追踪",
+          "weight": 70.0
+        }
+      ],
+      "label": "运维监控与中间件",
+      "requirement_ids": [
+        "req_kafka",
+        "req_k8s"
+      ]
+    }
+  ],
+  "provenance": {
+    "compiler_version": "job-policy-compiler-v1.1",
+    "model_version": "qwen3.8-27b",
+    "prompt_version": "job-policy-prompt-v1.3",
+    "validator_version": "policy-validator-v1.1"
+  },
+  "requirement_groups": [
+    {
+      "group_id": "grp_core_skills",
+      "label": "核心必备技能组合",
+      "members": [
+        "req_java_dev",
+        "req_sql_txn",
+        "req_auto_test"
+      ],
+      "needs_confirmation": false,
+      "operator": "ALL",
+      "priority": "REQUIRED",
+      "source_text": "必需能力：必须同时具备Java服务端开发能力、SQL与事务设计能力、接口自动化测试能力。",
+      "source_type": "JD"
+    },
+    {
+      "group_id": "grp_framework_route",
+      "label": "框架技术路线（二选一）",
+      "members": [
+        "req_spring_boot",
+        "req_quarkus"
+      ],
+      "needs_confirmation": false,
+      "operator": "ANY",
+      "priority": "REQUIRED",
+      "source_text": "框架路线：使用Spring Boot或Quarkus完成真实服务开发，至少满足其中一种框架路线，不要求两种都用过。",
+      "source_type": "JD"
+    },
+    {
+      "group_id": "grp_bonus_skills",
+      "label": "加分项技能（非强制）",
+      "members": [
+        "req_kafka",
+        "req_k8s"
+      ],
+      "needs_confirmation": false,
+      "operator": "ANY",
+      "priority": "PREFERRED",
+      "source_text": "加分项：了解Kafka消息队列或Kubernetes部署更好，但缺少这些经历不构成硬性淘汰条件。",
+      "source_type": "JD"
+    }
+  ],
+  "requirements": [
+    {
+      "label": "本科及以上学历",
+      "needs_confirmation": false,
+      "priority": "REQUIRED",
+      "requirement_id": "req_edu_bachelor",
+      "requirement_type": "EDUCATION",
+      "source_text": "硬性要求：本科及以上学历，至少3年工作经验，期望月薪不高于30K。",
+      "source_type": "JD"
+    },
+    {
+      "label": "至少3年工作经验",
+      "needs_confirmation": false,
+      "priority": "REQUIRED",
+      "requirement_id": "req_exp_3yrs",
+      "requirement_type": "EXPERIENCE",
+      "source_text": "硬性要求：本科及以上学历，至少3年工作经验，期望月薪不高于30K。",
+      "source_type": "JD"
+    },
+    {
+      "label": "期望月薪不高于30K",
+      "needs_confirmation": false,
+      "priority": "REQUIRED",
+      "requirement_id": "req_salary_30k",
+      "requirement_type": "COMPENSATION",
+      "source_text": "硬性要求：本科及以上学历，至少3年工作经验，期望月薪不高于30K。",
+      "source_type": "JD"
+    },
+    {
+      "label": "Java服务端开发能力",
+      "needs_confirmation": false,
+      "priority": "REQUIRED",
+      "requirement_id": "req_java_dev",
+      "requirement_type": "SKILL",
+      "source_text": "必需能力：必须同时具备Java服务端开发能力、SQL与事务设计能力、接口自动化测试能力。",
+      "source_type": "JD"
+    },
+    {
+      "label": "SQL与事务设计能力",
+      "needs_confirmation": false,
+      "priority": "REQUIRED",
+      "requirement_id": "req_sql_txn",
+      "requirement_type": "SKILL",
+      "source_text": "必需能力：必须同时具备Java服务端开发能力、SQL与事务设计能力、接口自动化测试能力。",
+      "source_type": "JD"
+    },
+    {
+      "label": "接口自动化测试能力",
+      "needs_confirmation": false,
+      "priority": "REQUIRED",
+      "requirement_id": "req_auto_test",
+      "requirement_type": "SKILL",
+      "source_text": "必需能力：必须同时具备Java服务端开发能力、SQL与事务设计能力、接口自动化测试能力。",
+      "source_type": "JD"
+    },
+    {
+      "label": "Spring Boot真实服务开发",
+      "needs_confirmation": false,
+      "priority": "REQUIRED",
+      "requirement_id": "req_spring_boot",
+      "requirement_type": "SKILL",
+      "source_text": "框架路线：使用Spring Boot或Quarkus完成真实服务开发，至少满足其中一种框架路线，不要求两种都用过。",
+      "source_type": "JD"
+    },
+    {
+      "label": "Quarkus真实服务开发",
+      "needs_confirmation": false,
+      "priority": "REQUIRED",
+      "requirement_id": "req_quarkus",
+      "requirement_type": "SKILL",
+      "source_text": "框架路线：使用Spring Boot或Quarkus完成真实服务开发，至少满足其中一种框架路线，不要求两种都用过。",
+      "source_type": "JD"
+    },
+    {
+      "label": "了解Kafka消息队列",
+      "needs_confirmation": false,
+      "priority": "PREFERRED",
+      "requirement_id": "req_kafka",
+      "requirement_type": "SKILL",
+      "source_text": "加分项：了解Kafka消息队列或Kubernetes部署更好，但缺少这些经历不构成硬性淘汰条件。",
+      "source_type": "JD"
+    },
+    {
+      "label": "了解Kubernetes部署",
+      "needs_confirmation": false,
+      "priority": "PREFERRED",
+      "requirement_id": "req_k8s",
+      "requirement_type": "SKILL",
+      "source_text": "加分项：了解Kafka消息队列或Kubernetes部署更好，但缺少这些经历不构成硬性淘汰条件。",
+      "source_type": "JD"
+    }
+  ],
+  "schema_version": "job_scoring_policy_v1",
+  "scoring_dimensions": [
+    {
+      "description": "评估候选人在订单支付等复杂业务场景下的架构设计能力，包括模块化、扩展性及高可用考量。",
+      "dimension_id": "dim_service_design",
+      "label": "服务设计",
+      "requirement_ids": [
+        "req_java_dev",
+        "req_spring_boot",
+        "req_quarkus"
+      ],
+      "rubric": [
+        {
+          "description": "仅能编写简单CRUD接口，缺乏对服务边界、依赖管理及异常处理的系统性思考，无法应对复杂业务变更。",
+          "max_score": 40,
+          "min_score": 0
+        },
+        {
+          "description": "能够独立设计单体应用内的模块划分，熟悉Spring Boot/Quarkus常用组件，具备基本的接口版本管理和日志规范意识。",
+          "max_score": 70,
+          "min_score": 41
+        },
+        {
+          "description": "主导过微服务拆分或核心链路重构，深入理解CAP理论在支付场景的应用，能通过架构调整显著提升系统吞吐量与稳定性。",
+          "max_score": 100,
+          "min_score": 71
+        }
+      ],
+      "weight": 0.3
+    },
+    {
+      "description": "考察候选人对关系型数据库事务隔离级别、并发冲突及数据一致性保障机制的理解与实践深度。",
+      "dimension_id": "dim_data_correctness",
+      "label": "数据正确性",
+      "requirement_ids": [
+        "req_sql_txn"
+      ],
+      "rubric": [
+        {
+          "description": "仅掌握基础SQL增删改查，不理解事务回滚机制，面对并发更新时容易引发脏读或丢失更新，缺乏数据校验手段。",
+          "max_score": 40,
+          "min_score": 0
+        },
+        {
+          "description": "熟练运用乐观锁或悲观锁处理常见并发场景，能根据业务需求选择合适的事务隔离级别，并建立基本的数据对账机制。",
+          "max_score": 70,
+          "min_score": 41
+        },
+        {
+          "description": "精通分布式事务解决方案（如TCC/Saga），能设计幂等性接口防止重复扣款，并通过全链路数据审计确保资金绝对安全。",
+          "max_score": 100,
+          "min_score": 71
+        }
+      ],
+      "weight": 0.3
+    },
+    {
+      "description": "评估候选人定位线上性能瓶颈、内存泄漏及网络抖动等复杂问题的方法论与实战经验。",
+      "dimension_id": "dim_troubleshooting",
+      "label": "故障排查",
+      "requirement_ids": [
+        "req_java_dev"
+      ],
+      "rubric": [
+        {
+          "description": "依赖重启服务解决偶发错误，缺乏查看堆栈日志和分析线程转储的能力，无法区分应用层与基础设施层的故障根源。",
+          "max_score": 40,
+          "min_score": 0
+        },
+        {
+          "description": "能熟练使用Arthas/JStack等工具分析CPU飙高或Full GC原因，通过日志关联分析快速锁定慢SQL或第三方接口超时问题。",
+          "max_score": 70,
+          "min_score": 41
+        },
+        {
+          "description": "具备构建可观测性体系的经验，能通过链路追踪精准定位跨服务调用中的性能损耗点，并制定预防性的熔断降级策略。",
+          "max_score": 100,
+          "min_score": 71
+        }
+      ],
+      "weight": 0.2
+    },
+    {
+      "description": "衡量候选人构建自动化测试体系、提升代码覆盖率及保障交付质量的工程化水平。",
+      "dimension_id": "dim_test_quality",
+      "label": "测试质量",
+      "requirement_ids": [
+        "req_auto_test"
+      ],
+      "rubric": [
+        {
+          "description": "主要依赖手工测试，自动化测试覆盖率极低，测试用例缺乏边界条件覆盖，导致回归测试成本高且易漏测。",
+          "max_score": 40,
+          "min_score": 0
+        },
+        {
+          "description": "建立了核心的接口自动化测试流水线，关键路径单元测试覆盖率达标，能利用Mock技术隔离外部依赖进行高效验证。",
+          "max_score": 70,
+          "min_score": 41
+        },
+        {
+          "description": "推行契约测试与混沌工程实践，自动化测试成为CI/CD的强制门禁，显著降低了生产环境缺陷逃逸率并提升了发布信心。",
+          "max_score": 100,
+          "min_score": 71
+        }
+      ],
+      "weight": 0.15
+    },
+    {
+      "description": "评估候选人与产品、运营等非技术角色协作，准确理解业务意图并转化为技术方案的能力。",
+      "dimension_id": "dim_communication",
+      "label": "业务沟通",
+      "requirement_ids": [
+        "req_java_dev"
+      ],
+      "rubric": [
+        {
+          "description": "被动接收需求，难以发现业务逻辑漏洞，沟通中常出现技术术语壁垒，导致需求理解偏差或返工。",
+          "max_score": 40,
+          "min_score": 0
+        },
+        {
+          "description": "能主动澄清模糊需求，用通俗语言解释技术限制与权衡，协助产品经理优化不合理流程，确保交付符合业务预期。",
+          "max_score": 70,
+          "min_score": 41
+        },
+        {
+          "description": "具备业务洞察力，能从技术视角提出产品改进建议，有效管理多方利益相关者预期，推动跨部门协作达成共同目标。",
+          "max_score": 100,
+          "min_score": 71
+        }
+      ],
+      "weight": 0.05
+    }
+  ],
+  "semantic_anchors": [
+    {
+      "anchor_id": "sa_pos_order_payment",
+      "polarity": "POSITIVE",
+      "requirement_ids": [
+        "req_java_dev",
+        "req_sql_txn"
+      ],
+      "text": "主导订单支付模块重构，通过引入本地消息表解决跨服务数据不一致问题，将资损率降低至零。"
+    },
+    {
+      "anchor_id": "sa_pos_perf_tuning",
+      "polarity": "POSITIVE",
+      "requirement_ids": [
+        "req_sql_txn",
+        "req_java_dev"
+      ],
+      "text": "针对高并发场景下的数据库连接池瓶颈，通过读写分离和缓存策略优化，使接口P99延迟从500ms降至50ms。"
+    },
+    {
+      "anchor_id": "sa_neg_tool_only",
+      "polarity": "NEGATIVE",
+      "requirement_ids": [
+        "req_auto_test"
+      ],
+      "text": "简历仅列出JMeter或Postman等工具名称，未描述具体的测试用例设计、断言逻辑或自动化脚本实现细节。"
+    }
+  ],
+  "sources": {
+    "hr_requirements": "工程设计与数据一致性比工具数量更重要。评分维度和权重为服务设计30%、数据正确性30%、故障排查20%、测试质量15%、业务沟通5%。粗排通过阈值为60，深度评分人工核验阈值为72，深度推荐阈值为92；本次不启用自动发送。不要要求AI、RAG或浏览器自动化经验。",
+    "jd_text": "岗位职责：建设订单与支付后台服务，维护业务接口与关系型数据库，定位线上性能及一致性问题。\n硬性要求：本科及以上学历，至少3年工作经验，期望月薪不高于30K。\n必需能力：必须同时具备Java服务端开发能力、SQL与事务设计能力、接口自动化测试能力。\n框架路线：使用Spring Boot或Quarkus完成真实服务开发，至少满足其中一种框架路线，不要求两种都用过。\n加分项：了解Kafka消息队列或Kubernetes部署更好，但缺少这些经历不构成硬性淘汰条件。"
+  },
+  "thresholds": {
+    "coarse_pass": 60.0,
+    "deep_recommend": 92.0,
+    "deep_review": 72.0
+  }
+}

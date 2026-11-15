@@ -1,0 +1,36 @@
+{
+  "case_id": "java_backend",
+  "job_id": "9a148a5822e24f38b11e8adaf8753f96",
+  "acceptance_passed": false,
+  "metrics": {
+    "status": "FAILED",
+    "stage": "api_call",
+    "model": "qwen3.8-27b",
+    "timeout_seconds": 90,
+    "max_tokens": 12288,
+    "temperature": 0,
+    "strict_schema": true,
+    "enable_thinking": false,
+    "sdk_max_retries": 0,
+    "system_chars": 2597,
+    "user_chars": 651,
+    "schema_chars": 8786,
+    "prompt_hash": "56e8fe62d006c1e62c8a5bb046586153e074e3b61397586ef53e8af951225ce6",
+    "schema_hash": "d6a14e6b793d23c10822a6bc5300d5e2e179c9766098ebd51c68e154cad17df1",
+    "usage": null,
+    "reasoning_tokens": null,
+    "pydantic_valid": false,
+    "business_valid": false,
+    "finish_reason": null,
+    "failure_type": "APITimeoutError",
+    "http_status": null,
+    "api_elapsed_seconds": 90.0106,
+    "cause_chain": [
+      "APITimeoutError",
+      "ReadTimeout",
+      "ReadTimeout"
+    ],
+    "elapsed_seconds": 90.0107
+  },
+  "error_type": "CompilationError"
+}
