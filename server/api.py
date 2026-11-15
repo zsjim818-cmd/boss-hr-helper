@@ -333,7 +333,8 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
                 pass
     payload = report.model_dump(mode="json")
     payload.update({"source": health.source or request.app.state.browser_source.name,
-                    "browser": health.browser, "page_url": health.page_url})
+                    "browser": health.browser, "page_url": health.page_url,
+                    "browser_account_id": getattr(adapter, "browser_account_id", None)})
     if report.collected == 0 and report.issues:
         # A fatal connection/DOM failure must not look like an empty page.
         first = report.issues[0]
@@ -389,18 +390,11 @@ def greeting_dry_run(job_id: str, evaluation_id: str, request: Request,
             "error_type": "GreetingRefused", "state": outcome.state,
             "message": outcome.message})
     evaluation = repo.get_pipeline_result(ctx, job_id, evaluation_id)
-    existing = repo.find_pending_dry_run(
-        ctx, job_id, evaluation["job_candidate_id"], evaluation_id, ctx.user_id)
+    event, reused = repo.ensure_pending_dry_run(
+        ctx, job_id, evaluation["job_candidate_id"], evaluation_id,
+        "DRY_RUN: " + outcome.message)
     payload = outcome.model_dump(mode="json")
-    if existing is not None:
-        # Idempotent rehearsal: reuse the existing PENDING row, but the DOM
-        # re-validation above already ran again.
-        payload["idempotent"] = True
-        payload["contact_event"] = _row(existing)
-        return payload
-    event = repo.append_pipeline_contact_event(
-        ctx, job_id, evaluation_id, "PENDING", "DRY_RUN: " + outcome.message)
-    payload["idempotent"] = False
+    payload["idempotent"] = reused
     payload["contact_event"] = _row(event)
     return payload
 

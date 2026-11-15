@@ -403,6 +403,7 @@ export interface BrowserScanResult {
   source?: string | null
   browser?: string | null
   page_url?: string | null
+  browser_account_id?: string | null
 }
 
 export interface BrowserScanStatus {

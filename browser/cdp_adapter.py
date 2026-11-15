@@ -83,26 +83,26 @@ class CdpMockBossAdapter(BrowserAdapter):
             if target.locator("#page-error").is_visible():
                 raise BrowserError("PAGE_UNAVAILABLE",
                                    "recommendation page failed to load")
+            size = page_size or 20
+            start, end = page * size, page * size + size
+            cards = target.locator(".candidate-card").all()
+            result = []
+            for index, element in enumerate(cards):
+                if not start <= index < end:
+                    continue
+                result.append(CandidateCard(
+                    identity=element.get_attribute("data-geek-id") or "",
+                    name=element.locator(".name").inner_text(),
+                    position=element.locator(".position").inner_text(),
+                    job_id="",
+                    dom={"card_index": index, "page_url": self.page_url}))
+            return result
         except BrowserError:
             raise
-        except Exception as exc:  # noqa: BLE001 - tab closed / navigation lost
+        except Exception as exc:  # noqa: BLE001 - closed tab / interrupted DOM
             raise BrowserError("PAGE_UNAVAILABLE",
                                f"Mock page is no longer usable: {exc}",
                                recoverable=True) from exc
-        size = page_size or 20
-        start, end = page * size, page * size + size
-        cards = target.locator(".candidate-card").all()
-        result = []
-        for index, element in enumerate(cards):
-            if not start <= index < end:
-                continue
-            result.append(CandidateCard(
-                identity=element.get_attribute("data-geek-id") or "",
-                name=element.locator(".name").inner_text(),
-                position=element.locator(".position").inner_text(),
-                job_id="",
-                dom={"card_index": index, "page_url": self.page_url}))
-        return result
 
     def open_detail(self, identity: str) -> CandidateDetail:
         return self.manager.run(lambda: self._open_detail_impl(identity))
@@ -142,24 +142,71 @@ class CdpMockBossAdapter(BrowserAdapter):
         target = self._require_page()
         try:
             card = target.locator(f'.candidate-card[data-geek-id="{identity}"]')
-            if card.count() == 0:
+            card_count = card.count()
+            if card_count == 0:
                 return GreetingOutcome(state="NOT_FOUND", identity=identity,
                                        message="candidate is no longer visible",
                                        dry_run=dry_run)
-            if dry_run:
-                # Re-locate the greet control in the live DOM; never click it.
-                target.locator("#detail-panel #greet-button").wait_for(
-                    state="visible", timeout=5000)
+            if card_count != 1:
                 return GreetingOutcome(
-                    state="DRY_RUN_READY", identity=identity,
-                    message="greet control re-located in the rendered DOM; "
-                            "nothing was sent",
-                    dry_run=True, recorded=False)
-        except Exception as exc:  # noqa: BLE001
+                    state="PAGE_UNCERTAIN", identity=identity,
+                    message="multiple cards carry the same stable identity",
+                    dry_run=dry_run)
+            if (card.first.get_attribute("data-geek-id") or "") != identity:
+                return GreetingOutcome(
+                    state="IDENTITY_MISMATCH", identity=identity,
+                    message="card identity attribute does not match the request",
+                    dry_run=dry_run)
+            if not dry_run:
+                # Real sending stays physically disabled in Sprint 4.
+                return GreetingOutcome(
+                    state="UNSUPPORTED", identity=identity,
+                    message="real sending is disabled in this batch", dry_run=False)
+
+            panel = target.locator("#detail-panel")
+            if panel.is_visible():
+                active_identity = panel.get_attribute("data-geek-id") or ""
+                if active_identity != identity:
+                    # Never let candidate A's open panel satisfy candidate B.
+                    return GreetingOutcome(
+                        state="IDENTITY_MISMATCH", identity=identity,
+                        message=(f"active detail panel belongs to "
+                                 f"{active_identity or 'an unknown candidate'!s}, "
+                                 f"not {identity!r}"),
+                        dry_run=dry_run)
+            # Open the target's own detail panel through its card-scoped control.
+            card.first.locator(".open-detail").click()
+            panel.wait_for(state="visible", timeout=5000)
+            panel_identity = panel.get_attribute("data-geek-id") or ""
+            if panel_identity != identity:
+                return GreetingOutcome(
+                    state="IDENTITY_MISMATCH", identity=identity,
+                    message=(f"detail panel identity {panel_identity!r} does not "
+                             f"match the requested candidate {identity!r}"),
+                    dry_run=dry_run)
+            card_name = card.first.locator(".name").inner_text()
+            panel_name = panel.locator("#detail-name").inner_text()
+            if card_name and panel_name and card_name != panel_name:
+                return GreetingOutcome(
+                    state="IDENTITY_MISMATCH", identity=identity,
+                    message="detail panel candidate name does not match the card",
+                    dry_run=dry_run)
+            controls = panel.locator("#greet-button")
+            if controls.count() != 1:
+                return GreetingOutcome(
+                    state="PAGE_UNCERTAIN", identity=identity,
+                    message="greet control is not uniquely present inside the "
+                            "verified detail panel",
+                    dry_run=dry_run)
+            controls.wait_for(state="visible", timeout=5000)
+            return GreetingOutcome(
+                state="DRY_RUN_READY", identity=identity,
+                message="greet control re-located inside the verified candidate "
+                        "panel; nothing was sent",
+                dry_run=True, recorded=False)
+        except BrowserError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - DOM/timeout/closed page
             raise BrowserError("PAGE_CHANGED",
                                f"greeting control could not be verified: {exc}",
                                recoverable=True) from exc
-        # Real sending stays physically disabled in Sprint 4.
-        return GreetingOutcome(state="UNSUPPORTED", identity=identity,
-                               message="real sending is disabled in this batch",
-                               dry_run=False)

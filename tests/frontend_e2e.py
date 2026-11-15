@@ -101,6 +101,27 @@ def seed_policy(job_id: str, job_title: str, jd_text: str) -> str:
     return policy_id
 
 
+def http_score(job_id: str, jcid: str, mode: str, idempotency_key: str) -> dict:
+    """Score through HTTP and wait for the task to finish."""
+    status, started = http_json(
+        "POST", f"/api/jobs/{job_id}/candidates/{jcid}/score",
+        {"scoring_mode": mode, "idempotency_key": idempotency_key})
+    if status != 200:
+        raise RuntimeError(f"score failed: {status} {started}")
+    if started.get("reused"):
+        return started["evaluation"]
+    task_id = started["task"]["pipeline_task_id"]
+    body = {}
+    for _ in range(300):
+        status, body = http_json("GET", f"/api/jobs/{job_id}/tasks/{task_id}")
+        if body.get("task", {}).get("status") in ("SUCCEEDED", "FAILED"):
+            break
+        time.sleep(0.2)
+    if body.get("task", {}).get("status") != "SUCCEEDED":
+        raise RuntimeError(f"scoring failed: {body.get('task')}")
+    return body["evaluation"]
+
+
 def main():
     from playwright.sync_api import sync_playwright
 
@@ -250,20 +271,19 @@ def run_browser():
               any("geek-java-1" in row for row in rows), str(rows[:3]))
 
         # Score the first imported candidate through the real HTTP API.
+        # Fast first, then deep: the pipeline treats deep as an upgrade, so the
+        # reverse order would legitimately reuse the deep result for fast.
         status, listing = http_json("GET", "/api/jobs/job-java/candidates?limit=10")
         jcid = listing["items"][0]["job_candidate"]["job_candidate_id"]
-        status, started = http_json(
-            "POST", f"/api/jobs/job-java/candidates/{jcid}/score",
-            {"scoring_mode": "deep_mode", "idempotency_key": "frontend-e2e-b11"})
-        task_id = started["task"]["pipeline_task_id"]
-        body = {}
-        for _ in range(300):
-            status, body = http_json("GET", f"/api/jobs/job-java/tasks/{task_id}")
-            if body.get("task", {}).get("status") in ("SUCCEEDED", "FAILED"):
-                break
-            time.sleep(0.2)
-        check("deep scoring finished", body.get("task", {}).get("status") == "SUCCEEDED",
-              str(body.get("task", {}).get("error_type", "")))
+        fast_eval = http_score("job-java", jcid, "fast_mode", "frontend-e2e-fast-1")
+        status, approved_fast = http_json(
+            "POST", f"/api/jobs/job-java/evaluations/"
+                    f"{fast_eval['pipeline_evaluation_id']}/reviews",
+            {"action": "APPROVE", "reason": "frontend e2e"})
+        check("fast evaluation approved over HTTP", status == 200, str(approved_fast))
+        deep_eval = http_score("job-java", jcid, "deep_mode", "frontend-e2e-deep-1")
+        check("deep scoring finished", deep_eval.get("scoring_status") == "DEEP_SCORED",
+              str(deep_eval.get("scoring_status")))
 
         page.goto(f"http://127.0.0.1:{FRONTEND_PORT}/review", wait_until="networkidle")
         page.wait_for_selector(".el-table__body tr", timeout=30000)
@@ -304,6 +324,76 @@ def run_browser():
         check("repeated dry-run is idempotent",
               len([row for row in repeat_rows if "DRY_RUN:" in row]) == 1,
               str(repeat_rows[-2:]))
+
+        # ------------------------------------------------------------------
+        # Contact-state consistency: same HR contacts via the FAST evaluation,
+        # then the UI must show the candidate-level badge on BOTH fast and deep.
+        # ------------------------------------------------------------------
+        status, listing = http_json("GET", "/api/jobs/job-java/candidates?limit=10")
+        items = {item["job_candidate"]["candidate_key"]: item
+                 for item in listing["items"]}
+        jcid2 = items["job-java:geek-java-2"]["job_candidate"]["job_candidate_id"]
+        status, contacted = http_json(
+            "POST", f"/api/jobs/job-java/evaluations/"
+                    f"{fast_eval['pipeline_evaluation_id']}/contact",
+            {"action": "CONTACTED", "note": "frontend e2e fast contact"})
+        check("fast evaluation contacted over HTTP", status == 200, str(contacted))
+        http_score("job-java", jcid2, "fast_mode", "frontend-e2e-fast-2")
+
+        status, ranking_body = http_json("GET", "/api/jobs/job-java/ranking")
+        ranking_keys = [item["candidate_key"] for item in ranking_body["ranking"]]
+        check("two ranking rows for rapid switching", len(ranking_keys) >= 2,
+              str(ranking_keys))
+
+        page.goto(f"http://127.0.0.1:{FRONTEND_PORT}/review", wait_until="networkidle")
+        page.wait_for_selector(".el-table__body tr", timeout=30000)
+        page.wait_for_timeout(800)
+        rows = page.locator(".el-table__body tr")
+        first_index = ranking_keys.index("job-java:geek-java-1")
+        rows.nth(first_index).click()
+        page.wait_for_selector("text=评估详情", timeout=30000)
+        page.wait_for_timeout(800)
+        check("candidate-level contact badge from summary",
+              page.get_by_text("已联系（HR：owner）", exact=False).count() > 0)
+        check("current account contact tag",
+              page.get_by_text("当前账号已联系", exact=False).count() > 0)
+        page.get_by_role("tab", name="HR 审核").click()
+        page.wait_for_timeout(500)
+        check("dry-run disabled after this HR contacted",
+              page.get_by_role("button", name="Greeting Dry-Run 预演").is_disabled())
+
+        # Switch to the fast evaluation: the candidate-level badge must persist.
+        detail_card = page.locator(".el-card", has_text="评估详情").first
+
+        def switch_evaluation(mode: str) -> dict:
+            try:
+                detail_card.get_by_role("button", name=mode, exact=True).click(timeout=8000)
+            except Exception:
+                print("DEBUG header:", detail_card.inner_html()[:2500])
+                print("DEBUG buttons:", page.locator("button").all_inner_texts())
+                raise
+            page.wait_for_timeout(800)
+            return {"ok": True}
+
+        fast_switch = switch_evaluation("fast_mode")
+        check("switched to the fast evaluation", fast_switch.get("ok") is True,
+              str(fast_switch))
+        check("contact badge persists on fast evaluation",
+              page.get_by_text("已联系（HR：owner）", exact=False).count() > 0)
+        deep_switch = switch_evaluation("deep_mode")
+        check("switched back to the deep evaluation", deep_switch.get("ok") is True,
+              str(deep_switch))
+        check("contact badge persists on deep evaluation",
+              page.get_by_text("已联系（HR：owner）", exact=False).count() > 0)
+
+        # Rapid candidate switching: a late detail response must not win.
+        second_index = ranking_keys.index("job-java:geek-java-2")
+        rows.nth(first_index).click()
+        rows.nth(second_index).click()
+        page.wait_for_timeout(1200)
+        header = detail_card.inner_text()
+        check("rapid detail switch keeps the latest candidate",
+              "job-java:geek-java-2" in header, header[:160])
         browser.close()
     return checks
 

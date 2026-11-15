@@ -250,6 +250,85 @@ class ApiGreetingDryRunTests(ApiBrowserCase):
         self.assertEqual(response.status_code, 409, response.text)
         self.assertEqual(response.json()["state"], "UNSUPPORTED")
 
+    def test_concurrent_dry_runs_create_exactly_one_pending_row(self):
+        from concurrent.futures import ThreadPoolExecutor
+
+        _, evaluation = self._scan_and_score()
+        evaluation_id = evaluation["pipeline_evaluation_id"]
+        self.append_review(evaluation_id, "APPROVE")
+
+        def rehearse(_):
+            return self.dry_run(evaluation_id)
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            responses = list(pool.map(rehearse, range(8)))
+        for response in responses:
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json()["state"], "DRY_RUN_READY")
+        events = self.contact_events(evaluation_id)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["action"], "PENDING")
+        self.assertTrue(events[0]["note"].startswith("DRY_RUN: "))
+        ids = {response.json()["contact_event"]["contact_event_id"]
+               for response in responses}
+        self.assertEqual(len(ids), 1)
+        self.assertEqual(sum(1 for response in responses
+                             if response.json()["idempotent"] is False), 1)
+
+    def test_dom_failure_returns_a_structured_browser_error(self):
+        from browser.adapter import BrowserAdapter
+        from browser.contracts import BrowserError, BrowserHealth
+
+        class BrokenPageAdapter(BrowserAdapter):
+            def connect(self):
+                return BrowserHealth(connected=True, browser="edge-cdp")
+
+            def close(self):
+                pass
+
+            def health(self):
+                return BrowserHealth(connected=True, browser="edge-cdp")
+
+            def list_cards(self, page=0, page_size=20):
+                raise RuntimeError("renderer crashed while reading cards")
+
+            def open_detail(self, identity):
+                raise BrowserError("PAGE_UNAVAILABLE", "renderer crashed")
+
+            def send_greeting(self, identity, message, *, dry_run=True):
+                raise BrowserError("PAGE_UNAVAILABLE", "renderer crashed")
+
+        app = create_app(self.repo, browser_source="mock",
+                         browser_adapter_factory=lambda *args: BrokenPageAdapter())
+        try:
+            client = TestClient(app)
+            batch = client.post("/api/jobs/job/batches", headers=self.headers).json()
+            response = client.post(
+                f"/api/jobs/job/batches/{batch['batch_id']}/browser/scan",
+                headers=self.headers, json={"pages": 1})
+            self.assertEqual(response.status_code, 503, response.text)
+            self.assertEqual(response.json()["error_type"], "BrowserError")
+            self.assertEqual(response.json()["code"], "UNEXPECTED_STATE")
+            status = client.get(
+                f"/api/jobs/job/batches/{batch['batch_id']}/browser/scan",
+                headers=self.headers).json()
+            self.assertEqual(status["status"], "FAILED")
+            self.assertEqual(status["error"]["code"], "UNEXPECTED_STATE")
+        finally:
+            app.state.executor.shutdown(wait=True)
+
+    def test_import_rejects_cross_job_candidate_key(self):
+        batch = self.client.post("/api/jobs/job/batches", headers=self.headers).json()
+        response = self.client.post(
+            f"/api/jobs/job/batches/{batch['batch_id']}/candidates",
+            headers=self.headers,
+            json={"candidate_key": "other-job:geek-1", "source": "browser",
+                  "resume": {"name": "x", "skills": "Java",
+                             "_meta": {"candidate_key": "other-job:geek-1",
+                                       "encrypt_geek_id": "geek-1",
+                                       "encrypt_job_id": "other-job"}}})
+        self.assertEqual(response.status_code, 400, response.text)
+
 
 if __name__ == "__main__":
     unittest.main()

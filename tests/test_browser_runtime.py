@@ -227,6 +227,114 @@ class CDPManagerTests(unittest.TestCase):
         with mock.patch.dict("os.environ", {"BROWSER_EDGE_PATH": r"C:\edge\msedge.exe"}):
             self.assertEqual(find_edge(), r"C:\edge\msedge.exe")
 
+    def test_non_loopback_cdp_host_is_rejected(self):
+        for host in ("10.0.0.5", "example.com", "0.0.0.0"):
+            with self.subTest(host=host):
+                with self.assertRaises(ValueError):
+                    CDPConnectionManager(host=host, port=free_port(),
+                                         user_data_dir=self.profile)
+        manager = CDPConnectionManager(host="localhost", port=free_port(),
+                                       user_data_dir=self.profile)
+        self.addCleanup(manager.close)
+        self.assertEqual(manager.host, "127.0.0.1")
+
+    def test_external_profile_without_evidence_is_refused(self):
+        manager = self._manager()
+        with mock.patch.object(manager, "_cdp_command_line", return_value=None):
+            with self.assertRaises(BrowserError) as captured:
+                manager._verify_external_profile()
+            self.assertEqual(captured.exception.code, "CDP_PROFILE_UNVERIFIED")
+            with mock.patch.dict("os.environ", {"BROWSER_ALLOW_UNVERIFIED_CDP": "1"}):
+                self.assertFalse(manager._verify_external_profile())
+
+    def test_external_profile_mismatch_is_rejected(self):
+        manager = self._manager()
+        arguments = [r"C:\Edge\msedge.exe",
+                     r"--user-data-dir=C:\Users\someone\AppData\Local\Microsoft\Edge\User Data"]
+        with mock.patch.object(manager, "_cdp_command_line", return_value=arguments):
+            with self.assertRaises(BrowserError) as captured:
+                manager._verify_external_profile()
+        self.assertEqual(captured.exception.code, "CDP_PROFILE_MISMATCH")
+
+    def test_matching_external_profile_is_accepted(self):
+        manager = self._manager()
+        arguments = [r"C:\Edge\msedge.exe",
+                     f"--user-data-dir={Path(self.profile).resolve()}"]
+        with mock.patch.object(manager, "_cdp_command_line", return_value=arguments):
+            self.assertTrue(manager._verify_external_profile())
+
+    def test_sentinel_marks_the_dedicated_profile(self):
+        manager = self._manager()
+        self.assertFalse(manager._sentinel_valid())
+        manager._write_sentinel()
+        self.assertTrue(manager._sentinel_valid())
+        with mock.patch.object(manager, "_cdp_command_line", return_value=None):
+            self.assertTrue(manager._verify_external_profile())
+
+    def test_reconnect_preserves_owned_process(self):
+        class FakeBrowser:
+            def __init__(self):
+                self.contexts = []
+
+            def is_connected(self):
+                return True
+
+            def close(self):
+                pass
+
+        class AliveProcess:
+            def poll(self):
+                return None
+
+            def terminate(self):
+                pass
+
+            def wait(self, timeout=None):
+                return 0
+
+            def kill(self):  # pragma: no cover
+                pass
+
+        manager = self._manager()
+        manager._owned = True
+        manager._process = AliveProcess()
+        manager._browser = None
+        with mock.patch("browser.runtime._port_open", return_value=True), \
+                mock.patch.object(manager, "_ensure_playwright"), \
+                mock.patch.object(manager, "_connect_with_retry",
+                                  return_value=FakeBrowser()), \
+                mock.patch.object(manager, "_verify_external_profile",
+                                  side_effect=AssertionError("must not re-verify")):
+            health = manager.connect()
+        self.assertTrue(health.connected)
+        self.assertTrue(manager.owned)
+        self.assertTrue(manager._profile_verified)
+
+    def test_reconnect_to_a_foreign_browser_keeps_ownership_false(self):
+        class FakeBrowser:
+            def __init__(self):
+                self.contexts = []
+
+            def is_connected(self):
+                return True
+
+            def close(self):
+                pass
+
+        manager = self._manager()
+        manager._owned = False
+        manager._process = None
+        manager._browser = None
+        with mock.patch("browser.runtime._port_open", return_value=True), \
+                mock.patch.object(manager, "_ensure_playwright"), \
+                mock.patch.object(manager, "_connect_with_retry",
+                                  return_value=FakeBrowser()), \
+                mock.patch.object(manager, "_verify_external_profile",
+                                  return_value=True):
+            manager.connect()
+        self.assertFalse(manager.owned)
+        self.assertTrue(manager._profile_verified)
+
 
 if __name__ == "__main__":
     unittest.main()

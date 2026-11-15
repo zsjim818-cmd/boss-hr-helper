@@ -134,6 +134,38 @@ class BrowserCollectorTests(PipelineCase):
         self.assertFalse(java_keys & sales_keys)
 
 
+class CdpDomErrorTests(unittest.TestCase):
+    """Raw Playwright/DOM failures must become structured BrowserError values."""
+
+    class BrokenPage:
+        def locator(self, *args, **kwargs):
+            raise RuntimeError("renderer crashed")
+
+    def test_list_cards_wraps_dom_failures(self):
+        from browser.cdp_adapter import CdpMockBossAdapter
+        adapter = CdpMockBossAdapter(manager=None, cards=[])
+        adapter._page = self.BrokenPage()
+        with self.assertRaises(BrowserError) as captured:
+            adapter._list_cards_impl(0, 5)
+        self.assertEqual(captured.exception.code, "PAGE_UNAVAILABLE")
+
+    def test_open_detail_wraps_dom_failures(self):
+        from browser.cdp_adapter import CdpMockBossAdapter
+        adapter = CdpMockBossAdapter(manager=None, cards=[])
+        adapter._page = self.BrokenPage()
+        with self.assertRaises(BrowserError) as captured:
+            adapter._open_detail_impl("geek-1")
+        self.assertEqual(captured.exception.code, "PAGE_CHANGED")
+
+    def test_greeting_wraps_dom_failures(self):
+        from browser.cdp_adapter import CdpMockBossAdapter
+        adapter = CdpMockBossAdapter(manager=None, cards=[])
+        adapter._page = self.BrokenPage()
+        with self.assertRaises(BrowserError) as captured:
+            adapter._send_greeting_impl("geek-1", "hello", True)
+        self.assertEqual(captured.exception.code, "PAGE_CHANGED")
+
+
 class ParserContractTests(unittest.TestCase):
     def test_parser_requires_stable_identity_and_resume_fields(self):
         parser = CandidateDetailParser()

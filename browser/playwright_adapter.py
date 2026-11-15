@@ -130,17 +130,44 @@ class PlaywrightBossAdapter(BrowserAdapter):
                       dry_run: bool = True) -> GreetingOutcome:
         if self._page is None:
             raise BrowserError("PAGE_UNAVAILABLE", "adapter is not connected")
-        card = self._page.locator(f'.candidate-card[data-geek-id="{identity}"]')
-        if card.count() == 0:
+        page = self._page
+        card = page.locator(f'.candidate-card[data-geek-id="{identity}"]')
+        count = card.count()
+        if count == 0:
             return GreetingOutcome(state="NOT_FOUND", identity=identity,
                                    message="candidate is no longer visible", dry_run=dry_run)
-        if dry_run:
-            # Rehearsal only: verify the greet control exists, never click it.
-            self._page.locator("#detail-panel #greet-button").wait_for(
-                state="visible", timeout=5000)
-            return GreetingOutcome(state="DRY_RUN_READY", identity=identity,
-                                   message="greet control located; nothing was sent",
-                                   dry_run=True, recorded=False)
-        return GreetingOutcome(state="UNSUPPORTED", identity=identity,
-                               message="real sending is disabled in this batch",
-                               dry_run=False)
+        if count != 1:
+            return GreetingOutcome(state="PAGE_UNCERTAIN", identity=identity,
+                                   message="multiple cards carry the same identity",
+                                   dry_run=dry_run)
+        if (card.first.get_attribute("data-geek-id") or "") != identity:
+            return GreetingOutcome(state="IDENTITY_MISMATCH", identity=identity,
+                                   message="card identity attribute does not match", dry_run=dry_run)
+        if not dry_run:
+            return GreetingOutcome(state="UNSUPPORTED", identity=identity,
+                                   message="real sending is disabled in this batch",
+                                   dry_run=False)
+        panel = page.locator("#detail-panel")
+        if panel.is_visible():
+            active = panel.get_attribute("data-geek-id") or ""
+            if active != identity:
+                return GreetingOutcome(
+                    state="IDENTITY_MISMATCH", identity=identity,
+                    message=f"active detail panel belongs to {active or 'unknown'!s}",
+                    dry_run=dry_run)
+        card.first.locator(".open-detail").click()
+        panel.wait_for(state="visible", timeout=5000)
+        if (panel.get_attribute("data-geek-id") or "") != identity:
+            return GreetingOutcome(state="IDENTITY_MISMATCH", identity=identity,
+                                   message="detail panel identity does not match",
+                                   dry_run=dry_run)
+        controls = panel.locator("#greet-button")
+        if controls.count() != 1:
+            return GreetingOutcome(state="PAGE_UNCERTAIN", identity=identity,
+                                   message="greet control is not uniquely present in the "
+                                           "verified panel", dry_run=dry_run)
+        controls.wait_for(state="visible", timeout=5000)
+        return GreetingOutcome(state="DRY_RUN_READY", identity=identity,
+                               message="greet control re-located inside the verified "
+                                       "candidate panel; nothing was sent",
+                               dry_run=True, recorded=False)

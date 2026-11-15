@@ -153,6 +153,113 @@ class CdpRuntimeTests(unittest.TestCase):
             adapter.list_cards()
         self.assertEqual(captured.exception.code, "BROWSER_CLOSED")
 
+    def test_greeting_scope_rejects_another_candidates_open_panel(self):
+        manager = self.manager()
+        adapter = CdpMockBossAdapter(manager, mock_cards("job", "java", 2))
+        adapter.connect()
+
+        first = adapter.send_greeting("geek-java-1", "hello", dry_run=True)
+        self.assertEqual(first.state, "DRY_RUN_READY")
+        # Panel A is still open; a direct rehearsal for B must be refused.
+        mismatched = adapter.send_greeting("geek-java-2", "hello", dry_run=True)
+        self.assertEqual(mismatched.state, "IDENTITY_MISMATCH")
+        self.assertIn("geek-java-1", mismatched.message)
+
+        # Through the executor the detail panel is re-opened for B and verified.
+        adapter.open_detail("geek-java-2")
+        allowed = adapter.send_greeting("geek-java-2", "hello", dry_run=True)
+        self.assertEqual(allowed.state, "DRY_RUN_READY")
+
+        # A corrupted panel identity is never accepted as B's controls.
+        manager.run(lambda: adapter._page.evaluate(
+            "document.getElementById('detail-panel').setAttribute("
+            "'data-geek-id', 'geek-java-1')"))
+        corrupted = adapter.send_greeting("geek-java-2", "hello", dry_run=True)
+        self.assertEqual(corrupted.state, "IDENTITY_MISMATCH")
+
+        # Missing greet control inside the verified panel is PAGE_UNCERTAIN.
+        manager.run(lambda: adapter._page.evaluate(
+            "document.getElementById('detail-panel').setAttribute("
+            "'data-geek-id', 'geek-java-2');"
+            "document.getElementById('greet-button').remove()"))
+        uncertain = adapter.send_greeting("geek-java-2", "hello", dry_run=True)
+        self.assertEqual(uncertain.state, "PAGE_UNCERTAIN")
+
+    def test_external_profile_must_match_or_connection_is_refused(self):
+        owner = self.manager()
+        owner.connect()
+        other_profile = str(Path(self.directory.name) / "other-profile")
+        foreign = CDPConnectionManager(port=self.port, user_data_dir=other_profile,
+                                       auto_launch=False, launch_timeout=5)
+        self.managers.append(foreign)
+        with self.assertRaises(BrowserError) as captured:
+            foreign.connect()
+        self.assertEqual(captured.exception.code, "CDP_PROFILE_MISMATCH")
+        self.assertTrue(owner.health().connected)
+
+        matching = CDPConnectionManager(port=self.port, user_data_dir=self.profile,
+                                        auto_launch=False, launch_timeout=5)
+        self.managers.append(matching)
+        health = matching.connect()
+        self.assertTrue(health.connected)
+        self.assertTrue(health.profile_verified)
+        self.assertFalse(matching.owned)
+        matching.close()
+        self.assertTrue(owner.health().connected)
+
+    def test_owned_process_survives_a_cdp_reconnect_and_is_closed(self):
+        manager = self.manager()
+        manager.connect()
+        self.assertTrue(manager.owned)
+        manager.run(lambda: manager._browser.close())  # simulate CDP drop
+        health = manager.connect()
+        self.assertTrue(health.connected)
+        self.assertTrue(manager.owned)
+        process = manager._process
+        self.assertIsNotNone(process)
+        manager.close()
+        self.assertIsNotNone(process.poll())
+
+    def test_two_hr_sessions_use_isolated_browsers(self):
+        from browser.sessions import BrowserSessionRegistry
+        from browser.source import BrowserSourceConfig
+        from storage.models import AccessContext
+
+        source = BrowserSourceConfig(
+            name="cdp_mock", enabled=True, port=self.port,
+            user_data_dir=str(Path(self.directory.name) / "base"), headless=True)
+        registry = BrowserSessionRegistry(
+            source, profile_root=str(Path(self.directory.name) / "sessions"))
+        self.addCleanup(registry.close)
+        owner_ctx = AccessContext("org", "owner")
+        hr_ctx = AccessContext("org", "hr2")
+        owner_runtime = registry.runtime_for(owner_ctx)
+        hr_runtime = registry.runtime_for(hr_ctx)
+        owner_binding = registry.binding_for(owner_ctx)
+        hr_binding = registry.binding_for(hr_ctx)
+        self.assertNotEqual(owner_binding.cdp_port, hr_binding.cdp_port)
+        self.assertNotEqual(owner_binding.user_data_dir, hr_binding.user_data_dir)
+        self.assertNotEqual(owner_binding.browser_account_id,
+                            hr_binding.browser_account_id)
+
+        owner_adapter = owner_runtime.adapter(mock_cards("job", "java", 1))
+        hr_adapter = hr_runtime.adapter(mock_cards("job", "sales", 1))
+        owner_adapter.connect()
+        hr_adapter.connect()
+        self.assertNotEqual(owner_adapter.page_url, hr_adapter.page_url)
+        self.assertNotEqual(owner_adapter.health().profile,
+                            hr_adapter.health().profile)
+        owner_pages = owner_runtime.manager.list_pages()
+        hr_pages = hr_runtime.manager.list_pages()
+        self.assertTrue(any(page["url"] == owner_adapter.page_url for page in owner_pages))
+        self.assertTrue(any(page["url"] == hr_adapter.page_url for page in hr_pages))
+        self.assertFalse(any(page["url"] == hr_adapter.page_url for page in owner_pages))
+        owner_process = owner_runtime.manager._process
+        hr_process = hr_runtime.manager._process
+        registry.close()
+        self.assertIsNotNone(owner_process.poll())
+        self.assertIsNotNone(hr_process.poll())
+
 
 @unittest.skipUnless(EDGE_AVAILABLE, "Playwright/Edge CDP unavailable")
 class CdpCollectorAndGreetingTests(PipelineCase):
@@ -201,7 +308,7 @@ class CdpCollectorAndGreetingTests(PipelineCase):
         greeting = GreetingExecutor(self.repo, adapter).execute(
             self.ctx, "job", evaluation_id, message="hello")
         self.assertEqual(greeting.state, "DRY_RUN_READY")
-        self.assertIn("rendered DOM", greeting.message)
+        self.assertIn("verified candidate panel", greeting.message)
         self.assertFalse(greeting.recorded)
 
 

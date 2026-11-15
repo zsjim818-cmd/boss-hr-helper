@@ -157,6 +157,7 @@ class BrowserScanOut(Out):
     source: str | None = None
     browser: str | None = None
     page_url: str | None = None
+    browser_account_id: str | None = None
 
 
 class BrowserScanStatusOut(Out):

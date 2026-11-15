@@ -33,9 +33,16 @@ class CandidateListCollector:
             except BrowserError as exc:
                 report.issues.append(CollectionIssue(
                     code=exc.code, message=str(exc), recoverable=exc.recoverable))
-                if exc.code in ("PAGE_UNAVAILABLE", "TIMEOUT", "LOGIN_REQUIRED"):
+                if exc.code in ("PAGE_UNAVAILABLE", "TIMEOUT", "LOGIN_REQUIRED",
+                                "BROWSER_CLOSED", "BROWSER_UNAVAILABLE",
+                                "CDP_CONNECT_FAILED"):
                     break
                 continue
+            except Exception as exc:  # noqa: BLE001 - adapters must not leak raw errors
+                report.issues.append(CollectionIssue(
+                    code="UNEXPECTED_STATE",
+                    message=f"browser page listing failed: {exc}", recoverable=True))
+                break
             if not cards:
                 break
             for card in cards:
@@ -56,6 +63,7 @@ class CandidateListCollector:
                     resume = self.parser.parse(detail, job_id=job_id)
                     acquired = self.repository.acquire_candidate_for_job(
                         context, job_id, batch_id, resume.meta.candidate_key,
+                        source="browser",
                         resume=resume.model_dump(by_alias=True, mode="json"))
                 except BrowserError as exc:
                     report.failed += 1
@@ -68,6 +76,12 @@ class CandidateListCollector:
                     report.issues.append(CollectionIssue(
                         code="IMPORT_FAILED", message=str(exc)[:2000], recoverable=True,
                         identity=identity))
+                    continue
+                except Exception as exc:  # noqa: BLE001 - never leak raw 500s
+                    report.failed += 1
+                    report.issues.append(CollectionIssue(
+                        code="UNEXPECTED_STATE", message=str(exc)[:2000],
+                        recoverable=True, identity=identity))
                     continue
                 if acquired["is_new"]:
                     report.imported += 1

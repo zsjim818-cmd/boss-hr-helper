@@ -31,6 +31,52 @@ def prepare_resume(resume):
 
 
 class CandidateRepository(BaseRepository):
+    @staticmethod
+    def _resume_meta(resume):
+        if isinstance(resume, ResumeData):
+            return resume.meta.model_dump(mode="json")
+        if isinstance(resume, dict):
+            meta = resume.get("_meta")
+            return dict(meta) if isinstance(meta, dict) else {}
+        return {}
+
+    def _validate_binding_identity(self, job_id, candidate_key, resume, source):
+        """The binding identity is derived server-side; page metadata cannot override it.
+
+        Platform resumes carry ``_meta.candidate_key``/``encrypt_geek_id``.  The
+        binding key is always the explicit ``candidate_key`` argument (computed by
+        the collector from ``job_id`` + stable geek id).  For browser-sourced
+        imports the key must equal the canonical ``job_id:encrypt_geek_id``;
+        a key that claims another job's prefix is rejected for every source.
+        """
+        meta = self._resume_meta(resume)
+        if source == "browser":
+            geek = str(meta.get("encrypt_geek_id") or "").strip()
+            if not geek:
+                raise ValueError(
+                    "browser-sourced candidates require a stable encrypt_geek_id")
+            canonical = f"{job_id}:{geek}"
+            if candidate_key != canonical:
+                raise ValueError(
+                    "browser candidate_key must be the canonical job_id:encrypt_geek_id")
+            meta_job = str(meta.get("encrypt_job_id") or "").strip()
+            if meta_job and meta_job != job_id:
+                raise ValueError(
+                    "browser resume metadata belongs to a different job")
+            return
+        # Manual imports use opaque keys; page metadata never decides the
+        # binding.  A key with a colon is allowed but must not masquerade as a
+        # browser identity for another job when one is resolvable.
+        if ":" in candidate_key:
+            prefix, suffix = candidate_key.split(":", 1)
+            geek = str(meta.get("encrypt_geek_id") or "").strip()
+            if geek and suffix == geek:
+                # Looks like a browser key: require the job prefix to match.
+                if prefix != job_id:
+                    raise ValueError(
+                        "candidate_key job prefix does not match the bound job; "
+                        "cross-job candidate keys are not accepted")
+
     def create_candidate(self, ctx, job_id, display_name="", candidate_id=None):
         with self.tx(ctx, job_id, "collect") as conn:
             identifier = candidate_id or uid()
@@ -164,6 +210,7 @@ class CandidateRepository(BaseRepository):
             raise ValueError("candidate_key and source must be non-empty strings")
         if external_id is not None and (not isinstance(external_id, str) or not external_id.strip()):
             raise ValueError("external_id must be a non-empty stable source identifier")
+        self._validate_binding_identity(job_id, candidate_key, resume, source)
         with self.tx(ctx, job_id, "collect") as conn:
             batch = self._active_batch(conn, ctx, job_id, batch_id)
             identifier = self._resolve_candidate(conn, ctx, job_id, candidate_key, source, external_id, candidate_id, resume)

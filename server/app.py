@@ -26,6 +26,7 @@ from browser.contracts import BrowserError
 from browser.mock_adapter import MockBossAdapter
 from browser.mock_data import mock_cards
 from browser.runtime import BrowserRuntime
+from browser.sessions import BrowserSessionRegistry
 from browser.source import BrowserSourceConfig, load_browser_source
 from server.api import (browser_router, candidates_router, jobs_router,
                         policies_router, reviews_router, scoring_router)
@@ -70,13 +71,20 @@ def _default_browser_adapter(repository, context, job_id):
     return adapter
 
 
-def _browser_factory(source: BrowserSourceConfig, runtime: BrowserRuntime | None):
+def _browser_factory(source: BrowserSourceConfig, runtime: BrowserRuntime | None,
+                     registry=None):
     def factory(repository, context, job_id):
         if source.name == "mock":
             return _default_browser_adapter(repository, context, job_id)
         if source.name == "cdp_mock":
             kind = _job_kind(repository, context, job_id)
-            adapter = runtime.adapter(mock_cards(job_id, kind, 3))
+            if registry is not None:
+                session = registry.runtime_for(context)
+                adapter = session.adapter(mock_cards(job_id, kind, 3))
+                binding = registry.binding_for(context)
+                adapter.browser_account_id = binding.browser_account_id
+            else:
+                adapter = runtime.adapter(mock_cards(job_id, kind, 3))
             adapter.connect()
             return adapter
         if source.name == "boss_readonly":
@@ -104,7 +112,7 @@ def _resolve_browser_source(mode, browser_source):
 def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory=None,
                semantic_runtime=None, max_workers=2, allow_trusted_headers=None,
                browser_adapter_factory=None, browser_source=None,
-               browser_runtime=None):
+               browser_runtime=None, browser_session_registry=None):
     mode = (mode or os.getenv("APP_RUN_MODE", "deterministic")).strip().lower()
     if mode not in RUNTIME_MODES:
         raise ValueError(f"APP_RUN_MODE must be one of {RUNTIME_MODES}")
@@ -125,14 +133,19 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
                             else _live_pipeline(semantic_runtime))
     source = _resolve_browser_source(mode, browser_source)
     runtime = browser_runtime
-    if runtime is None and source.name in ("cdp_mock", "boss_readonly"):
+    registry = browser_session_registry
+    if registry is None and runtime is None and source.name in ("cdp_mock", "boss_readonly"):
+        registry = BrowserSessionRegistry(source)
+    if runtime is None and source.name in ("cdp_mock", "boss_readonly") and registry is None:
         runtime = BrowserRuntime(source)
 
     @asynccontextmanager
     async def lifespan(application):
         yield
-        # Only closes a browser this runtime launched; external CDP browsers
-        # are merely disconnected (see CDPConnectionManager.close).
+        # Only closes browsers this process launched; external CDP browsers are
+        # merely disconnected (see CDPConnectionManager.close).
+        if registry is not None:
+            registry.close()
         if runtime is not None:
             runtime.close()
 
@@ -151,8 +164,9 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
     app.state.pipeline_factory = pipeline_factory
     app.state.browser_source = source
     app.state.browser_runtime = runtime
+    app.state.browser_session_registry = registry
     app.state.browser_adapter_factory = (
-        browser_adapter_factory or _browser_factory(source, runtime))
+        browser_adapter_factory or _browser_factory(source, runtime, registry))
     app.state.browser_scan_results = {}
     app.state.executor = ThreadPoolExecutor(max_workers=max_workers)
 
@@ -177,6 +191,8 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
                      else "gateway-required",
                      "local_only": mode == "deterministic",
                      "browser_source": source.describe()})
+        if registry is not None:
+            body["browser_source"]["sessions"] = registry.describe()
         return body
 
     if not allow_trusted_headers:
@@ -208,7 +224,8 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
         # empty-but-successful scan.
         unavailable = exc.code in ("BROWSER_UNAVAILABLE", "CDP_CONNECT_FAILED",
                                    "BROWSER_CLOSED", "TIMEOUT", "PAGE_UNAVAILABLE",
-                                   "LOGIN_REQUIRED", "TARGET_MISSING")
+                                   "LOGIN_REQUIRED", "TARGET_MISSING",
+                                   "UNEXPECTED_STATE")
         return JSONResponse(status_code=503 if unavailable else 409, content={
             "error_type": "BrowserError", "code": exc.code,
             "message": str(exc), "recoverable": exc.recoverable})

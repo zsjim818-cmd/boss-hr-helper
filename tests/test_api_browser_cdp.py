@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from browser.contracts import BrowserError
 from browser.runtime import BrowserRuntime, CDPConnectionManager, find_edge
+from browser.sessions import BrowserSessionRegistry
 from browser.source import BrowserSourceConfig
 from config.policy_compiler import JobPolicyCompiler
 from engine.policy_scoring_pipeline import PolicyScoringPipeline
@@ -217,6 +218,71 @@ class ApiCdpUnavailableTests(PipelineCase):
 
         listing = self.client.get("/api/jobs/job/candidates", headers=self.headers).json()
         self.assertEqual(listing["total"], 0)
+
+
+@unittest.skipUnless(EDGE_AVAILABLE, "Playwright/Edge CDP unavailable")
+class ApiCdpSessionIsolationTests(PipelineCase):
+    """Two HR accounts get separate Edge instances (port + profile) over HTTP."""
+
+    def setUp(self):
+        super().setUp()
+        self.publish_case(job_id="job")
+        self.directory = tempfile.TemporaryDirectory(prefix="api_cdp_sessions_")
+        self.addCleanup(self.directory.cleanup)
+        self.source = BrowserSourceConfig(
+            name="cdp_mock", enabled=True, port=free_port(),
+            user_data_dir=str(Path(self.directory.name) / "base"),
+            headless=True, auto_launch=True)
+        self.registry = BrowserSessionRegistry(
+            self.source, profile_root=str(Path(self.directory.name) / "sessions"))
+        self.addCleanup(self.registry.close)
+        self.app = create_app(
+            self.repo, mode="deterministic", browser_source=self.source,
+            browser_session_registry=self.registry,
+            compiler_factory=lambda: JobPolicyCompiler(
+                client=RecordedCompilerClient(offline_policy("java_backend")),
+                model_name="offline-api-compiler"),
+            pipeline_factory=lambda repository: PolicyScoringPipeline(
+                repository, semantic_service=RecordingSemantic(repository),
+                review_service=RecordingReview(repository)))
+        self.client = TestClient(self.app)
+        self.addCleanup(lambda: self.app.state.executor.shutdown(wait=True))
+        self.owner_headers = {"X-Org-Id": "org", "X-User-Id": "owner"}
+        self.repo.create_user(self.system, "test:cdp-hr2", user_id="hr2")
+        self.repo.add_organization_member(self.ctx, "hr2", org_role="ORG_ADMIN")
+        self.hr2_headers = {"X-Org-Id": "org", "X-User-Id": "hr2"}
+
+    def test_two_hr_accounts_get_isolated_cdp_sessions(self):
+        batch = self.client.post("/api/jobs/job/batches",
+                                 headers=self.owner_headers).json()
+        owner_scan = self.client.post(
+            f"/api/jobs/job/batches/{batch['batch_id']}/browser/scan",
+            headers=self.owner_headers, json={"pages": 1, "page_size": 5})
+        self.assertEqual(owner_scan.status_code, 200, owner_scan.text)
+        hr_scan = self.client.post(
+            f"/api/jobs/job/batches/{batch['batch_id']}/browser/scan",
+            headers=self.hr2_headers, json={"pages": 1, "page_size": 5})
+        self.assertEqual(hr_scan.status_code, 200, hr_scan.text)
+
+        owner_body = owner_scan.json()
+        hr_body = hr_scan.json()
+        self.assertTrue(owner_body["browser_account_id"].startswith("mock-account-"))
+        self.assertTrue(hr_body["browser_account_id"].startswith("mock-account-"))
+        self.assertNotEqual(owner_body["browser_account_id"],
+                            hr_body["browser_account_id"])
+        self.assertNotEqual(owner_body["page_url"], hr_body["page_url"])
+        self.assertEqual(owner_body["imported"], 3)
+        self.assertEqual(hr_body["imported"], 0)
+        self.assertEqual(hr_body["reused"], 3)
+
+        sessions = self.registry.describe()
+        self.assertEqual(len(sessions), 2)
+        self.assertEqual(len({item["cdp_port"] for item in sessions}), 2)
+        self.assertEqual(len({item["profile"] for item in sessions}), 2)
+        self.assertTrue(all(item["profile_verified"] for item in sessions))
+
+        runtime_mode = self.client.get("/api/runtime-mode").json()
+        self.assertEqual(len(runtime_mode["browser_source"]["sessions"]), 2)
 
 
 if __name__ == "__main__":

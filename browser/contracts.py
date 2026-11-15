@@ -27,6 +27,8 @@ class BrowserHealth(BrowserModel):
     pages: int = 0
     source: str = ""
     page_url: str = ""
+    profile: str = ""
+    profile_verified: bool = False
 
 
 class CandidateCard(BrowserModel):

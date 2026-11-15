@@ -417,7 +417,8 @@ class PipelineRepository(BaseRepository):
                              actor_id):
         """Existing DRY_RUN PENDING row for (candidate, evaluation, actor).
 
-        Used to make repeated rehearsal clicks idempotent without schema change.
+        Used for read-only diagnostics; the write path uses
+        :meth:`ensure_pending_dry_run`, which is atomic.
         """
         with self.read(ctx, job_id, "view") as conn:
             self.one(conn, """SELECT 1 FROM pipeline_evaluations
@@ -430,6 +431,42 @@ class PipelineRepository(BaseRepository):
                 ORDER BY created_at DESC, contact_event_id DESC LIMIT 1""",
                                (ctx.org_id, job_id, evaluation_id, actor_id)).fetchone()
             return dict(row) if row is not None else None
+
+    def ensure_pending_dry_run(self, ctx, job_id, job_candidate_id, evaluation_id,
+                               note):
+        """Atomically get-or-create the caller's DRY_RUN PENDING rehearsal row.
+
+        One ``BEGIN IMMEDIATE`` transaction holds the write lock from the lookup
+        through the insert, so concurrent Dry-Run requests for the same
+        (candidate, evaluation, actor) produce exactly one PENDING row.
+        """
+        if not isinstance(note, str) or not note.startswith("DRY_RUN:"):
+            raise ValueError("Rehearsal notes must start with 'DRY_RUN:'")
+        with self.tx(ctx, job_id, "review") as conn:
+            self.one(conn, """SELECT 1 FROM pipeline_evaluations
+                WHERE org_id=? AND job_id=? AND pipeline_evaluation_id=?
+                  AND job_candidate_id=?""",
+                     (ctx.org_id, job_id, evaluation_id, job_candidate_id))
+            existing = conn.execute("""SELECT * FROM pipeline_contact_events
+                WHERE org_id=? AND job_id=? AND pipeline_evaluation_id=? AND actor_id=?
+                  AND action='PENDING' AND note LIKE 'DRY_RUN:%'
+                ORDER BY created_at DESC, contact_event_id DESC LIMIT 1""",
+                                    (ctx.org_id, job_id, evaluation_id,
+                                     ctx.user_id)).fetchone()
+            if existing is not None:
+                return dict(existing), True
+            event_id = uid()
+            conn.execute("""INSERT INTO pipeline_contact_events
+                (org_id,job_id,contact_event_id,pipeline_evaluation_id,action,note,actor_id)
+                VALUES(?,?,?,?,?,?,?)""",
+                         (ctx.org_id, job_id, event_id, evaluation_id, "PENDING",
+                          note, ctx.user_id))
+            self.audit(conn, ctx, "PIPELINE_CONTACT_EVENT", event_id,
+                       {"evaluation_id": evaluation_id, "action": "PENDING",
+                        "rehearsal": True})
+            return self.one(conn, """SELECT * FROM pipeline_contact_events
+                WHERE org_id=? AND job_id=? AND contact_event_id=?""",
+                            (ctx.org_id, job_id, event_id)), False
 
     # ------------------------------------------------------- listing/ranking
     def list_job_candidates(self, ctx, job_id, *, limit=50, offset=0, status=None,

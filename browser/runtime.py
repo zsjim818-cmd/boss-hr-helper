@@ -14,6 +14,7 @@ Safety rules (Sprint 4 Batch 2A):
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import socket
@@ -81,7 +82,7 @@ class CDPConnectionManager:
                  user_data_dir: str | None = None, headless: bool = True,
                  auto_launch: bool = True, channel: str = "msedge",
                  edge_path: str | None = None, launch_timeout: float = 20.0):
-        self.host = host
+        self.host = self._loopback_host(host)
         self.port = port
         self.user_data_dir = str(user_data_dir or self.default_profile_dir(port))
         self.headless = headless
@@ -95,7 +96,17 @@ class CDPConnectionManager:
         self._browser = None
         self._process: subprocess.Popen | None = None
         self._owned = False
+        self._profile_verified = False
         self._closed = False
+
+    @staticmethod
+    def _loopback_host(host: str) -> str:
+        """CDP is a local control channel; remote hosts are refused."""
+        normalised = (host or "").strip().lower()
+        if normalised in ("localhost", "::1", "127.0.0.1"):
+            return "127.0.0.1"
+        raise ValueError(
+            f"CDP host must be a loopback address (127.0.0.1/localhost), got {host!r}")
 
     # ------------------------------------------------------------- construction
     @staticmethod
@@ -133,6 +144,7 @@ class CDPConnectionManager:
             "--no-default-browser-check",
             "--disable-extensions",
             "--disable-background-networking",
+            "--enable-automation",
             "about:blank",
         ]
         if self.headless:
@@ -161,7 +173,12 @@ class CDPConnectionManager:
                 self._browser = None
         started = time.monotonic()
         self._ensure_playwright()
+        # Preserve ownership across CDP reconnects: a process we launched may
+        # still be alive even though the CDP connection dropped.
+        was_owned = (self._owned and self._process is not None
+                     and self._process.poll() is None)
         launched = False
+        verified = False
         if not _port_open(self.host, self.port):
             if not self.auto_launch:
                 self._teardown_impl()
@@ -171,8 +188,12 @@ class CDPConnectionManager:
                     recoverable=True)
             self._launch_edge()
             launched = True
+            verified = True
         try:
             self._browser = self._connect_with_retry(started)
+            if not (launched or was_owned):
+                # Attaching to somebody else's browser: prove the Profile.
+                verified = self._verify_external_profile()
         except BrowserError:
             self._teardown_impl()
             raise
@@ -182,8 +203,80 @@ class CDPConnectionManager:
                 "CDP_CONNECT_FAILED",
                 f"could not attach to {self.endpoint}: {exc}",
                 recoverable=True) from exc
-        self._owned = launched
+        self._owned = launched or was_owned
+        self._profile_verified = verified or self._owned
         return self._health_impl()
+
+    # ------------------------------------------------------ profile provenance
+    def _sentinel_path(self) -> Path:
+        return Path(self.user_data_dir) / "boss-hr-helper-profile.json"
+
+    def _write_sentinel(self) -> None:
+        sentinel = self._sentinel_path()
+        sentinel.parent.mkdir(parents=True, exist_ok=True)
+        sentinel.write_text(json.dumps({
+            "marker": "boss-hr-helper-cdp", "port": self.port,
+            "profile": self.user_data_dir}), encoding="utf-8")
+
+    def _sentinel_valid(self) -> bool:
+        try:
+            payload = json.loads(self._sentinel_path().read_text(encoding="utf-8"))
+        except Exception:
+            return False
+        return payload.get("marker") == "boss-hr-helper-cdp"
+
+    def _cdp_command_line(self) -> list[str] | None:
+        """Actual Edge command line via a browser-level CDP session."""
+        try:
+            session = self._browser.new_browser_cdp_session()
+        except Exception:
+            return None
+        try:
+            result = session.send("Browser.getBrowserCommandLine")
+            arguments = result.get("arguments") if isinstance(result, dict) else None
+            return list(arguments) if isinstance(arguments, list) else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _profile_from_arguments(arguments: list[str]) -> str | None:
+        for argument in arguments:
+            if argument.startswith("--user-data-dir="):
+                return argument.split("=", 1)[1].strip().strip('"') or None
+        return None
+
+    def _verify_external_profile(self) -> bool:
+        """Prove the attached browser uses OUR dedicated profile.
+
+        Accepted evidence: the browser's real ``--user-data-dir`` (read over
+        CDP) or our sentinel file in the configured profile.  Unknown profiles
+        are refused unless ``BROWSER_ALLOW_UNVERIFIED_CDP=1`` is set explicitly.
+        """
+        expected = Path(self.user_data_dir).resolve()
+        arguments = self._cdp_command_line()
+        actual = self._profile_from_arguments(arguments or [])
+        if actual:
+            try:
+                actual_path = Path(actual).expanduser().resolve()
+            except OSError:
+                actual_path = None
+            if actual_path != expected:
+                raise BrowserError(
+                    "CDP_PROFILE_MISMATCH",
+                    f"CDP endpoint {self.endpoint} runs with profile {actual!r}, "
+                    f"not the configured dedicated profile {str(expected)!r}",
+                    recoverable=False)
+            return True
+        if self._sentinel_valid():
+            return True
+        if os.getenv("BROWSER_ALLOW_UNVERIFIED_CDP", "").strip() == "1":
+            return False
+        raise BrowserError(
+            "CDP_PROFILE_UNVERIFIED",
+            f"could not verify the profile of {self.endpoint}; refusing to attach. "
+            "Use a profile launched by this runtime, provision the dedicated "
+            "profile sentinel, or explicitly set BROWSER_ALLOW_UNVERIFIED_CDP=1",
+            recoverable=False)
 
     def _connect_with_retry(self, started: float):
         last_error: Exception | None = None
@@ -215,6 +308,7 @@ class CDPConnectionManager:
 
     def _launch_edge(self) -> None:
         plan = self.launch_plan()
+        self._write_sentinel()
         try:
             self._process = subprocess.Popen(
                 plan.command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -244,7 +338,9 @@ class CDPConnectionManager:
     def _health_impl(self) -> BrowserHealth:
         if self._browser is None:
             return BrowserHealth(connected=False, browser="edge-cdp",
-                                 message=f"not connected to {self.endpoint}")
+                                 message=f"not connected to {self.endpoint}",
+                                 profile=self.user_data_dir,
+                                 profile_verified=False)
         try:
             pages = sum(len(context.pages) for context in self._browser.contexts)
             if not self._browser.is_connected():
@@ -252,9 +348,13 @@ class CDPConnectionManager:
         except Exception as exc:  # noqa: BLE001 - connection loss is an error state
             self._browser = None
             return BrowserHealth(connected=False, browser="edge-cdp",
-                                 message=f"connection lost: {exc}")
+                                 message=f"connection lost: {exc}",
+                                 profile=self.user_data_dir,
+                                 profile_verified=self._profile_verified)
         return BrowserHealth(connected=True, browser="edge-cdp", pages=pages,
-                             message=f"connected to {self.endpoint}")
+                             message=f"connected to {self.endpoint}",
+                             profile=self.user_data_dir,
+                             profile_verified=self._profile_verified)
 
     def list_pages(self) -> list[dict]:
         return self.run(self._list_pages_impl)
@@ -318,6 +418,7 @@ class CDPConnectionManager:
         browser, self._browser = self._browser, None
         owned, self._owned = self._owned, False
         process, self._process = self._process, None
+        self._profile_verified = False
         if browser is not None:
             try:
                 # For connect_over_cdp this disconnects; it does not close the

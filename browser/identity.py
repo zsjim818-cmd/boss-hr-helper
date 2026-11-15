@@ -46,10 +46,12 @@ class CandidateDetailParser:
         raw = dict(detail.raw)
         raw["_meta"] = dict(raw.get("_meta") or {})
         meta = raw["_meta"]
-        meta.setdefault("encrypt_geek_id", detail.identity)
-        meta.setdefault("encrypt_job_id", detail.job_id or job_id)
-        meta.setdefault("candidate_key",
-                        CandidateIdentityResolver.candidate_key(job_id, detail.identity))
+        # The page payload is untrusted for identity: the stable identity comes
+        # from the adapter (data-geek-id) and the binding key is canonical.
+        meta["encrypt_geek_id"] = detail.identity
+        meta["encrypt_job_id"] = detail.job_id or job_id
+        meta["candidate_key"] = CandidateIdentityResolver.candidate_key(
+            job_id, detail.identity)
         try:
             resume = ResumeData.model_validate(raw)
         except ValidationError as exc:
@@ -59,5 +61,9 @@ class CandidateDetailParser:
                 recoverable=True) from exc
         if resume.meta.encrypt_geek_id != detail.identity:
             raise BrowserError("IDENTITY_MISMATCH", "parsed meta identity differs from detail",
+                               recoverable=False)
+        if resume.meta.candidate_key != meta["candidate_key"]:
+            raise BrowserError("IDENTITY_MISMATCH",
+                               "parsed candidate_key is not the canonical binding key",
                                recoverable=False)
         return resume

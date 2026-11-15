@@ -42,12 +42,14 @@
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <span style="font-weight: 600;">评估详情：{{ detail.job_candidate.candidate_key }}</span>
-          <el-select v-model="selectedEvaluationId" size="small" style="width: 320px;"
-                     @change="selectEvaluation">
-            <el-option v-for="item in detail.evaluations" :key="item.pipeline_evaluation_id"
-                       :label="`${item.scoring_mode} · ${item.scoring_status} · ${item.total_score ?? '—'}`"
-                       :value="item.pipeline_evaluation_id" />
-          </el-select>
+          <el-space v-if="detail" wrap>
+            <el-button v-for="item in detail.evaluations" :key="item.pipeline_evaluation_id"
+                       size="small"
+                       :type="item.pipeline_evaluation_id === selectedEvaluationId ? 'primary' : 'default'"
+                       @click="selectEvaluationById(item.pipeline_evaluation_id)">
+              {{ item.scoring_mode }}
+            </el-button>
+          </el-space>
         </div>
       </template>
 
@@ -198,13 +200,16 @@
 
             <el-divider content-position="left">联系状态（与审核分离，仅记录人工事实）</el-divider>
             <div style="display: flex; gap: 8px; margin-bottom: 10px;">
-              <el-button size="small" @click="contact('CONTACTED')">已联系</el-button>
+              <el-button size="small" :disabled="currentUserContacted"
+                         @click="contact('CONTACTED')">已联系</el-button>
               <el-button size="small" type="warning" @click="contact('DECLINED')">不联系</el-button>
               <el-button size="small" @click="contact('PENDING')">待定</el-button>
-              <el-tag v-if="contacted" type="success" size="small">已存在 CONTACTED 记录</el-tag>
+              <el-tag v-if="contactSummary?.contacted" type="success" size="small">
+                已存在 CONTACTED 记录（HR：{{ (contactSummary.contacted_by || []).join('、') }}）
+              </el-tag>
               <el-tag v-else type="info" size="small">尚未联系</el-tag>
             </div>
-            <el-table :data="contacts" size="small" border>
+            <el-table :data="contactSummary?.events || []" size="small" border>
               <el-table-column prop="action" label="动作" width="140" />
               <el-table-column prop="note" label="备注" />
               <el-table-column prop="actor_id" label="操作人" width="180" />
@@ -215,11 +220,15 @@
             <el-alert v-if="!approved" type="warning" show-icon :closable="false"
                       style="margin-bottom: 8px;"
                       :title="`最新审核状态为 ${latestReviewAction || '无'}，仅 APPROVE 可预演`" />
+            <el-alert v-if="currentUserContacted" type="info" show-icon :closable="false"
+                      style="margin-bottom: 8px;"
+                      title="当前 HR 账号已联系该候选人（同岗位跨评估去重），不可重复联系或预演" />
             <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
               <el-input v-model="greetingMessage" style="width: 420px;" size="small"
                         placeholder="预演招呼语（不会真实发送）" />
               <el-button size="small" type="primary" :loading="dryRunning"
-                         :disabled="!approved" @click="runGreetingDryRun">
+                         :disabled="!approved || currentUserContacted"
+                         @click="runGreetingDryRun">
                 Greeting Dry-Run 预演
               </el-button>
             </div>
@@ -242,16 +251,16 @@ import { ElMessage } from 'element-plus'
 import { api, ApiError } from '@/api'
 import { captureScope, scopeValid } from '@/lib/requestGate'
 import { useAppStore } from '@/stores/useAppStore'
-import type { CandidateDetail, ContactAction, ContactEvent, ContactSummary,
+import type { CandidateDetail, ContactAction, ContactSummary,
   GreetingDryRunResult, PipelineEvaluation, PreliminaryPayload, RankingEntry,
   ReviewAction, ReviewEvent, Tier2Payload, Tier3Payload } from '@/types'
 
 const store = useAppStore()
 const ranking = ref<RankingEntry[]>([])
 const detail = ref<CandidateDetail | null>(null)
+const detailToken = ref(0)
 const selectedEvaluationId = ref('')
 const reviews = ref<ReviewEvent[]>([])
-const contacts = ref<ContactEvent[]>([])
 const contactSummary = ref<ContactSummary | null>(null)
 const reviewReason = ref('')
 const greetingMessage = ref('您好，方便聊聊这个岗位的机会吗？')
@@ -269,7 +278,9 @@ const latestReviewAction = computed(() => {
   return action
 })
 const approved = computed(() => latestReviewAction.value === 'APPROVE')
-const contacted = computed(() => contacts.value.some((item) => item.action === 'CONTACTED'))
+// contact_summary is the single source of truth for candidate-level contact
+// state; no second interpretation from per-evaluation events is kept.
+const currentUserContacted = computed(() => contactSummary.value?.current_user_contacted === true)
 
 const activeEvaluation = computed<PipelineEvaluation | null>(() => {
   if (!detail.value) return null
@@ -300,13 +311,15 @@ async function loadRanking() {
   }
 }
 
-async function refreshContactSummary(jobCandidateId?: string) {
+async function refreshContactSummary(jobCandidateId?: string,
+                                     token = detailToken.value) {
   const jcId = jobCandidateId || detail.value?.job_candidate.job_candidate_id
   if (!store.activeJobId || !jcId) return
   const jobId = store.activeJobId
   const epoch = store.dataEpoch
   try {
     const summary = await api.contactSummary(jobId, jcId)
+    if (token !== detailToken.value) return
     if (store.dataEpoch !== epoch || store.activeJobId !== jobId) return
     if (detail.value?.job_candidate.job_candidate_id !== jcId) return
     contactSummary.value = summary
@@ -321,15 +334,20 @@ async function selectRanking(row: RankingEntry | null) {
   if (!row || !store.activeJobId) return
   const jobId = store.activeJobId
   const epoch = store.dataEpoch
+  const token = ++detailToken.value
+  const jcId = row.job_candidate_id
   try {
-    const value = await api.candidateDetail(jobId, row.job_candidate_id)
+    const value = await api.candidateDetail(jobId, jcId)
+    // A later row click owns the panel now: drop this late response entirely.
+    if (token !== detailToken.value) return
     if (store.dataEpoch !== epoch || store.activeJobId !== jobId) return
+    if (value.job_candidate.job_candidate_id !== jcId) return
     detail.value = value
     const preferred = value.evaluations.find(
       (item) => item.pipeline_evaluation_id === row.pipeline_evaluation_id)
     selectedEvaluationId.value = (preferred || value.evaluations[0])?.pipeline_evaluation_id || ''
-    await selectEvaluation()
-    await refreshContactSummary(row.job_candidate_id)
+    await selectEvaluation(token)
+    await refreshContactSummary(jcId, token)
   } catch (error) {
     if (store.dataEpoch === epoch) {
       ElMessage.error(error instanceof ApiError ? error.message : String(error))
@@ -337,25 +355,32 @@ async function selectRanking(row: RankingEntry | null) {
   }
 }
 
-async function selectEvaluation() {
+async function selectEvaluation(token = detailToken.value) {
   if (!store.activeJobId || !selectedEvaluationId.value) return
   greeting.value = null
   greetingError.value = ''
   const jobId = store.activeJobId
   const evaluationId = selectedEvaluationId.value
+  const jcId = detail.value?.job_candidate.job_candidate_id
   const epoch = store.dataEpoch
   try {
     const reviewsBody = await api.listReviews(jobId, evaluationId)
-    const contactsBody = await api.listContacts(jobId, evaluationId)
+    if (token !== detailToken.value) return
     if (store.dataEpoch !== epoch || store.activeJobId !== jobId
         || selectedEvaluationId.value !== evaluationId) return
+    if (detail.value?.job_candidate.job_candidate_id !== jcId) return
     reviews.value = reviewsBody.reviews
-    contacts.value = contactsBody.events
   } catch (error) {
     if (store.dataEpoch === epoch) {
       ElMessage.error(error instanceof ApiError ? error.message : String(error))
     }
   }
+}
+
+async function selectEvaluationById(evaluationId: string) {
+  if (!evaluationId || evaluationId === selectedEvaluationId.value) return
+  selectedEvaluationId.value = evaluationId
+  await selectEvaluation()
 }
 
 async function review(action: ReviewAction) {
@@ -425,12 +450,13 @@ async function runGreetingDryRun() {
 }
 
 watch(() => store.dataEpoch, () => {
-  // Job/identity switch: drop all ranking/detail/review state.
+  // Job/identity switch: drop all ranking/detail/review state and invalidate
+  // any in-flight detail response from the previous scope.
+  detailToken.value += 1
   ranking.value = []
   detail.value = null
   selectedEvaluationId.value = ''
   reviews.value = []
-  contacts.value = []
   contactSummary.value = null
   reviewReason.value = ''
   greeting.value = null

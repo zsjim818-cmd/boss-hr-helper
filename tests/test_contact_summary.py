@@ -17,7 +17,12 @@ class ContactSummaryCase(ApiCase):
     @staticmethod
     def _resume(key):
         from tests.pipeline_support import resume_for
-        return resume_for(key)
+        value = resume_for(key)
+        if ":" in key:
+            job_id, geek = key.split(":", 1)
+            value["_meta"]["encrypt_geek_id"] = geek
+            value["_meta"]["encrypt_job_id"] = job_id
+        return value
 
     def score(self, jcid, mode="deep_mode", *, job_id="job"):
         started = self.client.post(
