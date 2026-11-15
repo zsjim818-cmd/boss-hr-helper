@@ -414,7 +414,7 @@ class CDPConnectionManager:
         """Open (or reuse) a tab whose URL starts with ``prefix``."""
         return self.run(lambda: self._open_page_impl(url, prefix or url))
 
-    def _open_page_impl(self, url: str, prefix: str):
+    def _open_page_impl(self, url: str, prefix: str, *, navigate: bool = True):
         if self._browser is None:
             raise BrowserError("BROWSER_CLOSED", "not connected to a CDP browser",
                                recoverable=True)
@@ -422,7 +422,10 @@ class CDPConnectionManager:
         context = contexts[0] if contexts else self._browser.new_context()
         for page in context.pages:
             if page.url.startswith(prefix):
-                page.goto(url, wait_until="load", timeout=15_000)
+                # A real BOSS tab may carry manually selected filters; only
+                # navigate when the caller explicitly asks for it.
+                if navigate:
+                    page.goto(url, wait_until="load", timeout=15_000)
                 return page
         page = context.new_page()
         page.goto(url, wait_until="load", timeout=15_000)

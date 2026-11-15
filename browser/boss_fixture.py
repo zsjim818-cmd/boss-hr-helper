@@ -54,7 +54,8 @@ def build_boss_html(identities: list[str] | None = None, *, login: bool = False,
     cards = []
     for identity in identities:
         cards.append(f"""
-        <div class="job-card-box" data-geek-id="{html.escape(identity)}">
+        <div class="job-card-box" data-geek-id="{html.escape(identity)}"
+             data-encrypt-job-id="boss-job-fixture" data-degree="本科" data-work-years="5">
           <span class="name">BOSS candidate {html.escape(identity)}</span>
           <span class="expect">Java工程师 · 北京</span>
           <button class="open-detail" type="button">详情</button>

@@ -46,6 +46,9 @@ window.__MOCK__ = {{ cards: {payload}, flags: {flags} }};
     el.className = 'candidate-card';
     el.dataset.geekId = card.identity;
     el.dataset.index = String(index);
+    if (card.platform_job_id) el.dataset.encryptJobId = card.platform_job_id;
+    if (card.degree) el.dataset.degree = card.degree;
+    if (card.work_years) el.dataset.workYears = card.work_years;
     el.innerHTML = '<span class="name"></span> <span class="position"></span> ' +
       '<button class="open-detail">详情</button>';
     el.querySelector('.name').textContent = card.name;

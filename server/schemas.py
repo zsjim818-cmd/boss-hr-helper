@@ -75,6 +75,10 @@ class BrowserScanRequest(ApiModel):
     batch_id: str | None = Field(default=None, max_length=200)
     pages: int = Field(default=3, ge=1, le=20)
     page_size: int = Field(default=20, ge=1, le=100)
+    platform_job_id: str | None = Field(default=None, max_length=200)
+    filters_confirmed: bool = True
+    filter_summary: str | None = Field(default=None, max_length=500)
+    max_details: int = Field(default=50, ge=1, le=500)
 
 
 class GreetingDryRunRequest(ApiModel):

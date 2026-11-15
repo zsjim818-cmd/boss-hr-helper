@@ -61,6 +61,8 @@ class BrowserSourceConfig:
             "headless": self.headless,
             "auto_launch": self.auto_launch,
             "profile_isolated": bool(self.user_data_dir),
+            "real_contract_verified": False,
+            "real_pii_storage_ready": False,
             "channel": self.channel,
             "diagnostics": list(self.diagnostics),
         }

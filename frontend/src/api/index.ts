@@ -144,7 +144,9 @@ export const api = {
 
   // local mock browser (mock/cdp_mock sources only; never a real BOSS send)
   browserScan: (jobId: string, batchId: string,
-                payload: { pages?: number; page_size?: number }) =>
+                payload: { pages?: number; page_size?: number;
+                           platform_job_id?: string; filter_summary?: string;
+                           filters_confirmed?: boolean; max_details?: number }) =>
     call<BrowserScanResult>(
       http.post(`/jobs/${jobId}/batches/${batchId}/browser/scan`, payload)),
   browserScanStatus: (jobId: string, batchId: string) =>

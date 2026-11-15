@@ -63,6 +63,16 @@ class BossReadonlyAdapterTests(unittest.TestCase):
         self.assertFalse(self.manager.run(
             lambda: adapter._page.evaluate("() => window.__BOSS_GREET_CLICKED__ === true")))
 
+    def test_reconnect_reuses_open_tab_without_navigation(self):
+        adapter = self.adapter()
+        self.manager.run(lambda: adapter._page.evaluate(
+            "() => { window.__KEEP__ = 'selected-filters'; }"))
+        adapter.connect()  # second connect must not reload/reset the tab
+        kept = self.manager.run(
+            lambda: adapter._page.evaluate("() => window.__KEEP__"))
+        self.assertEqual(kept, "selected-filters")
+        self.assertEqual(len(adapter.list_cards(page=0, page_size=10)), 2)
+
     def test_login_and_risk_control_preflight(self):
         with self.assertRaises(BrowserError) as captured:
             self.adapter(login=True)

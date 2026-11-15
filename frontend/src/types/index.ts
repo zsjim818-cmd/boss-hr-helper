@@ -395,6 +395,16 @@ export interface BrowserScanResult {
   job_id: string
   batch_id: string
   collected: number
+  listed?: number
+  deduplicated?: number
+  preview_skipped?: number
+  detail_attempted?: number
+  detail_completed?: number
+  detail_partial?: number
+  sealed?: number
+  scored?: number
+  review_pending?: number
+  stop_reason?: string
   imported: number
   reused: number
   failed: number

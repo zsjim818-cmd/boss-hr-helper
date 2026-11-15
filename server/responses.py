@@ -149,6 +149,16 @@ class BrowserScanOut(Out):
     job_id: str | None = None
     batch_id: str | None = None
     collected: int | None = None
+    listed: int | None = None
+    deduplicated: int | None = None
+    preview_skipped: int | None = None
+    detail_attempted: int | None = None
+    detail_completed: int | None = None
+    detail_partial: int | None = None
+    sealed: int | None = None
+    scored: int | None = None
+    review_pending: int | None = None
+    stop_reason: str | None = None
     imported: int | None = None
     reused: int | None = None
     failed: int | None = None

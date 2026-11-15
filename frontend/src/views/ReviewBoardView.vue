@@ -223,6 +223,8 @@
             <el-alert v-if="currentUserContacted" type="info" show-icon :closable="false"
                       style="margin-bottom: 8px;"
                       title="当前 HR 账号已联系该候选人（同岗位跨评估去重），不可重复联系或预演" />
+            <el-alert type="warning" show-icon :closable="false" style="margin-bottom: 8px;"
+                      title="NEEDS_RELOCATE：候选人可能已从推荐列表消失；再次人工联系前需在 BOSS 页面人工重新定位，系统不自动搜索或发送。" />
             <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;">
               <el-input v-model="greetingMessage" style="width: 420px;" size="small"
                         placeholder="预演招呼语（不会真实发送）" />

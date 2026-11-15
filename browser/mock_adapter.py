@@ -60,6 +60,10 @@ class MockBossAdapter(BrowserAdapter):
                               name=self._cards[identity]["name"],
                               position=self._cards[identity].get("position", ""),
                               job_id=self._cards[identity].get("job_id", ""),
+                              platform_job_id=self._cards[identity].get(
+                                  "platform_job_id", ""),
+                              degree=self._cards[identity].get("degree", ""),
+                              work_years=self._cards[identity].get("work_years", ""),
                               dom={"card_index": start + offset})
                 for offset, identity in enumerate(slice_ids)]
 
@@ -75,6 +79,7 @@ class MockBossAdapter(BrowserAdapter):
             raise BrowserError("NOT_FOUND", "candidate is no longer visible", recoverable=True)
         return CandidateDetail(identity=identity, name=card["name"],
                                job_id=card.get("job_id", ""),
+                               platform_job_id=card.get("platform_job_id", ""),
                                raw=deepcopy(card["resume"]))
 
     def send_greeting(self, identity: str, message: str, *,

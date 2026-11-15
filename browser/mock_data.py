@@ -49,7 +49,7 @@ def resume_template(kind: str, identity: str, job_id: str) -> dict:
     value = deepcopy(base)
     value["_meta"] = {
         "candidate_key": f"{job_id}:{identity}",
-        "encrypt_job_id": job_id,
+        "encrypt_job_id": f"boss-job-{job_id}",
         "encrypt_geek_id": identity,
     }
     return value
@@ -57,9 +57,13 @@ def resume_template(kind: str, identity: str, job_id: str) -> dict:
 
 def mock_cards(job_id: str, kind: str = "java", count: int = 3,
                prefix: str = "geek") -> list[dict]:
+    platform_job_id = f"boss-job-{job_id}"
     return [{"identity": f"{prefix}-{kind}-{index}",
              "name": f"Mock {kind} candidate {index}",
              "position": "Engineer",
              "job_id": job_id,
+             "platform_job_id": platform_job_id,
+             "degree": "本科",
+             "work_years": "5年",
              "resume": resume_template(kind, f"{prefix}-{kind}-{index}", job_id)}
             for index in range(1, count + 1)]

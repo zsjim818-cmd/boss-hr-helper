@@ -277,7 +277,8 @@ class PipelineRepository(BaseRepository):
             return dict(row) if row else None
 
     def pipeline_result_for_mode(self, ctx, job_id, job_candidate_id, scoring_mode,
-                                 *, policy_id=None, policy_version=None):
+                                 *, policy_id=None, policy_version=None,
+                                 resume_id=None, pipeline_version=None):
         if scoring_mode not in ("fast_mode", "deep_mode"):
             raise ValueError("Unsupported scoring mode")
         with self.read(ctx, job_id, "view") as conn:
@@ -291,6 +292,12 @@ class PipelineRepository(BaseRepository):
             if policy_version is not None:
                 clauses.append("policy_version=?")
                 params.append(policy_version)
+            if resume_id is not None:
+                clauses.append("resume_id=?")
+                params.append(resume_id)
+            if pipeline_version is not None:
+                clauses.append("pipeline_version=?")
+                params.append(pipeline_version)
             row = conn.execute("""SELECT * FROM pipeline_evaluations
                 WHERE """ + " AND ".join(clauses) + """
                 ORDER BY created_at DESC, pipeline_evaluation_id DESC LIMIT 1""",

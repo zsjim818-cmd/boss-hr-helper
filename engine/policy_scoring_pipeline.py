@@ -197,17 +197,24 @@ class PolicyScoringPipeline:
         if scoring_mode not in ("fast_mode", "deep_mode"):
             raise PipelineError("Unsupported scoring mode")
         expected = self._current_binding(context, job_id, job_candidate_id, batch_id)
+        try:
+            sealed = self.repository.get_sealed_input(context, job_id, job_candidate_id)
+            resume_id = sealed["resume_id"]
+        except Exception:
+            resume_id = None
         deep = self.repository.pipeline_result_for_mode(
             context, job_id, job_candidate_id, "deep_mode",
             policy_id=expected["policy_id"],
-            policy_version=expected["policy_version"])
+            policy_version=expected["policy_version"],
+            resume_id=resume_id, pipeline_version=self.pipeline_version)
         if deep is not None:
             return deep
         if scoring_mode == "fast_mode":
             return self.repository.pipeline_result_for_mode(
                 context, job_id, job_candidate_id, "fast_mode",
                 policy_id=expected["policy_id"],
-                policy_version=expected["policy_version"])
+                policy_version=expected["policy_version"],
+                resume_id=resume_id, pipeline_version=self.pipeline_version)
         return None
 
     def run_and_persist(self, context, job_id, job_candidate_id, *, scoring_mode="deep_mode",

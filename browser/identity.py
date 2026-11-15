@@ -49,9 +49,13 @@ class CandidateDetailParser:
         # The page payload is untrusted for identity: the stable identity comes
         # from the adapter (data-geek-id) and the binding key is canonical.
         meta["encrypt_geek_id"] = detail.identity
-        meta["encrypt_job_id"] = detail.job_id or job_id
+        # encryptJobId is a PLATFORM identifier and must never be filled with
+        # the internal jobs.job_id.  Absent platform evidence stays empty.
+        meta["encrypt_job_id"] = detail.platform_job_id or ""
         meta["candidate_key"] = CandidateIdentityResolver.candidate_key(
             job_id, detail.identity)
+        # Short-lived security context is never persisted.
+        meta.pop("security_id", None)
         try:
             resume = ResumeData.model_validate(raw)
         except ValidationError as exc:

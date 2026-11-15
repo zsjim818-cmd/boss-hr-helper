@@ -95,6 +95,9 @@ class CdpMockBossAdapter(BrowserAdapter):
                     name=element.locator(".name").inner_text(),
                     position=element.locator(".position").inner_text(),
                     job_id="",
+                    platform_job_id=element.get_attribute("data-encrypt-job-id") or "",
+                    degree=element.get_attribute("data-degree") or "",
+                    work_years=element.get_attribute("data-work-years") or "",
                     dom={"card_index": index, "page_url": self.page_url}))
             return result
         except BrowserError:
@@ -124,7 +127,10 @@ class CdpMockBossAdapter(BrowserAdapter):
             raw = json.loads(target.locator("#detail-resume").inner_text())
             return CandidateDetail(identity=identity,
                                    name=target.locator("#detail-name").inner_text(),
-                                   job_id="", raw=raw)
+                                   job_id="",
+                                   platform_job_id=card.first.get_attribute(
+                                       "data-encrypt-job-id") or "",
+                                   raw=raw)
         except BrowserError:
             raise
         except Exception as exc:  # noqa: BLE001

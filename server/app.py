@@ -38,6 +38,7 @@ from server.semantic_runtime import (RUNTIME_MODES, DeterministicSemanticRuntime
                                      LiveSemanticRuntime)
 from storage.models import AccessContext
 from storage.repositories import NotFound, PermissionDenied
+from storage.repositories.browser import ScanAlreadyRunning
 from storage.repositories.pipeline import PipelineConflict
 
 
@@ -68,9 +69,7 @@ def _job_kind(repository, context, job_id):
 def _default_browser_adapter(repository, context, job_id):
     """LOCAL MOCK ONLY: deterministic in-memory recruitment page."""
     kind = _job_kind(repository, context, job_id)
-    adapter = MockBossAdapter(mock_cards(job_id, kind, 3), page_size=5)
-    adapter.connect()
-    return adapter
+    return MockBossAdapter(mock_cards(job_id, kind, 3), page_size=5)
 
 
 def _browser_factory(source: BrowserSourceConfig, runtime: BrowserRuntime | None,
@@ -87,26 +86,17 @@ def _browser_factory(source: BrowserSourceConfig, runtime: BrowserRuntime | None
                 adapter.browser_account_id = binding.browser_account_id
             else:
                 adapter = runtime.adapter(mock_cards(job_id, kind, 3))
-            adapter.connect()
+            # Connection is owned by the HTTP route (single connect per request).
             return adapter
         if source.name == "boss_readonly":
-            if not source.real_boss_allowed:
-                raise BrowserError(
-                    "UNSUPPORTED",
-                    "boss_readonly requires BROWSER_ALLOW_REAL_BOSS=1",
-                    recoverable=False)
-            if registry is None:
-                raise BrowserError("BROWSER_ACCOUNT_UNMAPPED",
-                                   "no HR browser session registry is configured",
-                                   recoverable=False)
-            session = registry.runtime_for(context)
-            adapter = BossReadonlyCdpAdapter(
-                session.manager,
-                page_url=os.getenv("BROWSER_BOSS_URL") or None)
-            adapter.connect()
-            binding = registry.binding_for(context)
-            adapter.browser_account_id = binding.browser_account_id
-            return adapter
+            # Real BOSS collection stays hard-disabled until an authorised HR
+            # account and a verified DOM/API contract exist.  A local flag alone
+            # must never open real collection.
+            raise BrowserError(
+                "REAL_CONTRACT_UNVERIFIED",
+                "boss_readonly real collection is disabled: no verified BOSS "
+                "DOM/API contract or authorised account. Use mock/cdp_mock.",
+                recoverable=False)
         raise BrowserError("UNSUPPORTED", f"browser source {source.name!r} is disabled",
                            recoverable=False)
     return factory
@@ -181,6 +171,7 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
     app.state.browser_adapter_factory = (
         browser_adapter_factory or _browser_factory(source, runtime, registry))
     app.state.browser_scan_results = {}
+    app.state.browser_scan_cancel = set()
     app.state.executor = ThreadPoolExecutor(max_workers=max_workers)
 
     for router in (jobs_router, policies_router, candidates_router,
@@ -243,7 +234,7 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
         unavailable = exc.code in ("BROWSER_UNAVAILABLE", "CDP_CONNECT_FAILED",
                                    "BROWSER_CLOSED", "TIMEOUT", "PAGE_UNAVAILABLE",
                                    "LOGIN_REQUIRED", "TARGET_MISSING",
-                                   "UNEXPECTED_STATE")
+                                   "UNEXPECTED_STATE", "EMPTY_UNVERIFIED")
         return JSONResponse(status_code=503 if unavailable else 409, content={
             "error_type": "BrowserError", "code": exc.code,
             "message": str(exc), "recoverable": exc.recoverable})
@@ -252,6 +243,12 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
     def pipeline_conflict(request: Request, exc: PipelineConflict):
         return JSONResponse(status_code=409, content={
             "error_type": "PipelineConflict", "message": str(exc)})
+
+    @app.exception_handler(ScanAlreadyRunning)
+    def scan_already_running(request: Request, exc: ScanAlreadyRunning):
+        return JSONResponse(status_code=409, content={
+            "error_type": "ScanAlreadyRunning",
+            "code": "SCAN_ALREADY_RUNNING", "message": str(exc)})
 
     @app.exception_handler(PolicyQualityBlocked)
     def quality_blocked(request: Request, exc: PolicyQualityBlocked):

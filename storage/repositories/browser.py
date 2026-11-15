@@ -1,7 +1,22 @@
 """Persistent browser account bindings and batch scan runs (migration 011)."""
 import json
+from datetime import datetime, timedelta, timezone
 
 from .base import BaseRepository, NotFound, uid, utcnow
+
+
+class ScanAlreadyRunning(RuntimeError):
+    def __init__(self, batch_id: str):
+        self.batch_id = batch_id
+        super().__init__(f"SCAN_ALREADY_RUNNING: batch {batch_id}")
+
+
+def _is_stale(started_at: str, minutes: int = 60) -> bool:
+    try:
+        value = datetime.fromisoformat((started_at or "").replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    return value < datetime.now(timezone.utc) - timedelta(minutes=minutes)
 
 
 class BrowserRepository(BaseRepository):
@@ -47,6 +62,13 @@ class BrowserRepository(BaseRepository):
             self.one(conn, """SELECT 1 FROM scan_batches
                 WHERE org_id=? AND job_id=? AND batch_id=?""",
                      (ctx.org_id, job_id, batch_id))
+            active = conn.execute("""SELECT * FROM browser_scan_runs
+                WHERE org_id=? AND job_id=? AND batch_id=? AND actor_user_id=?""",
+                                  (ctx.org_id, job_id, batch_id,
+                                   ctx.user_id)).fetchone()
+            if (active is not None and active["status"] == "RUNNING"
+                    and not _is_stale(active["started_at"])):
+                raise ScanAlreadyRunning(batch_id)
             now = utcnow()
             conn.execute("""INSERT INTO browser_scan_runs
                 (org_id,job_id,batch_id,actor_user_id,status,source,browser_account_id,

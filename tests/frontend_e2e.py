@@ -275,16 +275,21 @@ def run_browser():
         page.wait_for_selector("text=批次已创建", timeout=30000)
         check("batch created in UI", page.locator("text=批次已创建").count() > 0)
 
+        # Scanning requires the explicit human filter confirmation step.
+        page.locator(".el-checkbox").first.click()
+        page.wait_for_timeout(300)
         page.get_by_role("button", name="Mock 浏览器扫描").click()
         page.wait_for_selector("text=Mock 扫描完成", timeout=60000)
         page.wait_for_timeout(800)
         check("mock scan completed",
               page.locator("text=COMPLETED").count() > 0)
         check("scan report shows the CDP source",
-              page.locator("text=cdp_mock").count() > 0)
+              page.locator("text=CDP_MOCK").count() > 0)
         rows = page.locator(".el-table__body tr").all_inner_texts()
         check("scan imported mock candidates",
               any("geek-java-1" in row for row in rows), str(rows[:3]))
+        check("scanner enables scoring for scanned candidate",
+              page.get_by_role("button", name="快速初筛 (fast)").is_enabled())
 
         # Score the first imported candidate through the real HTTP API.
         # Fast first, then deep: the pipeline treats deep as an upgrade, so the

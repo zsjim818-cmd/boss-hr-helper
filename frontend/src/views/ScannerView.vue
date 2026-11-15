@@ -8,7 +8,7 @@
               <span style="font-weight: 600;">步骤 1：批次与简历导入</span>
               <el-space>
                 <el-button size="small" type="success" plain :loading="scanning"
-                           :disabled="!batch" @click="runBrowserScan">
+                           :disabled="!batch || !filtersConfirmed" @click="runBrowserScan">
                   Mock 浏览器扫描
                 </el-button>
                 <el-button size="small" type="primary" plain :loading="creatingBatch"
@@ -23,8 +23,15 @@
                     title="当前岗位尚未发布 Policy，无法创建批次。请先在【岗位与策略】发布。" />
           <template v-else>
             <el-descriptions :column="2" border size="small" style="margin-bottom: 12px;">
-              <el-descriptions-item label="锁定 Policy 版本">
-                v{{ store.currentPolicy.policy_version as number }}
+              <el-descriptions-item label="批次锁定 Policy">
+                <el-tag type="success" size="small">
+                  v{{ batch?.policy_version ?? (store.currentPolicy?.policy_version as number) }}
+                </el-tag>
+                <span v-if="batch && store.currentPolicy
+                            && batch.policy_version !== store.currentPolicy.policy_version"
+                      style="margin-left: 6px; color: #b88230; font-size: 12px;">
+                  当前岗位已发布 v{{ store.currentPolicy.policy_version }}，本批次仍使用 v{{ batch.policy_version }}
+                </span>
               </el-descriptions-item>
               <el-descriptions-item label="批次状态">
                 {{ batch ? batch.status : '未创建' }}
@@ -34,6 +41,21 @@
               </el-descriptions-item>
             </el-descriptions>
 
+            <el-card shadow="never" style="margin-bottom: 12px;" body-style="padding: 10px;">
+              <div style="font-weight: 600; margin-bottom: 6px;">扫描前人工确认</div>
+              <el-form label-position="top" size="small">
+                <el-form-item label="平台岗位 ID（encryptJobId，可选；与内部 job_id 不同）">
+                  <el-input v-model="platformJobId" placeholder="例如 boss-job-xxxx" />
+                </el-form-item>
+                <el-form-item label="筛选条件摘要（可选，仅保存必要非敏感信息）">
+                  <el-input v-model="filterSummary" placeholder="例如 北京 / 本科 / 3-5年" />
+                </el-form-item>
+                <el-checkbox v-model="filtersConfirmed">
+                  我已人工确认推荐页当前职位与筛选条件，并授权开始只读扫描
+                </el-checkbox>
+              </el-form>
+            </el-card>
+
             <div v-if="scanStatus || scanReport" style="margin-bottom: 12px;">
               <el-descriptions :column="4" border size="small">
                 <el-descriptions-item label="Mock 扫描状态">{{ scanStatus || '—' }}</el-descriptions-item>
@@ -42,6 +64,18 @@
                 <el-descriptions-item label="复用/失败">
                   {{ scanReport ? `${scanReport.reused} / ${scanReport.failed}` : '—' }}
                 </el-descriptions-item>
+                <el-descriptions-item label="列表/去重">
+                  {{ scanReport ? `${scanReport.listed ?? '—'} / ${scanReport.deduplicated ?? '—'}` : '—' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="预筛跳过">
+                  {{ scanReport?.preview_skipped ?? '—' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="详情/部分">
+                  {{ scanReport ? `${scanReport.detail_completed ?? '—'} / ${scanReport.detail_partial ?? '—'}` : '—' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="终止原因">
+                  {{ scanReport?.stop_reason || '—' }}
+                </el-descriptions-item>
               </el-descriptions>
               <el-alert v-for="(issue, index) in scanReport?.issues || []" :key="index"
                         type="warning" show-icon :closable="false" style="margin-top: 6px;"
@@ -49,7 +83,7 @@
               <el-alert v-if="scanError" type="error" show-icon :closable="false"
                         style="margin-top: 6px;" :title="scanError" />
               <div v-if="scanReport?.source" style="font-size: 12px; color: #909399;">
-                数据源：{{ scanReport.source }} · {{ scanReport.browser || '—' }}
+                数据源：{{ sourceLabel(scanReport.source) }} · {{ scanReport.browser || '—' }}
                 <span v-if="scanReport.page_url"> · {{ scanReport.page_url }}</span>
               </div>
             </div>
@@ -178,6 +212,9 @@ const batchScoring = ref(false)
 const batch = ref<Batch | null>(null)
 const imported = ref<ImportResult | null>(null)
 const selectedCandidate = ref<CandidateListItem | null>(null)
+const filtersConfirmed = ref(false)
+const platformJobId = ref('')
+const filterSummary = ref('')
 const scanReport = ref<BrowserScanResult | null>(null)
 const scanStatus = ref('')
 const scanError = ref('')
@@ -233,6 +270,13 @@ function applyTemplate() {
   if (template) resumeJson.value = JSON.stringify(template.value, null, 2)
 }
 
+function sourceLabel(source?: string | null) {
+  if (source === 'boss_readonly') return 'BOSS_UNVERIFIED'
+  if (source === 'cdp_mock') return 'CDP_MOCK'
+  if (source === 'mock') return 'MOCK'
+  return source || '—'
+}
+
 function statusTagType(status: string) {
   if (status === 'DEEP_SCORED') return 'success'
   if (status === 'HARD_FILTERED') return 'danger'
@@ -269,6 +313,10 @@ async function createBatch() {
 
 async function runBrowserScan() {
   if (!batch.value) return
+  if (!filtersConfirmed.value) {
+    ElMessage.warning('请先人工确认推荐页职位与筛选条件')
+    return
+  }
   // Local Mock scan only: it writes through the same repository/batch binding.
   const scope = captureScope(store.activeJobId, store.dataEpoch)
   const batchId = batch.value.batch_id
@@ -277,8 +325,13 @@ async function runBrowserScan() {
   scanStatus.value = ''
   scanError.value = ''
   try {
-    const report = await api.browserScan(scope.jobId, batchId,
-                                         { pages: 2, page_size: 5 })
+    const report = await api.browserScan(scope.jobId, batchId, {
+      pages: 2,
+      page_size: 5,
+      platform_job_id: platformJobId.value || undefined,
+      filter_summary: filterSummary.value || undefined,
+      filters_confirmed: true
+    })
     if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
     scanReport.value = report
     const status = await api.browserScanStatus(scope.jobId, batchId)
@@ -465,6 +518,9 @@ watch(() => store.dataEpoch, () => {
   batch.value = null
   imported.value = null
   selectedCandidate.value = null
+  filtersConfirmed.value = false
+  platformJobId.value = ''
+  filterSummary.value = ''
   task.value = null
   evaluation.value = null
   candidates.value = []

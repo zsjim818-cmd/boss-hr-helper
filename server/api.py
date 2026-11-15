@@ -317,14 +317,20 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
     never collects until real DOM contracts are verified.
     """
     from browser.collector import CandidateListCollector
+    from browser.preview import decide_preview, policy_preview_requirements
     repo = _repo(request)
     batch = repo.get_scan_batch(ctx, job_id, batch_id)
     if body and body.batch_id and body.batch_id != batch["batch_id"]:
         raise HTTPException(status_code=400,
                             detail="body batch_id conflicts with the request path")
+    if body is not None and not body.filters_confirmed:
+        raise HTTPException(
+            status_code=409,
+            detail="FILTERS_UNCONFIRMED: confirm the recommended-page job/filters "
+                   "before starting a scan")
     registry = getattr(request.app.state, "browser_session_registry", None)
     account = None
-    if registry is not None:
+    if registry is not None and request.app.state.browser_source.name != "boss_readonly":
         account = registry.binding_for(ctx).browser_account_id
     run = repo.start_browser_scan(
         ctx, job_id, batch["batch_id"],
@@ -333,9 +339,19 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
     try:
         adapter = _browser_adapter(request, ctx, job_id)
         health = adapter.connect()
+        policy_row = repo.get_policy_version(
+            ctx, job_id, policy_id=batch["policy_id"])
+        preview_requirements = policy_preview_requirements(
+            json.loads(policy_row["policy_json"]))
+        preview = (lambda card: decide_preview(card, **preview_requirements))
+        cancel_key = (ctx.org_id, job_id, batch["batch_id"], ctx.user_id)
         report = CandidateListCollector(repo, adapter).collect(
             ctx, job_id, batch["batch_id"], pages=(body.pages if body else 3),
-            page_size=(body.page_size if body else 20))
+            page_size=(body.page_size if body else 20),
+            expected_platform_job_id=(body.platform_job_id if body else None),
+            preview=preview,
+            max_details=(body.max_details if body else 50),
+            cancel_check=(lambda: cancel_key in request.app.state.browser_scan_cancel))
     except BrowserError as exc:
         repo.finish_browser_scan(
             ctx, job_id, batch["batch_id"], status="FAILED", collected=0,
@@ -353,6 +369,17 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
     payload.update({"source": health.source or request.app.state.browser_source.name,
                     "browser": health.browser, "page_url": health.page_url,
                     "browser_account_id": getattr(adapter, "browser_account_id", account)})
+    if report.stop_reason == "CANCELLED":
+        request.app.state.browser_scan_cancel.discard(cancel_key)
+        repo.finish_browser_scan(
+            ctx, job_id, batch["batch_id"], status="FAILED",
+            collected=report.collected, imported=report.imported,
+            reused=report.reused, failed=report.failed,
+            issues=[issue.model_dump(mode="json") for issue in report.issues],
+            error_code="CANCELLED", error_message="scan cancelled by operator",
+            browser_account_id=payload["browser_account_id"])
+        raise BrowserError("CANCELLED", "scan cancelled by operator",
+                           recoverable=True)
     if report.collected == 0 and report.issues:
         # A fatal connection/DOM failure must not look like an empty page.
         first = report.issues[0]
@@ -363,6 +390,19 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
             error_code=first.code, error_message=first.message,
             browser_account_id=payload["browser_account_id"])
         raise BrowserError(first.code, first.message, recoverable=first.recoverable)
+    if report.collected == 0:
+        # An empty page is not proof that the account has zero candidates.
+        repo.finish_browser_scan(
+            ctx, job_id, batch["batch_id"], status="FAILED",
+            collected=0, imported=0, reused=0, failed=0, issues=[],
+            error_code="EMPTY_UNVERIFIED",
+            error_message="No cards were read; an empty page cannot be treated as a "
+                          "verified zero-candidate result",
+            browser_account_id=payload["browser_account_id"])
+        raise BrowserError(
+            "EMPTY_UNVERIFIED",
+            "no candidates were read; empty result is not verified",
+            recoverable=True)
     repo.finish_browser_scan(
         ctx, job_id, batch["batch_id"],
         status="COMPLETED" if not report.issues else "COMPLETED_WITH_ERRORS",
@@ -397,8 +437,22 @@ def browser_scan_status(job_id: str, batch_id: str, request: Request,
     if run["error_code"]:
         error = {"code": run["error_code"], "message": run["error_message"] or "",
                  "recoverable": True}
-    return {"status": run["status"], "batch_id": run["batch_id"],
+    status = run["status"]
+    if status == "FAILED" and run["error_code"] == "CANCELLED":
+        status = "CANCELLED"
+    return {"status": status, "batch_id": run["batch_id"],
             "source": run["source"], "result": result, "error": error}
+
+
+@browser_router.post("/{job_id}/batches/{batch_id}/browser/scan/cancel")
+def browser_scan_cancel(job_id: str, batch_id: str, request: Request,
+                        ctx=Depends(get_context)):
+    repo = _repo(request)
+    batch = repo.get_scan_batch(ctx, job_id, batch_id)
+    key = (ctx.org_id, job_id, batch["batch_id"], ctx.user_id)
+    request.app.state.browser_scan_cancel.add(key)
+    return {"cancel_requested": True, "batch_id": batch["batch_id"],
+            "actor_user_id": ctx.user_id}
 
 
 @browser_router.post("/{job_id}/evaluations/{evaluation_id}/greeting-dry-run",
@@ -411,6 +465,7 @@ def greeting_dry_run(job_id: str, evaluation_id: str, request: Request,
     repo = _repo(request)
     adapter = _browser_adapter(request, ctx, job_id)
     try:
+        adapter.connect()
         outcome = GreetingExecutor(repo, adapter).execute(
             ctx, job_id, evaluation_id,
             message=(body.message if body else "您好，方便聊聊岗位机会吗？"),

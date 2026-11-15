@@ -20,7 +20,7 @@ class ParserIdentityTests(unittest.TestCase):
             job_id="job")
         self.assertEqual(resume.meta.candidate_key, "job:geek-1")
         self.assertEqual(resume.meta.encrypt_geek_id, "geek-1")
-        self.assertEqual(resume.meta.encrypt_job_id, "job")
+        self.assertEqual(resume.meta.encrypt_job_id, "")
 
     def test_parser_requires_stable_identity(self):
         raw = resume_template("java", "geek-1", "job")

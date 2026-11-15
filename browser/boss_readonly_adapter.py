@@ -64,7 +64,7 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
         return self.health()
 
     def _setup_page(self, url: str) -> None:
-        self._page = self.manager._open_page_impl(url, url)
+        self._page = self.manager._open_page_impl(url, url, navigate=False)
         self._url = self._page.url
         self._frame = self._page.frame_locator(FRAME_SELECTOR)
         self._preflight()
@@ -149,6 +149,9 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
                     name=element.locator(".name").inner_text().strip(),
                     position=element.locator(".expect").inner_text().strip(),
                     job_id="",
+                    platform_job_id=element.get_attribute("data-encrypt-job-id") or "",
+                    degree=element.get_attribute("data-degree") or "",
+                    work_years=element.get_attribute("data-work-years") or "",
                     dom={"card_index": index, "page_url": self._url}))
                 self._pause()
             return result
@@ -192,7 +195,10 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
                                    f"detail payload is not valid JSON: {exc}",
                                    recoverable=True) from exc
             self._pause()
-            return CandidateDetail(identity=identity, name=name, job_id="", raw=raw)
+            return CandidateDetail(identity=identity, name=name, job_id="",
+                                   platform_job_id=card.first.get_attribute(
+                                       "data-encrypt-job-id") or "",
+                                   raw=raw)
         except BrowserError:
             raise
         except Exception as exc:  # noqa: BLE001

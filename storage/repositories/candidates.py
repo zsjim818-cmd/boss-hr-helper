@@ -9,6 +9,13 @@ def prepare_resume(resume):
     raw = resume.model_dump(mode="json", by_alias=True) if isinstance(resume, ResumeData) else resume
     if not isinstance(raw, dict):
         raise ValueError("A resume snapshot must be a JSON object")
+    # Short-lived platform security context is never persisted, even when a
+    # caller/adapters accidentally pass it through.
+    raw = dict(raw)
+    if isinstance(raw.get("_meta"), dict):
+        meta = dict(raw["_meta"])
+        meta.pop("security_id", None)
+        raw["_meta"] = meta
     raw_json, raw_hash = json_dump(raw), digest(raw)
     try:
         parsed = ResumeData.model_validate(raw)
@@ -59,10 +66,8 @@ class CandidateRepository(BaseRepository):
             if candidate_key != canonical:
                 raise ValueError(
                     "browser candidate_key must be the canonical job_id:encrypt_geek_id")
-            meta_job = str(meta.get("encrypt_job_id") or "").strip()
-            if meta_job and meta_job != job_id:
-                raise ValueError(
-                    "browser resume metadata belongs to a different job")
+            # encryptJobId is a platform identifier and is deliberately NOT
+            # compared with the internal jobs.job_id (they are different IDs).
             return
         # Manual imports use opaque keys; page metadata never decides the
         # binding.  A key with a colon is allowed but must not masquerade as a
@@ -296,3 +301,29 @@ class CandidateRepository(BaseRepository):
         with self.tx(ctx, job_id, "collect") as conn:
             row = self._job_candidate(conn, ctx, job_id, job_candidate_id)
             return self._seal(conn, ctx, job_id, row, resume_id)
+
+    def reseal_candidate_input(self, ctx, job_id, job_candidate_id, resume_id):
+        """New input versions are blocked until an additive 012 migration exists.
+
+        ``job_candidate_inputs`` is intentionally immutable (migration 002/005
+        triggers).  Overwriting the sealed snapshot would silently rewrite the
+        audit trail, so no application-level shortcut is allowed here.
+        """
+        with self.tx(ctx, job_id, "collect") as conn:
+            row = self._job_candidate(conn, ctx, job_id, job_candidate_id)
+            snapshot = self.one(conn, """SELECT * FROM resume_snapshots
+                WHERE org_id=? AND candidate_id=? AND resume_id=?""",
+                                (ctx.org_id, row["candidate_id"], resume_id))
+            if not snapshot["is_scorable"]:
+                raise ValueError(
+                    "Only a complete, valid resume can replace the sealed input")
+            existing = conn.execute("""SELECT * FROM job_candidate_inputs
+                WHERE org_id=? AND job_id=? AND job_candidate_id=?""",
+                                    (ctx.org_id, job_id, job_candidate_id)).fetchone()
+            if existing is None:
+                return self._seal(conn, ctx, job_id, row, resume_id)
+            if existing["resume_id"] == resume_id:
+                return dict(existing)
+            raise ValueError(
+                "INPUT_VERSIONING_REQUIRES_012: sealed inputs are immutable; add an "
+                "additive input-version migration before re-scoring enriched resumes")
