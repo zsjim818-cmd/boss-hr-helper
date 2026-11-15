@@ -65,3 +65,15 @@ class ContactRequest(ApiModel):
 
 class SemanticPrepareRequest(ApiModel):
     job_candidate_id: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class BrowserScanRequest(ApiModel):
+    # Batch is bound by the path; the body only tunes pagination.  A conflicting
+    # body batch_id is rejected instead of silently scanning another batch.
+    batch_id: str | None = Field(default=None, max_length=200)
+    pages: int = Field(default=3, ge=1, le=20)
+    page_size: int = Field(default=20, ge=1, le=100)
+
+
+class GreetingDryRunRequest(ApiModel):
+    message: str = Field(default="您好，方便聊聊岗位机会吗？", min_length=1, max_length=500)

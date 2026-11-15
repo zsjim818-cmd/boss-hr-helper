@@ -145,6 +145,50 @@ class SemanticPrepareOut(Out):
     candidate: dict[str, Any] | None = None
 
 
+class BrowserScanOut(Out):
+    job_id: str | None = None
+    batch_id: str | None = None
+    collected: int | None = None
+    imported: int | None = None
+    reused: int | None = None
+    failed: int | None = None
+    issues: list[dict[str, Any]] = []
+    imported_candidates: list[dict[str, Any]] = []
+    source: str | None = None
+    browser: str | None = None
+    page_url: str | None = None
+
+
+class BrowserScanStatusOut(Out):
+    status: str | None = None
+    batch_id: str | None = None
+    source: str | None = None
+    result: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
+
+
+class GreetingDryRunOut(Out):
+    state: str | None = None
+    identity: str | None = None
+    message: str | None = None
+    dry_run: bool | None = None
+    recorded: bool | None = None
+    idempotent: bool | None = None
+    contact_event: dict[str, Any] | None = None
+
+
+class ContactSummaryOut(Out):
+    job_candidate_id: str | None = None
+    contacted: bool | None = None
+    contacted_by: list[str] = []
+    current_user_contacted: bool | None = None
+    latest_contact: dict[str, Any] | None = None
+    latest_pending_dry_run: dict[str, Any] | None = None
+    current_user_pending_dry_run: dict[str, Any] | None = None
+    pending_dry_run_count: int | None = None
+    events: list[dict[str, Any]] = []
+
+
 class ConfirmOut(Out):
     confirmation_id: str | None = None
     draft_id: str | None = None

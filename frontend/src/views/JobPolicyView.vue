@@ -177,6 +177,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api, ApiError } from '@/api'
+import { captureScope, scopeValid } from '@/lib/requestGate'
 import { useAppStore } from '@/stores/useAppStore'
 import type { CompileResult, JobScoringPolicy, PolicyDraft, QualityReport } from '@/types'
 
@@ -211,6 +212,18 @@ watch(() => store.activeJob, (job) => {
   if (job) form.job_title = job.title
 }, { immediate: true })
 
+// Job/identity switch: drop every job-scoped draft/quality/version state.
+watch(() => store.dataEpoch, () => {
+  compileResult.value = null
+  draft.value = null
+  quality.value = null
+  versionRecord.value = null
+  overrideReason.value = ''
+  form.jd_text = ''
+  form.hr_requirements = ''
+  form.job_title = store.activeJob?.title || ''
+})
+
 async function createJob() {
   if (!newJobTitle.value.trim()) return ElMessage.warning('请输入岗位名称')
   creating.value = true
@@ -229,16 +242,21 @@ async function createJob() {
 
 async function compile() {
   if (!store.activeJobId) return ElMessage.warning('请先创建/选择岗位')
+  const scope = captureScope(store.activeJobId, store.dataEpoch)
+  const payload = { ...form }
   compiling.value = true
   versionRecord.value = null
   try {
-    const result = await api.compilePolicy(store.activeJobId, { ...form })
+    const result = await api.compilePolicy(scope.jobId, payload)
+    if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
     compileResult.value = result
     draft.value = result.draft
     quality.value = result.quality || null
     ElMessage.success('草稿已编译')
   } catch (error) {
-    ElMessage.error(error instanceof ApiError ? error.message : String(error))
+    if (scopeValid(scope, store.activeJobId, store.dataEpoch)) {
+      ElMessage.error(error instanceof ApiError ? error.message : String(error))
+    }
   } finally {
     compiling.value = false
   }
@@ -246,19 +264,29 @@ async function compile() {
 
 async function confirmAndVersion() {
   if (!draft.value || !compileResult.value) return
+  // Snapshot the whole operation scope; every await must re-validate it.
+  const scope = captureScope(store.activeJobId, store.dataEpoch)
+  const job_id = scope.jobId
+  const draft_id = draft.value.draft_id
+  const draft_hash = draft.value.draft_hash
+  const run_id = compileResult.value.compilation_run.run_id
+  if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
   publishing.value = true
   try {
-    const confirmed = await api.confirmDraft(store.activeJobId, draft.value.draft_id, {
-      run_id: compileResult.value.compilation_run.run_id,
-      confirmation_hash: draft.value.draft_hash
+    const confirmed = await api.confirmDraft(job_id, draft_id, {
+      run_id,
+      confirmation_hash: draft_hash
     })
-    const sealed = await api.createVersion(store.activeJobId, draft.value.draft_id, {
-      run_id: compileResult.value.compilation_run.run_id,
+    if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
+    const sealed = await api.createVersion(job_id, draft_id, {
+      run_id,
       confirmation_id: confirmed.confirmation_id as string
     })
+    if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
     versionRecord.value = sealed.version as { policy_id: string; policy_version: number }
     ElMessage.success('不可变版本已创建')
   } catch (error) {
+    if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
     const apiError = error as ApiError
     ElMessage.error(apiError.message)
     if (apiError.qualityIssues?.length) {
@@ -271,15 +299,23 @@ async function confirmAndVersion() {
 
 async function publish() {
   if (!draft.value || !versionRecord.value) return
+  const scope = captureScope(store.activeJobId, store.dataEpoch)
+  const job_id = scope.jobId
+  const policy_id = versionRecord.value.policy_id
+  const confirmation_hash = draft.value.draft_hash
+  const reason = overrideReason.value
   publishing.value = true
   try {
-    await api.publishPolicy(store.activeJobId, versionRecord.value.policy_id, {
-      confirmation_hash: draft.value.draft_hash,
-      ...(overrideReason.value ? { quality_override_reason: overrideReason.value } : {})
+    await api.publishPolicy(job_id, policy_id, {
+      confirmation_hash,
+      ...(reason ? { quality_override_reason: reason } : {})
     })
+    if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
     await store.refreshCurrentPolicy()
+    if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
     ElMessage.success('策略已发布')
   } catch (error) {
+    if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
     ElMessage.error(error instanceof ApiError ? error.message : String(error))
   } finally {
     publishing.value = false

@@ -376,10 +376,78 @@ export interface SemanticPrepareResult {
   candidate?: Record<string, unknown> | null
 }
 
+export interface BrowserScanIssue {
+  code: string
+  message: string
+  recoverable: boolean
+  identity?: string | null
+}
+
+export interface BrowserScanCandidate {
+  identity: string
+  candidate_key: string
+  job_candidate_id: string
+  policy_id: string
+  policy_version: number
+}
+
+export interface BrowserScanResult {
+  job_id: string
+  batch_id: string
+  collected: number
+  imported: number
+  reused: number
+  failed: number
+  issues: BrowserScanIssue[]
+  imported_candidates: BrowserScanCandidate[]
+  source?: string | null
+  browser?: string | null
+  page_url?: string | null
+}
+
+export interface BrowserScanStatus {
+  status: 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'FAILED' | string
+  batch_id?: string | null
+  source?: string | null
+  result: BrowserScanResult | null
+  error?: { code: string; message: string; recoverable?: boolean } | null
+}
+
+export type GreetingDryRunState =
+  'DRY_RUN_READY' | 'SENT' | 'NOT_APPROVED' | 'ALREADY_SENT' | 'NOT_FOUND'
+  | 'IDENTITY_MISMATCH' | 'PAGE_UNCERTAIN' | 'UNSUPPORTED'
+
+export interface GreetingDryRunResult {
+  state: GreetingDryRunState
+  identity: string
+  message: string
+  dry_run: boolean
+  recorded: boolean
+  idempotent?: boolean
+  contact_event?: ContactEvent | null
+}
+
+export interface ContactSummaryEvent extends ContactEvent {
+  scoring_mode: ScoringMode
+}
+
+export interface ContactSummary {
+  job_candidate_id: string
+  contacted: boolean
+  contacted_by: string[]
+  current_user_contacted: boolean
+  latest_contact: ContactSummaryEvent | null
+  latest_pending_dry_run: ContactSummaryEvent | null
+  current_user_pending_dry_run: ContactSummaryEvent | null
+  pending_dry_run_count: number
+  events: ContactSummaryEvent[]
+}
+
 export interface ApiErrorPayload {
   error_type?: string
   message?: string
   detail?: string
+  state?: string
   quality_issues?: QualityIssue[]
   errors?: Array<{ path: string; type: string }>
 }

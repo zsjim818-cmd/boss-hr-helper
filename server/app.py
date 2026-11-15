@@ -10,6 +10,7 @@ Run modes (``APP_RUN_MODE`` env or explicit ``mode=``):
 """
 import os
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,8 +22,13 @@ from config.policy_service import PolicyQualityBlocked
 from engine.demo_models import MOCK_MODEL, DeterministicLLMClient, demo_tier3_response
 from engine.policy_llm_reviewer import PolicyReviewService
 from engine.policy_scoring_pipeline import PolicyScoringPipeline
-from server.api import (candidates_router, jobs_router, policies_router,
-                        reviews_router, scoring_router)
+from browser.contracts import BrowserError
+from browser.mock_adapter import MockBossAdapter
+from browser.mock_data import mock_cards
+from browser.runtime import BrowserRuntime
+from browser.source import BrowserSourceConfig, load_browser_source
+from server.api import (browser_router, candidates_router, jobs_router,
+                        policies_router, reviews_router, scoring_router)
 from server.auth import get_context
 from server.demo_compiler import DemoJobPolicyCompiler
 from server.responses import RuntimeModeOut
@@ -50,8 +56,55 @@ def _live_pipeline(semantic_runtime):
     return factory
 
 
+def _job_kind(repository, context, job_id):
+    title = repository.get_job(context, job_id)["title"]
+    return ("ai" if ("AI" in title or "自动化" in title)
+            else "sales" if "销售" in title else "java")
+
+
+def _default_browser_adapter(repository, context, job_id):
+    """LOCAL MOCK ONLY: deterministic in-memory recruitment page."""
+    kind = _job_kind(repository, context, job_id)
+    adapter = MockBossAdapter(mock_cards(job_id, kind, 3), page_size=5)
+    adapter.connect()
+    return adapter
+
+
+def _browser_factory(source: BrowserSourceConfig, runtime: BrowserRuntime | None):
+    def factory(repository, context, job_id):
+        if source.name == "mock":
+            return _default_browser_adapter(repository, context, job_id)
+        if source.name == "cdp_mock":
+            kind = _job_kind(repository, context, job_id)
+            adapter = runtime.adapter(mock_cards(job_id, kind, 3))
+            adapter.connect()
+            return adapter
+        if source.name == "boss_readonly":
+            raise BrowserError(
+                "UNSUPPORTED",
+                "boss_readonly is authorised for connection diagnostics only; "
+                "real BOSS DOM contracts are unverified in this batch, so no "
+                "collection is attempted",
+                recoverable=False)
+        raise BrowserError("UNSUPPORTED", f"browser source {source.name!r} is disabled",
+                           recoverable=False)
+    return factory
+
+
+def _resolve_browser_source(mode, browser_source):
+    if browser_source is None:
+        return load_browser_source(mode)
+    if isinstance(browser_source, BrowserSourceConfig):
+        return browser_source
+    env = dict(os.environ)
+    env["BROWSER_SOURCE"] = str(browser_source)
+    return load_browser_source(mode, environ=env)
+
+
 def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory=None,
-               semantic_runtime=None, max_workers=2, allow_trusted_headers=None):
+               semantic_runtime=None, max_workers=2, allow_trusted_headers=None,
+               browser_adapter_factory=None, browser_source=None,
+               browser_runtime=None):
     mode = (mode or os.getenv("APP_RUN_MODE", "deterministic")).strip().lower()
     if mode not in RUNTIME_MODES:
         raise ValueError(f"APP_RUN_MODE must be one of {RUNTIME_MODES}")
@@ -70,8 +123,22 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
     if pipeline_factory is None:
         pipeline_factory = (_deterministic_pipeline(semantic_runtime) if mode == "deterministic"
                             else _live_pipeline(semantic_runtime))
+    source = _resolve_browser_source(mode, browser_source)
+    runtime = browser_runtime
+    if runtime is None and source.name in ("cdp_mock", "boss_readonly"):
+        runtime = BrowserRuntime(source)
+
+    @asynccontextmanager
+    async def lifespan(application):
+        yield
+        # Only closes a browser this runtime launched; external CDP browsers
+        # are merely disconnected (see CDPConnectionManager.close).
+        if runtime is not None:
+            runtime.close()
+
     app = FastAPI(title="Boss HR Helper API", version="3.1.0",
-                  description="Multi-job dynamic resume matching (Tier 0-3) with HR review")
+                  description="Multi-job dynamic resume matching (Tier 0-3) with HR review",
+                  lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -82,11 +149,20 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
     app.state.semantic_runtime = semantic_runtime
     app.state.compiler_factory = compiler_factory
     app.state.pipeline_factory = pipeline_factory
+    app.state.browser_source = source
+    app.state.browser_runtime = runtime
+    app.state.browser_adapter_factory = (
+        browser_adapter_factory or _browser_factory(source, runtime))
+    app.state.browser_scan_results = {}
     app.state.executor = ThreadPoolExecutor(max_workers=max_workers)
 
     for router in (jobs_router, policies_router, candidates_router,
                    scoring_router, reviews_router):
         app.include_router(router)
+    if source.enabled:
+        # Browser integration is independent of the model run mode; the Mock
+        # sources never touch a real BOSS session.
+        app.include_router(browser_router)
 
     @app.get("/health", tags=["health"])
     @app.get("/api/health", tags=["health"])
@@ -99,7 +175,8 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
         body = dict(semantic_runtime.describe())
         body.update({"auth_mode": "trusted-headers" if allow_trusted_headers
                      else "gateway-required",
-                     "local_only": mode == "deterministic"})
+                     "local_only": mode == "deterministic",
+                     "browser_source": source.describe()})
         return body
 
     if not allow_trusted_headers:
@@ -124,6 +201,17 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
     def not_found(request: Request, exc: NotFound):
         return JSONResponse(status_code=404, content={"error_type": "NotFound",
                                                       "message": str(exc)})
+
+    @app.exception_handler(BrowserError)
+    def browser_error(request: Request, exc: BrowserError):
+        # Connection/DOM loss is reported as a structured failure, never as an
+        # empty-but-successful scan.
+        unavailable = exc.code in ("BROWSER_UNAVAILABLE", "CDP_CONNECT_FAILED",
+                                   "BROWSER_CLOSED", "TIMEOUT", "PAGE_UNAVAILABLE",
+                                   "LOGIN_REQUIRED", "TARGET_MISSING")
+        return JSONResponse(status_code=503 if unavailable else 409, content={
+            "error_type": "BrowserError", "code": exc.code,
+            "message": str(exc), "recoverable": exc.recoverable})
 
     @app.exception_handler(PipelineConflict)
     def pipeline_conflict(request: Request, exc: PipelineConflict):

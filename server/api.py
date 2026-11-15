@@ -7,24 +7,28 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from config.policy_compiler import JobPolicyCompiler
 from config.policy_service import PolicyCompilerService, PolicyQualityBlocked
+from browser.contracts import BrowserError
 from engine.policy_validator import validate_policy_quality
 from schemas.job_policy import JobScoringPolicy
 from server.auth import get_context
-from server.responses import (BatchOut, CandidateDetailOut, CandidateListOut,
-                              CompileOut, ConfirmOut, ContactsOut, DraftOut,
-                              EvaluationsOut, ImportOut, JobOut, JobsOut,
-                              PolicyRowOut, PublishOut, QualityOut, RankingOut,
-                              ReviewOut, ReviewsOut, RowOut, RuntimeModeOut,
-                              ScoreStartOut, SemanticPrepareOut, TaskOut,
-                              VersionOut)
-from server.schemas import (CompilePolicyRequest, ConfirmDraftRequest,
-                            ContactRequest, CreateJobRequest,
-                            CreateVersionRequest, ImportCandidateRequest,
-                            PublishPolicyRequest, ReviewRequest, ScoreRequest,
-                            SemanticPrepareRequest, UpdateDraftRequest)
+from server.responses import (BatchOut, BrowserScanOut, BrowserScanStatusOut,
+                              CandidateDetailOut, CandidateListOut, CompileOut,
+                              ConfirmOut, ContactSummaryOut, ContactsOut, DraftOut,
+                              EvaluationsOut, GreetingDryRunOut, ImportOut, JobOut,
+                              JobsOut, PolicyRowOut, PublishOut, QualityOut,
+                              RankingOut, ReviewOut, ReviewsOut, RowOut,
+                              RuntimeModeOut, ScoreStartOut, SemanticPrepareOut,
+                              TaskOut, VersionOut)
+from server.schemas import (BrowserScanRequest, CompilePolicyRequest,
+                            ConfirmDraftRequest, ContactRequest, CreateJobRequest,
+                            CreateVersionRequest, GreetingDryRunRequest,
+                            ImportCandidateRequest, PublishPolicyRequest,
+                            ReviewRequest, ScoreRequest, SemanticPrepareRequest,
+                            UpdateDraftRequest)
 
 
 jobs_router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -189,7 +193,21 @@ def candidate_detail(job_id: str, job_candidate_id: str, request: Request,
     history = repo.list_pipeline_results(ctx, job_id, job_candidate_id)
     attempts = repo.list_pipeline_attempts(ctx, job_id, job_candidate_id)
     return {"job_candidate": _row(candidate), "latest_evaluation": _row(latest),
-            "evaluations": _row(history), "attempts": _row(attempts)}
+            "evaluations": _row(history), "attempts": _row(attempts),
+            "contact_summary": repo.pipeline_contact_summary(
+                ctx, job_id, job_candidate_id)}
+
+
+@candidates_router.get("/{job_id}/candidates/{job_candidate_id}/contact-summary",
+                       response_model=ContactSummaryOut)
+def candidate_contact_summary(job_id: str, job_candidate_id: str, request: Request,
+                              ctx=Depends(get_context)):
+    """Candidate-level contact state shared by fast/deep evaluations.
+
+    Team visibility is scoped to one job: a different job may contact the same
+    person independently, and different HR accounts may each contact once.
+    """
+    return _repo(request).pipeline_contact_summary(ctx, job_id, job_candidate_id)
 
 
 # -------------------------------------------------------------------- scoring
@@ -264,6 +282,127 @@ def semantic_prepare(job_id: str, request: Request, ctx=Depends(get_context),
         repo.get_job_candidate(ctx, job_id, body.job_candidate_id)
     return _row(request.app.state.semantic_runtime.prepare(
         ctx, job_id, body.job_candidate_id if body else None))
+
+
+# --------------------------------------------------------- local mock browser
+browser_router = APIRouter(prefix="/api/jobs", tags=["browser"])
+
+
+def _browser_adapter(request: Request, ctx, job_id):
+    factory = request.app.state.browser_adapter_factory
+    return factory(request.app.state.repository, ctx, job_id)
+
+
+@browser_router.post("/{job_id}/batches/{batch_id}/browser/scan",
+                     response_model=BrowserScanOut)
+def browser_scan(job_id: str, batch_id: str, request: Request,
+                 ctx=Depends(get_context),
+                 body: BrowserScanRequest | None = None):
+    """LOCAL MOCK / READ-ONLY: collect candidates through the browser layer.
+
+    The batch (and therefore its locked Policy version) comes from the path; the
+    scan state is isolated per ``(org_id, job_id, batch_id)``.  ``boss_readonly``
+    never collects until real DOM contracts are verified.
+    """
+    from browser.collector import CandidateListCollector
+    repo = _repo(request)
+    batch = repo.get_scan_batch(ctx, job_id, batch_id)
+    if body and body.batch_id and body.batch_id != batch["batch_id"]:
+        raise HTTPException(status_code=400,
+                            detail="body batch_id conflicts with the request path")
+    key = (ctx.org_id, job_id, batch["batch_id"])
+    adapter = None
+    try:
+        adapter = _browser_adapter(request, ctx, job_id)
+        health = adapter.connect()
+        report = CandidateListCollector(repo, adapter).collect(
+            ctx, job_id, batch["batch_id"], pages=(body.pages if body else 3),
+            page_size=(body.page_size if body else 20))
+    except BrowserError as exc:
+        request.app.state.browser_scan_results[key] = {
+            "status": "FAILED", "batch_id": batch["batch_id"],
+            "source": request.app.state.browser_source.name,
+            "error": {"code": exc.code, "message": str(exc),
+                      "recoverable": exc.recoverable}}
+        raise
+    finally:
+        if adapter is not None:
+            try:
+                adapter.close()
+            except Exception:
+                pass
+    payload = report.model_dump(mode="json")
+    payload.update({"source": health.source or request.app.state.browser_source.name,
+                    "browser": health.browser, "page_url": health.page_url})
+    if report.collected == 0 and report.issues:
+        # A fatal connection/DOM failure must not look like an empty page.
+        first = report.issues[0]
+        request.app.state.browser_scan_results[key] = {
+            "status": "FAILED", "batch_id": batch["batch_id"],
+            "source": payload["source"], "result": payload,
+            "error": {"code": first.code, "message": first.message,
+                      "recoverable": first.recoverable}}
+        raise BrowserError(first.code, first.message, recoverable=first.recoverable)
+    request.app.state.browser_scan_results[key] = {
+        "status": "COMPLETED" if not report.issues else "COMPLETED_WITH_ERRORS",
+        "batch_id": batch["batch_id"], "source": payload["source"],
+        "result": payload}
+    return payload
+
+
+@browser_router.get("/{job_id}/batches/{batch_id}/browser/scan",
+                    response_model=BrowserScanStatusOut)
+def browser_scan_status(job_id: str, batch_id: str, request: Request,
+                        ctx=Depends(get_context)):
+    # Status is batch-scoped: another batch of the same job never overwrites it.
+    repo = _repo(request)
+    batch = repo.get_scan_batch(ctx, job_id, batch_id)
+    status = request.app.state.browser_scan_results.get(
+        (ctx.org_id, job_id, batch["batch_id"]))
+    if status is None:
+        raise HTTPException(status_code=404,
+                            detail="No browser scan has run for this batch yet")
+    return status
+
+
+@browser_router.post("/{job_id}/evaluations/{evaluation_id}/greeting-dry-run",
+                     response_model=GreetingDryRunOut)
+def greeting_dry_run(job_id: str, evaluation_id: str, request: Request,
+                     ctx=Depends(get_context),
+                     body: GreetingDryRunRequest | None = None):
+    """LOCAL MOCK ONLY: rehearse a greeting; real sending stays disabled."""
+    from browser.greeting import GreetingExecutor
+    repo = _repo(request)
+    adapter = _browser_adapter(request, ctx, job_id)
+    try:
+        outcome = GreetingExecutor(repo, adapter).execute(
+            ctx, job_id, evaluation_id,
+            message=(body.message if body else "您好，方便聊聊岗位机会吗？"),
+            dry_run=True)
+    finally:
+        try:
+            adapter.close()
+        except Exception:
+            pass
+    if outcome.state != "DRY_RUN_READY":
+        return JSONResponse(status_code=409, content={
+            "error_type": "GreetingRefused", "state": outcome.state,
+            "message": outcome.message})
+    evaluation = repo.get_pipeline_result(ctx, job_id, evaluation_id)
+    existing = repo.find_pending_dry_run(
+        ctx, job_id, evaluation["job_candidate_id"], evaluation_id, ctx.user_id)
+    payload = outcome.model_dump(mode="json")
+    if existing is not None:
+        # Idempotent rehearsal: reuse the existing PENDING row, but the DOM
+        # re-validation above already ran again.
+        payload["idempotent"] = True
+        payload["contact_event"] = _row(existing)
+        return payload
+    event = repo.append_pipeline_contact_event(
+        ctx, job_id, evaluation_id, "PENDING", "DRY_RUN: " + outcome.message)
+    payload["idempotent"] = False
+    payload["contact_event"] = _row(event)
+    return payload
 
 
 # -------------------------------------------------------------------- reviews

@@ -6,10 +6,16 @@
           <template #header>
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <span style="font-weight: 600;">步骤 1：批次与简历导入</span>
-              <el-button size="small" type="primary" plain :loading="creatingBatch"
-                         :disabled="!store.currentPolicy" @click="createBatch">
-                创建批次
-              </el-button>
+              <el-space>
+                <el-button size="small" type="success" plain :loading="scanning"
+                           :disabled="!batch" @click="runBrowserScan">
+                  Mock 浏览器扫描
+                </el-button>
+                <el-button size="small" type="primary" plain :loading="creatingBatch"
+                           :disabled="!store.currentPolicy" @click="createBatch">
+                  创建批次
+                </el-button>
+              </el-space>
             </div>
           </template>
 
@@ -27,6 +33,26 @@
                 {{ batch?.batch_id || '—' }}
               </el-descriptions-item>
             </el-descriptions>
+
+            <div v-if="scanStatus || scanReport" style="margin-bottom: 12px;">
+              <el-descriptions :column="4" border size="small">
+                <el-descriptions-item label="Mock 扫描状态">{{ scanStatus || '—' }}</el-descriptions-item>
+                <el-descriptions-item label="采集">{{ scanReport?.collected ?? '—' }}</el-descriptions-item>
+                <el-descriptions-item label="导入">{{ scanReport?.imported ?? '—' }}</el-descriptions-item>
+                <el-descriptions-item label="复用/失败">
+                  {{ scanReport ? `${scanReport.reused} / ${scanReport.failed}` : '—' }}
+                </el-descriptions-item>
+              </el-descriptions>
+              <el-alert v-for="(issue, index) in scanReport?.issues || []" :key="index"
+                        type="warning" show-icon :closable="false" style="margin-top: 6px;"
+                        :title="`${issue.code}: ${issue.message}`" />
+              <el-alert v-if="scanError" type="error" show-icon :closable="false"
+                        style="margin-top: 6px;" :title="scanError" />
+              <div v-if="scanReport?.source" style="font-size: 12px; color: #909399;">
+                数据源：{{ scanReport.source }} · {{ scanReport.browser || '—' }}
+                <span v-if="scanReport.page_url"> · {{ scanReport.page_url }}</span>
+              </div>
+            </div>
 
             <el-form label-position="top">
               <el-form-item label="候选人 Key">
@@ -121,21 +147,26 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { api, ApiError } from '@/api'
+import { captureScope, scopeValid } from '@/lib/requestGate'
 import { useAppStore } from '@/stores/useAppStore'
-import type { Batch, CandidateListItem, ImportResult, PipelineEvaluation,
-  PipelineTask, ScoringMode, PipelineStatus } from '@/types'
+import type { Batch, BrowserScanResult, CandidateListItem, ImportResult,
+  PipelineEvaluation, PipelineTask, ScoringMode, PipelineStatus } from '@/types'
 
 const store = useAppStore()
 const creatingBatch = ref(false)
 const importing = ref(false)
 const preparing = ref(false)
+const scanning = ref(false)
 const scoringFast = ref(false)
 const scoringDeep = ref(false)
 const batch = ref<Batch | null>(null)
 const imported = ref<ImportResult | null>(null)
+const scanReport = ref<BrowserScanResult | null>(null)
+const scanStatus = ref('')
+const scanError = ref('')
 const candidateKey = ref('cand-demo-01')
 const templateKey = ref('java')
 const resumeJson = ref('')
@@ -206,31 +237,70 @@ const taskTagType = computed(() => {
 
 async function createBatch() {
   if (!store.activeJobId) return
+  const scope = captureScope(store.activeJobId, store.dataEpoch)
   creatingBatch.value = true
   try {
-    batch.value = await api.createBatch(store.activeJobId)
+    const created = await api.createBatch(scope.jobId)
+    if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
+    batch.value = created
     ElMessage.success('批次已创建（Policy 版本已锁定）')
   } catch (error) {
-    ElMessage.error(error instanceof ApiError ? error.message : String(error))
+    if (scopeValid(scope, store.activeJobId, store.dataEpoch)) {
+      ElMessage.error(error instanceof ApiError ? error.message : String(error))
+    }
   } finally {
     creatingBatch.value = false
   }
 }
 
+async function runBrowserScan() {
+  if (!batch.value) return
+  // Local Mock scan only: it writes through the same repository/batch binding.
+  const scope = captureScope(store.activeJobId, store.dataEpoch)
+  const batchId = batch.value.batch_id
+  scanning.value = true
+  scanReport.value = null
+  scanStatus.value = ''
+  scanError.value = ''
+  try {
+    const report = await api.browserScan(scope.jobId, batchId,
+                                         { pages: 2, page_size: 5 })
+    if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
+    scanReport.value = report
+    const status = await api.browserScanStatus(scope.jobId, batchId)
+    if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
+    scanStatus.value = status.status
+    ElMessage.success(
+      `Mock 扫描完成：采集 ${report.collected}，导入 ${report.imported}，复用 ${report.reused}`)
+    await refreshCandidates()
+  } catch (error) {
+    if (!scopeValid(scope, store.activeJobId, store.dataEpoch)) return
+    scanStatus.value = 'FAILED'
+    scanError.value = error instanceof ApiError ? error.message : String(error)
+  } finally {
+    scanning.value = false
+  }
+}
+
 async function importCandidate() {
   if (!batch.value) return
+  const epoch = store.dataEpoch
   importing.value = true
   try {
     const resume = JSON.parse(resumeJson.value || '{}')
-    imported.value = await api.importCandidate(store.activeJobId, batch.value.batch_id, {
+    const result = await api.importCandidate(store.activeJobId, batch.value.batch_id, {
       candidate_key: candidateKey.value,
       resume,
       source: 'manual'
     })
-    ElMessage.success(imported.value.is_new ? '简历已导入并封存' : '候选人已存在（复用绑定）')
+    if (store.dataEpoch !== epoch) return
+    imported.value = result
+    ElMessage.success(result.is_new ? '简历已导入并封存' : '候选人已存在（复用绑定）')
     await refreshCandidates()
   } catch (error) {
-    ElMessage.error(error instanceof ApiError ? error.message : String(error))
+    if (store.dataEpoch === epoch) {
+      ElMessage.error(error instanceof ApiError ? error.message : String(error))
+    }
   } finally {
     importing.value = false
   }
@@ -238,13 +308,17 @@ async function importCandidate() {
 
 async function prepareSemantic() {
   if (!store.activeJobId || !imported.value) return
+  const epoch = store.dataEpoch
   preparing.value = true
   try {
     const result = await api.semanticPrepare(
       store.activeJobId, imported.value.job_candidate.job_candidate_id)
+    if (store.dataEpoch !== epoch) return
     ElMessage.success(`语义准备：${result.status}`)
   } catch (error) {
-    ElMessage.error(error instanceof ApiError ? error.message : String(error))
+    if (store.dataEpoch === epoch) {
+      ElMessage.error(error instanceof ApiError ? error.message : String(error))
+    }
   } finally {
     preparing.value = false
   }
@@ -252,6 +326,7 @@ async function prepareSemantic() {
 
 async function score(mode: ScoringMode) {
   if (!store.activeJobId || !imported.value) return
+  const epoch = store.dataEpoch
   const busy = mode === 'fast_mode' ? scoringFast : scoringDeep
   busy.value = true
   evaluation.value = null
@@ -260,6 +335,7 @@ async function score(mode: ScoringMode) {
     const started = await api.startScoring(
       store.activeJobId, imported.value.job_candidate.job_candidate_id,
       { scoring_mode: mode })
+    if (store.dataEpoch !== epoch) return
     if (started.reused && started.evaluation) {
       evaluation.value = started.evaluation
       ElMessage.success('已有正式结果，直接复用')
@@ -268,19 +344,23 @@ async function score(mode: ScoringMode) {
     }
     if (started.task) {
       task.value = started.task
-      await pollTask(started.task.pipeline_task_id)
+      await pollTask(started.task.pipeline_task_id, epoch)
     }
   } catch (error) {
-    ElMessage.error(error instanceof ApiError ? error.message : String(error))
+    if (store.dataEpoch === epoch) {
+      ElMessage.error(error instanceof ApiError ? error.message : String(error))
+    }
   } finally {
     busy.value = false
   }
 }
 
-async function pollTask(taskId: string) {
+async function pollTask(taskId: string, epoch: number) {
   if (!store.activeJobId) return
   for (let i = 0; i < 240; i += 1) {
+    if (store.dataEpoch !== epoch) return  // job/identity switched: stop polling
     const body = await api.task(store.activeJobId, taskId)
+    if (store.dataEpoch !== epoch) return
     task.value = body.task
     if (body.task.status === 'SUCCEEDED') {
       evaluation.value = body.evaluation
@@ -299,13 +379,31 @@ async function pollTask(taskId: string) {
 
 async function refreshCandidates() {
   if (!store.activeJobId) return
+  const jobId = store.activeJobId
+  const epoch = store.dataEpoch
   try {
-    const result = await api.listCandidates(store.activeJobId, { limit: 50 })
+    const result = await api.listCandidates(jobId, { limit: 50 })
+    if (store.dataEpoch !== epoch || store.activeJobId !== jobId) return
     candidates.value = result.items
   } catch (error) {
-    ElMessage.error(error instanceof ApiError ? error.message : String(error))
+    if (store.dataEpoch === epoch) {
+      ElMessage.error(error instanceof ApiError ? error.message : String(error))
+    }
   }
 }
+
+watch(() => store.dataEpoch, () => {
+  // Job/identity switch: clear job-scoped batch/candidate/scan/task state.
+  batch.value = null
+  imported.value = null
+  task.value = null
+  evaluation.value = null
+  candidates.value = []
+  scanReport.value = null
+  scanStatus.value = ''
+  scanError.value = ''
+  void refreshCandidates()
+})
 
 onMounted(() => {
   applyTemplate()

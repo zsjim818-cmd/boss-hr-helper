@@ -98,13 +98,31 @@ class LiveSemanticRuntime:
         return self._model
 
     def prepare(self, context, job_id, job_candidate_id=None):
+        """Prepare immutable embedding assets for the correct Policy version.
+
+        With a candidate, the Policy identity always comes from the candidate's
+        first-bound batch version (never the job's current publication): a batch
+        locked on v1 must keep preparing and scoring v1 after v2 is published.
+        Without a candidate, the currently published Policy is allowed.
+        """
         from engine.embedding_service import PolicyEmbeddingService, ResumeEmbeddingService
-        policy = self.repository.get_current_policy(context, job_id)
+        if job_candidate_id is not None:
+            candidate = self.repository.get_job_candidate(context, job_id, job_candidate_id)
+            version = self.repository.get_policy_version(
+                context, job_id, policy_id=candidate["policy_id"])
+            if version["policy_version"] != candidate["policy_version"]:
+                raise SemanticRuntimeError(
+                    "Candidate-bound Policy version does not match its immutable version row")
+            policy_id = candidate["policy_id"]
+            policy_version = candidate["policy_version"]
+        else:
+            current = self.repository.get_current_policy(context, job_id)
+            policy_id = current["policy_id"]
+            policy_version = current["policy_version"]
         service = PolicyEmbeddingService(self.repository, self.model())
         result = {"mode": self.mode, "status": "PREPARED",
-                  "policy": service.prepare_policy(context, job_id,
-                                                   policy["policy_id"], policy["policy_version"])}
-        if job_candidate_id:
+                  "policy": service.prepare_policy(context, job_id, policy_id, policy_version)}
+        if job_candidate_id is not None:
             result["candidate"] = ResumeEmbeddingService(
                 self.repository, self.model()).prepare_candidate(
                 context, job_id, job_candidate_id)

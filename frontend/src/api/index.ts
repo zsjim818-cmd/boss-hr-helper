@@ -3,10 +3,11 @@
 // as a thrown ApiError so the UI can show a real error banner.
 import axios, { AxiosError } from 'axios'
 import type {
-  ApiErrorPayload, Batch, CandidateDetail, CandidateList, CompileResult,
-  ContactAction, ContactEvent, ImportResult, Job, JobScoringPolicy, PipelineEvaluation,
-  PolicyDraft, QualityReport, RankingEntry, ReviewAction, ReviewEvent,
-  RuntimeMode, ScoreStartResult, ScoringMode, SemanticPrepareResult, TaskResult,
+  ApiErrorPayload, Batch, BrowserScanResult, BrowserScanStatus, CandidateDetail,
+  CandidateList, CompileResult, ContactAction, ContactEvent, ContactSummary,
+  GreetingDryRunResult, ImportResult, Job, JobScoringPolicy, PipelineEvaluation,
+  PolicyDraft, QualityReport, RankingEntry, ReviewAction, ReviewEvent, RuntimeMode,
+  ScoreStartResult, ScoringMode, SemanticPrepareResult, TaskResult,
   LocalIdentity, PolicyDiagnostic
 } from '@/types'
 
@@ -19,13 +20,17 @@ export class ApiError extends Error {
   status: number
   errorType: string
   qualityIssues: ApiErrorPayload['quality_issues']
+  // Greeting/browser refusals carry a machine-readable state (NOT_APPROVED,
+  // ALREADY_SENT, IDENTITY_MISMATCH, ...) so the UI can explain the block.
+  state?: string
   constructor(message: string, status: number, errorType: string,
-              qualityIssues?: ApiErrorPayload['quality_issues']) {
+              qualityIssues?: ApiErrorPayload['quality_issues'], state?: string) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.errorType = errorType
     this.qualityIssues = qualityIssues
+    this.state = state
   }
 }
 
@@ -47,7 +52,8 @@ function decorate(error: unknown): never {
     const payload = axiosError.response.data || {}
     const message = payload.message || payload.detail || axiosError.message
     throw new ApiError(message, axiosError.response.status,
-      payload.error_type || 'HTTP_' + axiosError.response.status, payload.quality_issues)
+      payload.error_type || 'HTTP_' + axiosError.response.status, payload.quality_issues,
+      payload.state)
   }
   throw new ApiError('无法连接后端服务（' + axiosError.message + '）', 0, 'NETWORK_ERROR')
 }
@@ -132,7 +138,22 @@ export const api = {
   appendContact: (jobId: string, evaluationId: string, payload: { action: ContactAction; note: string }) =>
     call<ContactEvent>(http.post(`/jobs/${jobId}/evaluations/${evaluationId}/contact`, payload)),
   listContacts: (jobId: string, evaluationId: string) =>
-    call<{ events: ContactEvent[] }>(http.get(`/jobs/${jobId}/evaluations/${evaluationId}/contact`))
+    call<{ events: ContactEvent[] }>(http.get(`/jobs/${jobId}/evaluations/${evaluationId}/contact`)),
+
+  // local mock browser (mock/cdp_mock sources only; never a real BOSS send)
+  browserScan: (jobId: string, batchId: string,
+                payload: { pages?: number; page_size?: number }) =>
+    call<BrowserScanResult>(
+      http.post(`/jobs/${jobId}/batches/${batchId}/browser/scan`, payload)),
+  browserScanStatus: (jobId: string, batchId: string) =>
+    call<BrowserScanStatus>(
+      http.get(`/jobs/${jobId}/batches/${batchId}/browser/scan`)),
+  contactSummary: (jobId: string, jobCandidateId: string) =>
+    call<ContactSummary>(
+      http.get(`/jobs/${jobId}/candidates/${jobCandidateId}/contact-summary`)),
+  greetingDryRun: (jobId: string, evaluationId: string, payload: { message: string }) =>
+    call<GreetingDryRunResult>(
+      http.post(`/jobs/${jobId}/evaluations/${evaluationId}/greeting-dry-run`, payload))
 }
 
 export type { PolicyDiagnostic }

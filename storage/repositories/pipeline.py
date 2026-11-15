@@ -355,6 +355,82 @@ class PipelineRepository(BaseRepository):
                 ORDER BY created_at, contact_event_id""",
                                                        (ctx.org_id, job_id, evaluation_id))]
 
+    def has_pipeline_contact_event(self, ctx, job_id, job_candidate_id, *,
+                                   action="CONTACTED", actor_id=None):
+        """Any contact event of this action across ALL evaluations of the candidate.
+
+        Dedupe spans fast/deep modes and every bound Policy version.  When
+        ``actor_id`` is supplied the check is scoped to that HR account: the
+        business rule allows *different* HR accounts to contact the same
+        candidate in the same job, while the same HR must not re-send.
+        """
+        with self.read(ctx, job_id, "view") as conn:
+            self.one(conn, "SELECT 1 FROM job_candidates WHERE org_id=? AND job_id=? AND job_candidate_id=?",
+                     (ctx.org_id, job_id, job_candidate_id))
+            clause, params = "", [ctx.org_id, job_id, job_candidate_id, action]
+            if actor_id is not None:
+                clause = " AND c.actor_id=?"
+                params.append(actor_id)
+            row = conn.execute("""SELECT 1 FROM pipeline_contact_events c
+                JOIN pipeline_evaluations e ON e.org_id=c.org_id AND e.job_id=c.job_id
+                  AND e.pipeline_evaluation_id=c.pipeline_evaluation_id
+                WHERE c.org_id=? AND c.job_id=? AND e.job_candidate_id=? AND c.action=?"""
+                                + clause + " LIMIT 1", params).fetchone()
+            return row is not None
+
+    def pipeline_contact_summary(self, ctx, job_id, job_candidate_id):
+        """Candidate-level contact summary shared by the API and the review board.
+
+        Team visibility: who already contacted, whether the current HR did, and
+        the latest DRY_RUN rehearsal.  Scoped to one job (cross-job contact is
+        explicitly allowed and therefore never merged here).
+        """
+        with self.read(ctx, job_id, "view") as conn:
+            self.one(conn, "SELECT 1 FROM job_candidates WHERE org_id=? AND job_id=? AND job_candidate_id=?",
+                     (ctx.org_id, job_id, job_candidate_id))
+            rows = [dict(row) for row in conn.execute("""SELECT c.*, e.scoring_mode
+                FROM pipeline_contact_events c
+                JOIN pipeline_evaluations e ON e.org_id=c.org_id AND e.job_id=c.job_id
+                  AND e.pipeline_evaluation_id=c.pipeline_evaluation_id
+                WHERE c.org_id=? AND c.job_id=? AND e.job_candidate_id=?
+                ORDER BY c.created_at, c.contact_event_id""",
+                                                       (ctx.org_id, job_id, job_candidate_id))]
+        contacted = [row for row in rows if row["action"] == "CONTACTED"]
+        contacted_by = sorted({row["actor_id"] for row in contacted})
+        rehearsals = [row for row in rows if row["action"] == "PENDING"
+                      and row["note"].startswith("DRY_RUN:")]
+        return {
+            "job_candidate_id": job_candidate_id,
+            "contacted": bool(contacted_by),
+            "contacted_by": contacted_by,
+            "current_user_contacted": ctx.user_id in contacted_by,
+            "latest_contact": contacted[-1] if contacted else None,
+            "latest_pending_dry_run": rehearsals[-1] if rehearsals else None,
+            "current_user_pending_dry_run": next(
+                (row for row in reversed(rehearsals) if row["actor_id"] == ctx.user_id),
+                None),
+            "pending_dry_run_count": len(rehearsals),
+            "events": rows,
+        }
+
+    def find_pending_dry_run(self, ctx, job_id, job_candidate_id, evaluation_id,
+                             actor_id):
+        """Existing DRY_RUN PENDING row for (candidate, evaluation, actor).
+
+        Used to make repeated rehearsal clicks idempotent without schema change.
+        """
+        with self.read(ctx, job_id, "view") as conn:
+            self.one(conn, """SELECT 1 FROM pipeline_evaluations
+                WHERE org_id=? AND job_id=? AND pipeline_evaluation_id=?
+                  AND job_candidate_id=?""",
+                     (ctx.org_id, job_id, evaluation_id, job_candidate_id))
+            row = conn.execute("""SELECT * FROM pipeline_contact_events
+                WHERE org_id=? AND job_id=? AND pipeline_evaluation_id=? AND actor_id=?
+                  AND action='PENDING' AND note LIKE 'DRY_RUN:%'
+                ORDER BY created_at DESC, contact_event_id DESC LIMIT 1""",
+                               (ctx.org_id, job_id, evaluation_id, actor_id)).fetchone()
+            return dict(row) if row is not None else None
+
     # ------------------------------------------------------- listing/ranking
     def list_job_candidates(self, ctx, job_id, *, limit=50, offset=0, status=None,
                             min_score=None):
