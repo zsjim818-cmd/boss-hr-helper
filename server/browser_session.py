@@ -44,6 +44,13 @@ def _actions(state: str) -> list[str]:
     }.get(state, ["diagnostics"])
 
 
+def _runtime(request, ctx):
+    registry = getattr(request.app.state, "browser_session_registry", None)
+    if registry is not None:
+        return registry.runtime_for(ctx)
+    return getattr(request.app.state, "browser_runtime", None)
+
+
 def describe_state(request, ctx) -> dict:
     source = request.app.state.browser_source
     stored = _store(request).get(_key(ctx), {})
@@ -73,8 +80,41 @@ def describe_state(request, ctx) -> dict:
         base.update(state="DISABLED", actions=_actions("DISABLED"))
         return base
     if source.name == "boss_readonly":
-        base.update(state="REAL_CONTRACT_UNVERIFIED",
-                    actions=_actions("REAL_CONTRACT_UNVERIFIED"))
+        if not source.real_boss_dom_allowed:
+            base.update(state="REAL_CONTRACT_UNVERIFIED",
+                        actions=_actions("REAL_CONTRACT_UNVERIFIED"))
+            return base
+        runtime = _runtime(request, ctx)
+        if runtime is None:
+            base.update(state="DISCONNECTED", actions=_actions("DISCONNECTED"))
+            return base
+        if registry is not None:
+            try:
+                base["profile_id"] = registry.binding_for(ctx).profile_id
+            except BrowserError:
+                pass
+        health = runtime.manager.health()
+        base.update(connected=health.connected, browser=health.browser)
+        if health.connected:
+            from browser.boss_readonly_adapter import BossReadonlyCdpAdapter
+            try:
+                state = BossReadonlyCdpAdapter(
+                    runtime.manager, page_url=source.boss_url).probe_state()
+                stored.update(error_code=None, error_message=None)
+            except BrowserError as exc:
+                if exc.code == "AUTH_REQUIRED":
+                    state = "LOGIN_REQUIRED"
+                elif exc.code in ("CAPTCHA_BLOCKED",
+                                  "AUTH_OR_ANTI_BOT_BLOCKED"):
+                    state = "CAPTCHA_BLOCKED"
+                else:
+                    state = "DISCONNECTED"
+                _record_session_error(request, ctx, exc)
+            base["error_code"] = stored.get("error_code")
+            base["error_message"] = stored.get("error_message")
+        else:
+            state = "DISCONNECTED"
+        base.update(state=state, actions=_actions(state))
         return base
     if source.name == "mock":
         base.update(state="READY" if stored.get("connected") else "DISCONNECTED",
@@ -115,14 +155,71 @@ def _record_session_error(request, ctx, exc: BrowserError) -> None:
                   error_message=str(exc)[:2000], checked_at=_now())
 
 
+def _open_boss_readonly(request, ctx, source, *, job_id=None, repository=None) -> dict:
+    """Open the configured real BOSS page read-only and persist safe page facts.
+
+    Login/captcha is reported as a state, never bypassed.  No greet/send control
+    is clicked here.
+    """
+    from browser.boss_readonly_adapter import BossReadonlyCdpAdapter
+    runtime = _runtime(request, ctx)
+    if runtime is None:
+        raise BrowserError("BROWSER_UNAVAILABLE",
+                           "no CDP runtime is configured for boss_readonly",
+                           recoverable=True)
+    health = runtime.manager.connect()
+    if not health.connected:
+        raise BrowserError("BROWSER_UNAVAILABLE",
+                           health.message or "browser did not connect",
+                           recoverable=True)
+    job_title = ""
+    if job_id and repository is not None:
+        job_title = repository.get_job(ctx, job_id)["title"]
+    stored = _store(request).setdefault(_key(ctx), {})
+    adapter = BossReadonlyCdpAdapter(runtime.manager, page_url=source.boss_url)
+    visible, page_url, page_title, iframe = 0, source.boss_url, "", False
+    error = None
+    try:
+        adapter.connect()
+        visible = len(adapter.list_cards(0, 100))
+        page_url = adapter._url or source.boss_url
+        page_title = runtime.manager.run(lambda: adapter._page.title())
+        iframe = True
+    except BrowserError as exc:
+        if exc.code not in ("AUTH_REQUIRED", "CAPTCHA_BLOCKED",
+                            "AUTH_OR_ANTI_BOT_BLOCKED"):
+            raise
+        error = exc
+    finally:
+        adapter.close()
+    stored.update({
+        "connected": True,
+        "job_id": job_id or stored.get("job_id", ""),
+        "job_title": job_title or stored.get("job_title", ""),
+        "page_url": page_url,
+        "page_title": page_title,
+        "iframe_detected": iframe,
+        "platform_job_id": "",
+        "filter_summary": "真实 BOSS 推荐页（只读；筛选标签需人工核对）",
+        "visible_cards": visible,
+        "checked_at": _now(),
+        "error_code": error.code if error else None,
+        "error_message": str(error)[:2000] if error else None,
+    })
+    return describe_state(request, ctx)
+
+
 def connect_session(request, ctx, *, job_id=None, repository=None) -> dict:
     source = request.app.state.browser_source
     stored = _store(request).setdefault(_key(ctx), {})
     if source.name == "disabled":
         raise BrowserError("UNSUPPORTED", "browser source is disabled", recoverable=False)
     if source.name == "boss_readonly":
-        stored.update(state="REAL_CONTRACT_UNVERIFIED")
-        return describe_state(request, ctx)
+        if not source.real_boss_dom_allowed:
+            stored.update(state="REAL_CONTRACT_UNVERIFIED")
+            return describe_state(request, ctx)
+        return _open_boss_readonly(request, ctx, source, job_id=job_id,
+                                   repository=repository)
     if source.name == "mock":
         stored.update(connected=True, checked_at=_now())
         if job_id and repository is not None:
@@ -159,11 +256,14 @@ def navigate_session(request, ctx, *, job_id: str, repository) -> dict:
     stored = _store(request).setdefault(_key(ctx), {})
     job = repository.get_job(ctx, job_id)
     if source.name == "boss_readonly":
-        raise BrowserError(
-            "REAL_CONTRACT_UNVERIFIED",
-            "real BOSS navigation/collection is disabled until an authorised "
-            "account and verified DOM/API contract exist",
-            recoverable=False)
+        if not source.real_boss_dom_allowed:
+            raise BrowserError(
+                "REAL_CONTRACT_UNVERIFIED",
+                "real BOSS navigation is locked: set BROWSER_ALLOW_REAL_BOSS=1 "
+                "and BROWSER_ALLOW_REAL_BOSS_DOM=1 for read-only joint debugging",
+                recoverable=False)
+        return _open_boss_readonly(request, ctx, source, job_id=job_id,
+                                   repository=repository)
     if source.name == "disabled":
         raise BrowserError("UNSUPPORTED", "browser source is disabled", recoverable=False)
     kind = _job_kind(job["title"])
@@ -213,11 +313,35 @@ def navigate_session(request, ctx, *, job_id: str, repository) -> dict:
 def precheck(request, ctx, *, job_id: str, repository, batch_id: str | None = None) -> dict:
     source = request.app.state.browser_source
     stored = _store(request).get(_key(ctx), {})
-    if source.name in ("disabled", "boss_readonly"):
-        raise BrowserError(
-            "REAL_CONTRACT_UNVERIFIED" if source.name == "boss_readonly" else "UNSUPPORTED",
-            "page precheck is unavailable for this browser source",
-            recoverable=False)
+    if source.name == "disabled":
+        raise BrowserError("UNSUPPORTED", "page precheck is unavailable for this browser source",
+                           recoverable=False)
+    if source.name == "boss_readonly":
+        if not source.real_boss_dom_allowed:
+            raise BrowserError(
+                "REAL_CONTRACT_UNVERIFIED",
+                "real BOSS precheck is locked until BROWSER_ALLOW_REAL_BOSS=1 "
+                "and BROWSER_ALLOW_REAL_BOSS_DOM=1",
+                recoverable=False)
+        from browser.boss_readonly_adapter import BossReadonlyCdpAdapter
+        runtime = _runtime(request, ctx)
+        if runtime is None:
+            raise BrowserError("BROWSER_UNAVAILABLE",
+                               "no CDP runtime for boss_readonly", recoverable=True)
+        probe = BossReadonlyCdpAdapter(
+            runtime.manager, page_url=source.boss_url).probe_state()
+        if probe == "LOGIN_REQUIRED":
+            raise BrowserError("AUTH_REQUIRED",
+                               "BOSS recruiter login is required; complete it manually",
+                               recoverable=True)
+        if probe == "CAPTCHA_BLOCKED":
+            raise BrowserError("CAPTCHA_BLOCKED",
+                               "BOSS security verification is blocking the page",
+                               recoverable=False)
+        if probe != "READY":
+            raise BrowserError("PAGE_UNAVAILABLE",
+                               "BOSS recommendation page is not ready",
+                               recoverable=True)
     if not stored.get("page_url"):
         raise BrowserError("PAGE_MISMATCH",
                            "no page has been opened for this session; call navigate first",
@@ -243,6 +367,8 @@ def precheck(request, ctx, *, job_id: str, repository, batch_id: str | None = No
             f"页面当前岗位为 {page_title!r}，与系统选中岗位 {job['title']!r} 不一致")
     if not stored.get("iframe_detected"):
         warnings.append("未检测到推荐页 iframe；页面可能尚未加载完成")
+    if source.name == "boss_readonly":
+        warnings.append("真实 BOSS 页面为只读联调模式；请人工核对当前页面岗位与筛选标签")
     confirmation = {}
     if batch_id:
         batch = repository.get_scan_batch(ctx, job_id, batch_id)

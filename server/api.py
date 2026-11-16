@@ -496,7 +496,8 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
         filter_summary=(body.filter_summary or ""), visible_cards=0)
     registry = getattr(request.app.state, "browser_session_registry", None)
     account = None
-    if registry is not None and request.app.state.browser_source.name != "boss_readonly":
+    if registry is not None and (request.app.state.browser_source.name == "cdp_mock"
+                                 or request.app.state.browser_source.real_boss_dom_allowed):
         account = registry.binding_for(ctx).browser_account_id
     cancel_key = (ctx.org_id, job_id, batch["batch_id"], ctx.user_id)
     request.app.state.browser_scan_cancel.discard(cancel_key)

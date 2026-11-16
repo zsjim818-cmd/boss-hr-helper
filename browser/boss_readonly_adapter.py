@@ -108,6 +108,25 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
         self._page = None
         self._frame = None
 
+    def probe_state(self) -> str:
+        """Read login/captcha state without clicking or waiting for cards."""
+        return self.manager.run_with_recovery(self._probe_state_impl)
+
+    def _probe_state_impl(self) -> str:
+        self._page = self.manager._open_page_impl(
+            self.page_url, self.page_url, navigate=False)
+        self._url = self._page.url
+        self._frame = self._page.frame_locator(FRAME_SELECTOR)
+        try:
+            self._preflight()
+        except BrowserError as exc:
+            if exc.code == "AUTH_REQUIRED":
+                return "LOGIN_REQUIRED"
+            if exc.code in ("CAPTCHA_BLOCKED", "AUTH_OR_ANTI_BOT_BLOCKED"):
+                return "CAPTCHA_BLOCKED"
+            raise
+        return "READY"
+
     def health(self) -> BrowserHealth:
         health = self.manager.health()
         return health.model_copy(update={"source": self.source,
@@ -126,7 +145,8 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
 
     # -------------------------------------------------------------------- dom
     def list_cards(self, page: int = 0, page_size: int = 20) -> list[CandidateCard]:
-        return self.manager.run(lambda: self._list_cards_impl(page, page_size))
+        return self.manager.run_with_recovery(
+            lambda: self._list_cards_impl(page, page_size))
 
     def _list_cards_impl(self, page: int, page_size: int) -> list[CandidateCard]:
         frame = self._require_frame()
@@ -163,7 +183,8 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
                                recoverable=True) from exc
 
     def open_detail(self, identity: str) -> CandidateDetail:
-        return self.manager.run(lambda: self._open_detail_impl(identity))
+        return self.manager.run_with_recovery(
+            lambda: self._open_detail_impl(identity))
 
     def _open_detail_impl(self, identity: str) -> CandidateDetail:
         frame = self._require_frame()
@@ -209,7 +230,7 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
     # --------------------------------------------------------------- greeting
     def send_greeting(self, identity: str, message: str, *,
                       dry_run: bool = True) -> GreetingOutcome:
-        return self.manager.run(
+        return self.manager.run_with_recovery(
             lambda: self._send_greeting_impl(identity, message, dry_run))
 
     def _send_greeting_impl(self, identity: str, message: str,

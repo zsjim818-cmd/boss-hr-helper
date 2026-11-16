@@ -91,14 +91,28 @@ def _browser_factory(source: BrowserSourceConfig, runtime: BrowserRuntime | None
             # Connection is owned by the HTTP route (single connect per request).
             return adapter
         if source.name == "boss_readonly":
-            # Real BOSS collection stays hard-disabled until an authorised HR
-            # account and a verified DOM/API contract exist.  A local flag alone
-            # must never open real collection.
-            raise BrowserError(
-                "REAL_CONTRACT_UNVERIFIED",
-                "boss_readonly real collection is disabled: no verified BOSS "
-                "DOM/API contract or authorised account. Use mock/cdp_mock.",
-                recoverable=False)
+            if not source.real_boss_dom_allowed:
+                # Real BOSS collection stays hard-disabled unless BOTH explicit
+                # switches are set. A local flag alone never opens real pages.
+                raise BrowserError(
+                    "REAL_CONTRACT_UNVERIFIED",
+                    "boss_readonly real DOM is locked: set BROWSER_ALLOW_REAL_BOSS=1 "
+                    "and BROWSER_ALLOW_REAL_BOSS_DOM=1 for read-only joint debugging",
+                    recoverable=False)
+            from browser.boss_readonly_adapter import BossReadonlyCdpAdapter
+            if registry is not None:
+                session = registry.runtime_for(context)
+                manager = session.manager
+                adapter = BossReadonlyCdpAdapter(manager, page_url=source.boss_url)
+                binding = registry.binding_for(context)
+                adapter.browser_account_id = binding.browser_account_id
+            elif runtime is not None:
+                adapter = BossReadonlyCdpAdapter(runtime.manager,
+                                                 page_url=source.boss_url)
+            else:  # pragma: no cover - create_app always supplies one
+                raise BrowserError("BROWSER_UNAVAILABLE",
+                                   "no CDP runtime is configured", recoverable=True)
+            return adapter
         raise BrowserError("UNSUPPORTED", f"browser source {source.name!r} is disabled",
                            recoverable=False)
     return factory

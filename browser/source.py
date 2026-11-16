@@ -22,6 +22,9 @@ DEFAULT_CDP_HOST = "127.0.0.1"
 DEFAULT_CDP_PORT = 9222
 # Explicit opt-in for real BOSS pages; without it boss_readonly is downgraded.
 REAL_BOSS_AUTH_ENV = "BROWSER_ALLOW_REAL_BOSS"
+# Second explicit opt-in: real DOM read-only joint debugging (never real send).
+REAL_BOSS_DOM_ENV = "BROWSER_ALLOW_REAL_BOSS_DOM"
+DEFAULT_BOSS_URL = "https://www.zhipin.com/web/chat/recommend"
 
 
 def default_source_for(mode: str) -> str:
@@ -40,6 +43,8 @@ class BrowserSourceConfig:
     name: str
     enabled: bool
     real_boss_allowed: bool = False
+    real_boss_dom_allowed: bool = False
+    boss_url: str = DEFAULT_BOSS_URL
     host: str = DEFAULT_CDP_HOST
     port: int = DEFAULT_CDP_PORT
     headless: bool = True
@@ -62,6 +67,8 @@ class BrowserSourceConfig:
             "source": self.name,
             "enabled": self.enabled,
             "real_boss_allowed": self.real_boss_allowed,
+            "real_boss_dom_allowed": self.real_boss_dom_allowed,
+            "boss_url": self.boss_url,
             "cdp_endpoint": self.endpoint if self.name in ("cdp_mock", "boss_readonly") else None,
             "headless": self.headless,
             "auto_launch": self.auto_launch,
@@ -116,6 +123,8 @@ def load_browser_source(mode: str, *, environ=None) -> BrowserSourceConfig:
 
     if raw == "boss_readonly":
         allowed = _flag(env, REAL_BOSS_AUTH_ENV, False)
+        dom_allowed = allowed and _flag(env, REAL_BOSS_DOM_ENV, False)
+        boss_url = (env.get("BROWSER_BOSS_URL") or DEFAULT_BOSS_URL).strip() or DEFAULT_BOSS_URL
         if not allowed:
             diagnostics.append(
                 f"boss_readonly requires explicit authorisation ({REAL_BOSS_AUTH_ENV}=1); "
@@ -125,11 +134,24 @@ def load_browser_source(mode: str, *, environ=None) -> BrowserSourceConfig:
                                        headless=headless, auto_launch=auto_launch,
                                        user_data_dir=profile, channel=channel,
                                        diagnostics=tuple(diagnostics))
+        if not dom_allowed:
+            diagnostics.append(
+                "read-only real BOSS source authorised: connect/page-list only; "
+                f"real DOM remains locked until {REAL_BOSS_DOM_ENV}=1")
+            return BrowserSourceConfig(name="boss_readonly", enabled=True,
+                                       real_boss_allowed=True,
+                                       real_boss_dom_allowed=False, boss_url=boss_url,
+                                       host=host, port=port,
+                                       headless=headless, auto_launch=auto_launch,
+                                       user_data_dir=profile, channel=channel,
+                                       diagnostics=tuple(diagnostics))
         diagnostics.append(
-            "read-only real BOSS source authorised: connect/page-list only; "
-            "real DOM contracts are unverified so scanning stays UNSUPPORTED")
+            "read-only real BOSS DOM joint-debugging authorised: "
+            f"target {boss_url}; real send remains physically disabled")
         return BrowserSourceConfig(name="boss_readonly", enabled=True,
-                                   real_boss_allowed=True, host=host, port=port,
+                                   real_boss_allowed=True,
+                                   real_boss_dom_allowed=True, boss_url=boss_url,
+                                   host=host, port=port,
                                    headless=headless, auto_launch=auto_launch,
                                    user_data_dir=profile, channel=channel,
                                    diagnostics=tuple(diagnostics))

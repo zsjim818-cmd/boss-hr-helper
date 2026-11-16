@@ -135,14 +135,16 @@ class BrowserSessionRegistry:
                 port = port if port is not None else persisted["cdp_port"]
                 profile_id = profile_id or str(persisted["profile_id"])
             if not account:
-                if self.source.name == "boss_readonly":
+                if (self.source.name == "boss_readonly"
+                        and not self.source.real_boss_dom_allowed):
                     raise BrowserError(
                         "BROWSER_ACCOUNT_UNMAPPED",
                         f"no BOSS browser account is mapped for {key[0]}:{key[1]}; "
                         "bind it in browser_account_bindings before real collection",
                         recoverable=False)
                 digest = hashlib.sha256(f"{key[0]}:{key[1]}".encode()).hexdigest()[:12]
-                account = f"mock-account-{digest}"
+                account = (f"boss-account-{digest}" if self.source.name == "boss_readonly"
+                           else f"mock-account-{digest}")
                 mapping_source = "simulated"
             if port is None:
                 port = self._allocate_port(key)
