@@ -53,6 +53,23 @@ class CandidateRepository(BaseRepository):
         return {}
 
     @staticmethod
+    def _has_candidate_deletions(conn):
+        return conn.execute("""SELECT 1 FROM sqlite_master
+            WHERE type='table' AND name='job_candidate_deletions'""").fetchone() is not None
+
+    @staticmethod
+    def _restore_deleted_candidate(conn, ctx, job_id, row):
+        """A successful re-scan/import resurrects a soft-deleted candidate."""
+        if not CandidateRepository._has_candidate_deletions(conn):
+            return
+        conn.execute("""DELETE FROM job_candidate_deletions
+            WHERE org_id=? AND job_id=? AND job_candidate_id IN (
+              SELECT job_candidate_id FROM job_candidates
+              WHERE org_id=? AND job_id=? AND candidate_id=?)""",
+                     (ctx.org_id, job_id, ctx.org_id, job_id,
+                      row["candidate_id"]))
+
+    @staticmethod
     def _ensure_manual_meta(resume, candidate_key):
         """Manual imports may omit platform metadata; synthesize the contract."""
         if not isinstance(resume, dict):
@@ -433,6 +450,7 @@ class CandidateRepository(BaseRepository):
                 row = dict(existing)
             snapshot = self._snapshot(conn, ctx, identifier, resume) if resume is not None else None
             acquisition = self._acquisition(conn, ctx, job_id, row, batch_id, snapshot, source, capture_id)
+            self._restore_deleted_candidate(conn, ctx, job_id, row)
             sealed = None
             if snapshot is not None and snapshot["is_scorable"]:
                 table = ("job_candidate_inputs_current"
