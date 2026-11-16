@@ -204,9 +204,13 @@
             <el-button size="small" type="danger" :loading="scoringDeep"
                        :disabled="!selectedCandidate" @click="score('deep_mode')">Deep 深评</el-button>
             <el-button size="small" type="success" plain :loading="batchScoring"
-                       :disabled="!candidates.length" @click="scoreBatch('fast_mode')">批量 Fast</el-button>
+                       :disabled="!candidates.length" @click="scoreBatch('fast_mode')">
+              批量 Fast{{ selectedCandidates.length ? ` (已选 ${selectedCandidates.length})` : '' }}
+            </el-button>
             <el-button size="small" type="danger" plain :loading="batchScoring"
-                       :disabled="!candidates.length" @click="scoreBatch('deep_mode')">批量 Deep</el-button>
+                       :disabled="!candidates.length" @click="scoreBatch('deep_mode')">
+              批量 Deep{{ selectedCandidates.length ? ` (已选 ${selectedCandidates.length})` : '' }}
+            </el-button>
             <el-tag v-if="task" :type="taskTagType">{{ task.status }}</el-tag>
           </el-space>
           <el-alert v-if="task?.error_type" type="error" show-icon :closable="false"
@@ -1174,12 +1178,31 @@ async function score(mode: ScoringMode) {
 
 async function scoreBatch(mode: ScoringMode) {
   if (!store.activeJobId) return
-  const targets = candidates.value.filter((item) => !item.latest_evaluation)
+  const epoch = store.dataEpoch
+  let targets: CandidateListItem[] = []
+  if (selectedCandidates.value.length) {
+    targets = [...selectedCandidates.value]
+  } else {
+    try {
+      const result = await api.listCandidates(store.activeJobId, {
+        limit: 200,
+        offset: 0,
+        batch_id: batch.value?.batch_id,
+        tab: tabParam.value
+      })
+      if (store.dataEpoch !== epoch) return
+      targets = result.items.filter((item) => !item.latest_evaluation)
+    } catch (error) {
+      ElMessage.error(errorText(error))
+      return
+    }
+  }
   if (!targets.length) {
-    ElMessage.info('当前没有未评分候选人')
+    ElMessage.info(selectedCandidates.value.length
+      ? '请选择需要评分的候选人'
+      : '当前批次没有未评分候选人')
     return
   }
-  const epoch = store.dataEpoch
   const summary = { success: 0, skipped: 0, failed: 0, failures: [] as Array<{ candidate_key: string; reason: string }> }
   batchScoring.value = true
   try {
@@ -1200,6 +1223,8 @@ async function scoreBatch(mode: ScoringMode) {
     if (store.dataEpoch === epoch) {
       batchResult.value = summary
       batchResultVisible.value = true
+      candidateTable.value?.clearSelection()
+      selectedCandidates.value = []
       await refreshCandidates()
     }
   } finally {
