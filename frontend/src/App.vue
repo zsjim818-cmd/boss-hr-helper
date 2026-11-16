@@ -1,6 +1,6 @@
 <template>
   <el-container style="min-height: 100vh;">
-    <el-aside width="230px" style="background-color: #001529; color: #fff; display: flex; flex-direction: column;">
+    <el-aside width="230px" style="background-color: #001529; color: #fff; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; align-self: flex-start; flex-shrink: 0; overflow-y: auto;">
       <div style="padding: 20px 16px; font-size: 17px; font-weight: 700; border-bottom: 1px solid #002140; display: flex; align-items: center; gap: 8px;">
         <el-icon :size="22" color="#00bebd"><Cpu /></el-icon>
         <span>Boss HR 智能筛选台</span>
