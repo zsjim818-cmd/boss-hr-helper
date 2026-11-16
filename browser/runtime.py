@@ -155,12 +155,54 @@ class CDPConnectionManager:
         return LaunchPlan(command=command, user_data_dir=self.user_data_dir, port=self.port)
 
     # ------------------------------------------------------------- thread bridge
+    @staticmethod
+    def _is_target_closed(exc: BaseException) -> bool:
+        """Playwright/Chromium stale-handle signatures worth one self-heal."""
+        message = str(exc).lower()
+        return any(token in message for token in (
+            "target page, context or browser has been closed",
+            "target closed",
+            "browser has been closed",
+            "context has been closed",
+            "page has been closed",
+            "browserclosederror",
+            "targetclosederror",
+            "failed to open a new tab",
+            "target.createtarget",
+            "protocol error (target.createtarget)",
+            "cannot create a new tab",
+        ))
+
     def run(self, function):
         """Execute ``function`` on the single CDP worker thread."""
         if self._closed:
             raise BrowserError("BROWSER_CLOSED", "browser runtime has been closed",
                                recoverable=False)
         return self._executor.submit(function).result()
+
+    def run_with_recovery(self, action, *, retries: int = 2):
+        """Run an action; on a stale CDP handle reconnect and retry.
+
+        First retry re-attaches to a live process.  If the handle is still
+        unusable (e.g. a headful Edge whose last window was closed and is now
+        shutting down), an owned browser is relaunched once and the action is
+        retried again.  External browsers are never terminated.
+        """
+        def wrapped():
+            attempt = 0
+            while True:
+                try:
+                    return action()
+                except Exception as exc:  # noqa: BLE001 - stale-handle normalisation
+                    if (attempt >= retries or self._closed
+                            or not self._is_target_closed(exc)):
+                        raise
+                    attempt += 1
+                    self._drop_connection_impl()
+                    if attempt > 1:
+                        self._restart_owned_impl()
+                    self._connect_impl()
+        return self.run(wrapped)
 
     # --------------------------------------------------------------------- cdp
     def connect(self) -> BrowserHealth:
@@ -170,6 +212,9 @@ class CDPConnectionManager:
         if self._browser is not None:
             try:
                 if self._browser.is_connected():
+                    # Touch contexts: a cached browser object can outlive its
+                    # default context in Edge after the last window is closed.
+                    list(self._browser.contexts)
                     return self._health_impl()
             except Exception:
                 self._browser = None
@@ -414,22 +459,55 @@ class CDPConnectionManager:
         """Open (or reuse) a tab whose URL starts with ``prefix``."""
         return self.run(lambda: self._open_page_impl(url, prefix or url))
 
-    def _open_page_impl(self, url: str, prefix: str, *, navigate: bool = True):
+    def page_for(self, url: str, *, prefix: str | None = None):
+        """Open/reuse a tab with stale-handle self-healing."""
+        return self.run_with_recovery(
+            lambda: self._open_page_impl(url, prefix or url))
+
+    def _require_browser_impl(self):
+        if self._closed:
+            raise BrowserError("BROWSER_CLOSED", "browser runtime has been closed",
+                               recoverable=False)
         if self._browser is None:
-            raise BrowserError("BROWSER_CLOSED", "not connected to a CDP browser",
-                               recoverable=True)
-        contexts = list(self._browser.contexts)
-        context = contexts[0] if contexts else self._browser.new_context()
-        for page in context.pages:
-            if page.url.startswith(prefix):
-                # A real BOSS tab may carry manually selected filters; only
-                # navigate when the caller explicitly asks for it.
-                if navigate:
+            self._connect_impl()
+        return self._browser
+
+    @staticmethod
+    def _page_usable(page) -> bool:
+        try:
+            return not page.is_closed()
+        except Exception:
+            return False
+
+    def _open_page_impl(self, url: str, prefix: str, *, navigate: bool = True):
+        browser = self._require_browser_impl()
+        contexts = list(browser.contexts)
+        # 1) Exact target already open: refresh it in place (idempotent).
+        for context in contexts:
+            for page in list(context.pages):
+                if not self._page_usable(page):
+                    continue
+                if page.url.startswith(prefix):
+                    if navigate:
+                        page.goto(url, wait_until="load", timeout=15_000)
+                    return page
+        # 2) Reuse the browser's own blank tab instead of creating a new one.
+        #    This is what turns the headful "about:blank" window into the Mock
+        #    recommendation page on the very first connect.
+        for context in contexts:
+            for page in list(context.pages):
+                if not self._page_usable(page):
+                    continue
+                if (page.url or "").strip().lower() in (
+                        "about:blank", "", "chrome://newtab/",
+                        "edge://newtab/", "chrome://new-tab-page/"):
                     page.goto(url, wait_until="load", timeout=15_000)
-                return page
+                    return page
+        context = contexts[0] if contexts else browser.new_context()
         page = context.new_page()
         page.goto(url, wait_until="load", timeout=15_000)
         return page
+
 
     # ---------------------------------------------------------------- lifecycle
     def close(self) -> None:
@@ -440,6 +518,51 @@ class CDPConnectionManager:
         finally:
             self._closed = True
             self._executor.shutdown(wait=True)
+
+    def _drop_connection_impl(self) -> None:
+        """Drop stale Playwright/Browser handles without killing our Edge.
+
+        Used by self-healing: the owned process (if any) stays alive so the next
+        ``_connect_impl`` can attach to the same CDP port again; external
+        browsers are never terminated.
+        """
+        browser, self._browser = self._browser, None
+        if browser is not None:
+            try:
+                browser.close()
+            except Exception:
+                pass
+        if self._playwright is not None:
+            try:
+                self._playwright.stop()
+            except Exception:
+                pass
+            self._playwright = None
+        self._profile_verified = False
+        # Keep _owned/_process: a process we launched may still be serving CDP.
+
+    def _restart_owned_impl(self) -> None:
+        """Terminate an owned Edge that can no longer create pages.
+
+        External browsers are left untouched; only a process this manager
+        launched is restarted so the next ``_connect_impl`` launches a clean
+        window/profile lock owner.
+        """
+        if not self._owned:
+            return
+        process, self._process = self._process, None
+        self._owned = False
+        if process is None or process.poll() is not None:
+            return
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:  # pragma: no cover - slow shutdown
+            process.kill()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                pass
 
     def _teardown_impl(self) -> None:
         browser, self._browser = self._browser, None

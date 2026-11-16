@@ -43,7 +43,9 @@ class CdpMockBossAdapter(BrowserAdapter):
                           greeting_confirm=self.greeting_confirm)
         self.page_url = self.manager.write_mock_page(html)
         try:
-            self._page = self.manager.open_page(self.page_url)
+            # Reuse the browser's existing blank tab when possible; recover once
+            # from a stale CDP Page/Context handle.
+            self._page = self.manager.page_for(self.page_url)
         except BrowserError:
             self._page = None
             raise
@@ -64,15 +66,38 @@ class CdpMockBossAdapter(BrowserAdapter):
                                          "page_url": self.page_url})
 
     # -------------------------------------------------------------------- dom
-    def _require_page(self):
-        if self._page is None:
+    def _ensure_page(self):
+        """Return a live, currently rendered Mock page (self-healing)."""
+        page = self._page
+        try:
+            if page is not None and not page.is_closed():
+                if not self.page_url or (page.url or "").startswith(self.page_url):
+                    return page
+        except Exception:
+            pass
+        if self.manager is None:
+            # Unit-test/fake page objects without a runtime cannot be reopened.
+            page = self._page
+            if page is not None:
+                return page
             raise BrowserError("BROWSER_CLOSED",
                                "Mock page is not open; call connect() first",
                                recoverable=True)
+        # Runs inside the CDP worker thread; do not call manager.run here.
+        self._page = self.manager._open_page_impl(self.page_url, self.page_url)
         return self._page
 
+    def _require_page(self):
+        page = self._ensure_page()
+        if page is None:
+            raise BrowserError("BROWSER_CLOSED",
+                               "Mock page is not open; call connect() first",
+                               recoverable=True)
+        return page
+
     def list_cards(self, page: int = 0, page_size: int = 20) -> list[CandidateCard]:
-        return self.manager.run(lambda: self._list_cards_impl(page, page_size))
+        return self.manager.run_with_recovery(
+            lambda: self._list_cards_impl(page, page_size))
 
     def _list_cards_impl(self, page: int, page_size: int) -> list[CandidateCard]:
         target = self._require_page()
@@ -108,7 +133,8 @@ class CdpMockBossAdapter(BrowserAdapter):
                                recoverable=True) from exc
 
     def open_detail(self, identity: str) -> CandidateDetail:
-        return self.manager.run(lambda: self._open_detail_impl(identity))
+        return self.manager.run_with_recovery(
+            lambda: self._open_detail_impl(identity))
 
     def _open_detail_impl(self, identity: str) -> CandidateDetail:
         target = self._require_page()
@@ -140,7 +166,7 @@ class CdpMockBossAdapter(BrowserAdapter):
 
     def send_greeting(self, identity: str, message: str, *,
                       dry_run: bool = True) -> GreetingOutcome:
-        return self.manager.run(
+        return self.manager.run_with_recovery(
             lambda: self._send_greeting_impl(identity, message, dry_run))
 
     def _send_greeting_impl(self, identity: str, message: str,

@@ -304,6 +304,9 @@ def run_browser():
         page.get_by_role("button", name="连接/召唤专用浏览器").click()
         page.wait_for_selector("text=READY", timeout=60000)
         check("browser session connected", page.locator("text=READY").count() > 0)
+        page.wait_for_timeout(600)
+        check("connect opens the recommend page directly",
+              page.locator("text=推荐牛人（CDP Mock）").count() > 0)
         page.get_by_role("button", name="打开/定位推荐页").click()
         page.wait_for_selector("text=页面岗位", timeout=60000)
         page.wait_for_timeout(800)

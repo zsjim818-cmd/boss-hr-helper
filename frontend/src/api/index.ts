@@ -157,7 +157,9 @@ export const api = {
 
   // local mock browser (mock/cdp_mock sources only; never a real BOSS send)
   browserSession: () => call<BrowserSession>(http.get('/browser/session')),
-  browserSessionConnect: () => call<BrowserSession>(http.post('/browser/session/connect')),
+  browserSessionConnect: (jobId?: string) =>
+    call<BrowserSession>(http.post('/browser/session/connect',
+                                   jobId ? { job_id: jobId } : {})),
   browserSessionNavigate: (jobId: string) =>
     call<BrowserSession>(http.post('/browser/session/navigate', { job_id: jobId })),
   browserPrecheck: (jobId: string, batchId?: string) =>

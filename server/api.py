@@ -26,7 +26,8 @@ from server.responses import (BatchOut, BrowserScanOut, BrowserScanStatusOut,
                               RankingOut, ReviewOut, ReviewsOut, RowOut,
                               RuntimeModeOut, ScoreStartOut, SemanticPrepareOut,
                               TaskOut, VersionOut)
-from server.schemas import (BrowserScanRequest, BrowserSessionNavigateRequest,
+from server.schemas import (BrowserScanRequest, BrowserSessionConnectRequest,
+                            BrowserSessionNavigateRequest,
                             CompilePolicyRequest, ConfirmDraftRequest,
                             ContactRequest, CreateJobRequest, CreateVersionRequest,
                             GreetingDryRunRequest, ImportCandidateRequest,
@@ -427,8 +428,10 @@ def browser_session(ctx=Depends(get_context), request: Request = None):
 
 
 @session_router.post("/session/connect")
-def browser_session_connect(ctx=Depends(get_context), request: Request = None):
-    return connect_session(request, ctx)
+def browser_session_connect(request: Request, ctx=Depends(get_context),
+                            body: BrowserSessionConnectRequest | None = None):
+    return connect_session(request, ctx, job_id=(body.job_id if body else None),
+                           repository=_repo(request))
 
 
 @session_router.post("/session/navigate")

@@ -111,11 +111,11 @@ def describe_state(request, ctx) -> dict:
 
 def _record_session_error(request, ctx, exc: BrowserError) -> None:
     stored = _store(request).setdefault(_key(ctx), {})
-    stored.update(adb_connected=False, error_code=exc.code,
+    stored.update(connected=False, error_code=exc.code,
                   error_message=str(exc)[:2000], checked_at=_now())
 
 
-def connect_session(request, ctx) -> dict:
+def connect_session(request, ctx, *, job_id=None, repository=None) -> dict:
     source = request.app.state.browser_source
     stored = _store(request).setdefault(_key(ctx), {})
     if source.name == "disabled":
@@ -125,6 +125,9 @@ def connect_session(request, ctx) -> dict:
         return describe_state(request, ctx)
     if source.name == "mock":
         stored.update(connected=True, checked_at=_now())
+        if job_id and repository is not None:
+            return navigate_session(request, ctx, job_id=job_id,
+                                    repository=repository)
         return describe_state(request, ctx)
     registry = request.app.state.browser_session_registry
     runtime = registry.runtime_for(ctx)
@@ -139,6 +142,15 @@ def connect_session(request, ctx) -> dict:
                            recoverable=True)
     stored.update(connected=True, checked_at=_now(),
                   error_code=None, error_message=None)
+    if job_id and repository is not None:
+        # One-click summon: turn the launched about:blank window into the Mock
+        # recommendation page instead of leaving a blank Edge window behind.
+        try:
+            return navigate_session(request, ctx, job_id=job_id,
+                                    repository=repository)
+        except BrowserError as exc:
+            _record_session_error(request, ctx, exc)
+            raise
     return describe_state(request, ctx)
 
 
@@ -161,6 +173,7 @@ def navigate_session(request, ctx, *, job_id: str, repository) -> dict:
         adapter = MockBossAdapter(cards, page_size=5)
         adapter.connect()
         visible = len(adapter.list_cards(0, 100))
+        adapter.close()
         page_url = f"mock://zhipin/recommend/{job_id}"
         page_title = f"{job['title']} · 推荐牛人（Mock）"
     else:
@@ -171,11 +184,13 @@ def navigate_session(request, ctx, *, job_id: str, repository) -> dict:
             cards)
         try:
             adapter.connect()
+            visible = len(adapter.list_cards(0, 100))
+            page_url = adapter.page_url
         except BrowserError as exc:
             _record_session_error(request, ctx, exc)
             raise
-        visible = len(adapter.list_cards(0, 100))
-        page_url = adapter.page_url
+        finally:
+            adapter.close()
         page_title = f"{job['title']} · 推荐牛人（CDP Mock）"
     stored.update({
         "adapter": adapter,
@@ -207,6 +222,17 @@ def precheck(request, ctx, *, job_id: str, repository, batch_id: str | None = No
         raise BrowserError("PAGE_MISMATCH",
                            "no page has been opened for this session; call navigate first",
                            recoverable=True)
+    if source.name == "cdp_mock":
+        # Precheck is read-only, but a manually closed tab must be healed here
+        # instead of reporting stale facts for a page that no longer exists.
+        registry = getattr(request.app.state, "browser_session_registry", None)
+        if registry is not None:
+            try:
+                registry.runtime_for(ctx).manager.page_for(
+                    stored["page_url"])
+            except BrowserError as exc:
+                _record_session_error(request, ctx, exc)
+                raise
     job = repository.get_job(ctx, job_id)
     page_job_id = stored.get("job_id", "")
     page_title = stored.get("job_title", "")

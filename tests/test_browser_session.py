@@ -196,5 +196,241 @@ class BrowserSessionDataTests(ApiCase):
             app.state.executor.shutdown(wait=True)
 
 
+"""Sprint 5 Batch 2.1: real Edge CDP page lifecycle regression."""
+import os
+import socket
+import tempfile
+import time
+import unittest
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from browser.runtime import BrowserRuntime, find_edge
+from browser.sessions import BrowserSessionRegistry
+from browser.source import BrowserSourceConfig
+from config.policy_compiler import JobPolicyCompiler
+from engine.policy_scoring_pipeline import PolicyScoringPipeline
+from server.app import create_app
+from tests.pipeline_support import (PipelineCase, RecordingReview,
+                                    RecordingSemantic, resume_for)
+from tests.policy_fixtures import offline_policy
+from tests.test_policy_compiler import RecordedCompilerClient
+
+EDGE_AVAILABLE = True
+try:
+    find_edge()
+    import playwright.sync_api  # noqa: F401
+except Exception:  # pragma: no cover - environment dependent
+    EDGE_AVAILABLE = False
+
+
+def _free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+@unittest.skipUnless(EDGE_AVAILABLE, "Playwright/Edge CDP unavailable")
+class CdpPageLifecycleTests(PipelineCase):
+    def setUp(self):
+        super().setUp()
+        self.job_version = self.publish_case(job_id="job")
+        self.directory = tempfile.TemporaryDirectory(
+            ignore_cleanup_errors=True, prefix="cdp_lifecycle_")
+        self.addCleanup(self.directory.cleanup)
+        headless = os.getenv("BROWSER_HEADLESS", "1").strip().lower() not in (
+            "0", "false", "no", "off")
+        self.source = BrowserSourceConfig(
+            name="cdp_mock", enabled=True, port=_free_port(),
+            user_data_dir=str(Path(self.directory.name) / "profile"),
+            headless=headless, auto_launch=True)
+        self.registry = BrowserSessionRegistry(
+            self.source,
+            profile_root=str(Path(self.directory.name) / "sessions"),
+            runtime_factory=lambda binding: BrowserRuntime(self.source),
+            store=self.repo)
+        self.addCleanup(self.registry.close)
+        self.app = create_app(
+            self.repo, mode="deterministic", browser_source=self.source,
+            browser_session_registry=self.registry,
+            compiler_factory=lambda: JobPolicyCompiler(
+                client=RecordedCompilerClient(offline_policy("java_backend")),
+                model_name="offline-api-compiler"),
+            pipeline_factory=lambda repository: PolicyScoringPipeline(
+                repository, semantic_service=RecordingSemantic(repository),
+                review_service=RecordingReview(repository)))
+        self.client = TestClient(self.app)
+        self.addCleanup(lambda: self.app.state.executor.shutdown(wait=True))
+        self.headers = {"X-Org-Id": "org", "X-User-Id": "owner"}
+
+    # ---------------------------------------------------------------- helpers
+    def _batch(self):
+        response = self.client.post("/api/jobs/job/batches",
+                                    headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()["batch_id"]
+
+    def _connect(self):
+        response = self.client.post(
+            "/api/browser/session/connect", headers=self.headers,
+            json={"job_id": "job"})
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()
+
+    def _navigate(self):
+        response = self.client.post(
+            "/api/browser/session/navigate", headers=self.headers,
+            json={"job_id": "job"})
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()
+
+    def _precheck(self, batch_id):
+        response = self.client.get(
+            f"/api/jobs/job/browser/precheck?batch_id={batch_id}",
+            headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()
+
+    def _scan(self, batch_id, key="lifecycle-scan"):
+        response = self.client.post(
+            f"/api/jobs/job/batches/{batch_id}/browser/scan",
+            headers=self.headers,
+            json={"pages": 1, "page_size": 5, "filters_confirmed": True})
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()
+
+    def _score(self, jcid):
+        started = self.client.post(
+            f"/api/jobs/job/candidates/{jcid}/score", headers=self.headers,
+            json={"scoring_mode": "deep_mode", "idempotency_key": "lifecycle"})
+        self.assertEqual(started.status_code, 200, started.text)
+        body = started.json()
+        if body.get("reused"):
+            return body["evaluation"]
+        deadline = time.time() + 20
+        while time.time() < deadline:
+            status = self.client.get(
+                f"/api/jobs/job/tasks/{body['task']['pipeline_task_id']}",
+                headers=self.headers).json()
+            if status["task"]["status"] == "SUCCEEDED":
+                return status["evaluation"]
+            if status["task"]["status"] == "FAILED":
+                self.fail(status)
+            time.sleep(0.05)
+        self.fail("pipeline task did not finish")
+
+    def _manager(self):
+        return self.registry.runtime_for(self.ctx).manager
+
+    def _mock_pages(self):
+        manager = self._manager()
+        return [page for page in manager.list_pages()
+                if "mock-pages" in page["url"]]
+
+    def _close_all_pages(self):
+        manager = self._manager()
+
+        def close_pages():
+            for context in list(manager._browser.contexts):
+                for page in list(context.pages):
+                    try:
+                        page.close()
+                    except Exception:
+                        pass
+        manager.run(close_pages)
+
+    # ----------------------------------------------------------------- tests
+    def test_connect_job_reuses_blank_tab_and_full_chain_is_stable(self):
+        state = self._connect()
+        self.assertEqual(state["state"], "READY")
+        self.assertTrue(state["page_url"].startswith("file://"))
+        self.assertNotIn("about:blank", state["page_url"])
+        self.assertTrue(state["iframe_detected"])
+        self.assertGreater(state["visible_cards"], 0)
+
+        # Repeated navigate is idempotent and keeps exactly one Mock page.
+        again = self._navigate()
+        self.assertEqual(again["page_url"], state["page_url"])
+        self.assertEqual(len(self._mock_pages()), 1)
+
+        batch_id = self._batch()
+        precheck = self._precheck(batch_id)
+        self.assertFalse(precheck["job_mismatch"])
+        scan = self._scan(batch_id)
+        self.assertEqual(scan["imported"], 3)
+
+        listing = self.client.get(
+            "/api/jobs/job/candidates", headers=self.headers,
+            params={"batch_id": batch_id}).json()
+        jcid = listing["items"][0]["job_candidate"]["job_candidate_id"]
+        resume = self.client.post(
+            f"/api/jobs/job/candidates/{jcid}/re-extract",
+            headers=self.headers, json={"batch_id": batch_id})
+        self.assertEqual(resume.status_code, 200, resume.text)
+        self.assertTrue(resume.json()["sealed"])
+
+        evaluation = self._score(jcid)
+        approved = self.client.post(
+            f"/api/jobs/job/evaluations/"
+            f"{evaluation['pipeline_evaluation_id']}/reviews",
+            headers=self.headers, json={"action": "APPROVE", "reason": "lifecycle"})
+        self.assertEqual(approved.status_code, 200, approved.text)
+        # Dry-Run must also self-heal after the tab was manually closed.
+        self._close_all_pages()
+        greeting = self.client.post(
+            f"/api/jobs/job/evaluations/"
+            f"{evaluation['pipeline_evaluation_id']}/greeting-dry-run",
+            headers=self.headers, json={"message": "hello"})
+        self.assertEqual(greeting.status_code, 200, greeting.text)
+        self.assertEqual(greeting.json()["state"], "DRY_RUN_READY")
+        self.assertFalse(greeting.json()["recorded"])
+        # Every step reused the same rendered Mock tab.
+        self.assertEqual(len(self._mock_pages()), 1)
+        session = self.client.get("/api/browser/session",
+                                  headers=self.headers).json()
+        self.assertEqual(session["page_url"], state["page_url"])
+
+    def test_closed_page_and_browser_disconnect_self_heal(self):
+        state = self._connect()
+        self._close_all_pages()
+        recovered = self._navigate()
+        self.assertEqual(recovered["state"], "READY")
+        self.assertTrue(recovered["page_url"].startswith("file://"))
+        self.assertGreaterEqual(len(self._mock_pages()), 1)
+
+        # Scan works after the page was closed under the cached handle.
+        batch_id = self._batch()
+        self._close_all_pages()
+        self._precheck(batch_id)  # read-only precheck heals the closed tab
+        self.assertGreaterEqual(len(self._mock_pages()), 1)
+        self._close_all_pages()
+        scan = self._scan(batch_id)
+        self.assertEqual(scan["imported"], 3)
+
+        # Simulate a CDP drop (browser handle closed) and navigate again.
+        manager = self._manager()
+        manager.run(lambda: manager._browser.close())
+        after_drop = self._navigate()
+        self.assertEqual(after_drop["state"], "READY")
+        self.assertTrue(after_drop["page_url"].startswith("file://"))
+        reopened = self.client.get(
+            f"/api/jobs/job/browser/precheck?batch_id={batch_id}",
+            headers=self.headers)
+        self.assertEqual(reopened.status_code, 200, reopened.text)
+
+        # A re-extract after another page close must also self-heal.
+        listing = self.client.get(
+            "/api/jobs/job/candidates", headers=self.headers,
+            params={"batch_id": batch_id}).json()
+        jcid = listing["items"][0]["job_candidate"]["job_candidate_id"]
+        self._close_all_pages()
+        resume = self.client.post(
+            f"/api/jobs/job/candidates/{jcid}/re-extract",
+            headers=self.headers, json={"batch_id": batch_id})
+        self.assertEqual(resume.status_code, 200, resume.text)
+        self.assertTrue(resume.json()["sealed"])
+
+
 if __name__ == "__main__":
     unittest.main()

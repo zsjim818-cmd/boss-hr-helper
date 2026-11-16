@@ -581,7 +581,7 @@ async function loadSession() {
 async function connectBrowser() {
   sessionLoading.value = true
   try {
-    session.value = await api.browserSessionConnect()
+    session.value = await api.browserSessionConnect(store.activeJobId || undefined)
     ElMessage.success('浏览器会话已连接')
     await loadSession()
   } catch (error) {
