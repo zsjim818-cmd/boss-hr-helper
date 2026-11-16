@@ -226,7 +226,7 @@ def diagnose_policy(policy, expected_input=None):
                 add("DUPLICATE_" + label + "_ID", "ERROR", f"{label} IDs must be unique", [key])
     sources = {"JD": policy.sources.jd_text, "HR": policy.sources.hr_requirements}
     preferred_words = re.compile(r"优先|加分|更佳|最好|preferred|nice\s+to\s+have|bonus", re.I)
-    explicit_required = re.compile(r"必须|必需|必备|要求|至少|不少于|不得|不接受|仅限|需具备|需要|must|required|minimum", re.I)
+    explicit_required = re.compile(r"必须|必需|必备|要求|至少|不少于|不得|不接受|仅限|需具备|需要|及以上|以上|及以下|以下|以内|不超过|不低于|不高于|封顶|must|required|minimum", re.I)
     for item in [*policy.requirements, *policy.requirement_groups]:
         key = getattr(item, "requirement_id", None) or item.group_id
         if item.source_type == "INFERENCE":
@@ -425,6 +425,24 @@ def validate_publishable_policy(policy_json, source_json=None, *, confirmed_requ
     if source_json is not None:
         expected = PolicyCompileInput.model_validate(source_json)
     return assert_publishable(policy_json, expected, confirmed_requirement_ids=confirmed_requirement_ids)
+
+
+def validate_sealed_policy(policy_json, source_json=None):
+    """Validate a version already sealed by confirm_draft + create_version.
+
+    HR acknowledgement is a property of the sealed version.  CONFIRM diagnostics
+    therefore remain visible in the policy payload but never block runtime
+    execution; only structural/source ERROR diagnostics are fatal.
+    """
+    policy = JobScoringPolicy.model_validate(policy_json)
+    expected = None
+    if source_json is not None:
+        expected = PolicyCompileInput.model_validate(source_json)
+    diagnostics = diagnose_policy(policy, expected)
+    blocking = [item for item in diagnostics if item.severity == "ERROR"]
+    if blocking:
+        raise PolicyNotPublishable(blocking)
+    return policy
 
 
 def validate_dynamic_assessment(policy, assessment):

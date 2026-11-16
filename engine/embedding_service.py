@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from time import perf_counter
 
-from config.policy_validation import validate_publishable_policy
+from config.policy_validation import validate_sealed_policy
 from schemas import ResumeData
 from schemas.job_policy import JobScoringPolicy
 from storage.repositories import NotFound
@@ -44,7 +44,7 @@ class PolicyEmbeddingService:
         if row["policy_schema_version"] != "job_scoring_policy_v1":
             raise ValueError("Stage 5 only supports confirmed generic JobScoringPolicy versions")
         policy = JobScoringPolicy.model_validate(json.loads(row["policy_json"]))
-        validate_publishable_policy(policy, json.loads(row["source_snapshot_json"]))
+        validate_sealed_policy(policy, json.loads(row["source_snapshot_json"]))
         return row, policy
 
     def prepare_policy(self, context, job_id, policy_id, policy_version):

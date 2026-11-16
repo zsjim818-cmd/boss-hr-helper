@@ -2,7 +2,8 @@
 import json
 
 from config.policy_compiler import CompilationError
-from config.policy_validation import VALIDATOR_VERSION, diagnose_policy, validate_publishable_policy
+from config.policy_validation import (VALIDATOR_VERSION, diagnose_policy,
+                                      validate_sealed_policy)
 from engine.policy_validator import validate_policy_quality
 from schemas.job_policy import JobScoringPolicy, PolicyCompileInput, PolicyProvenance
 
@@ -96,12 +97,7 @@ class PolicyCompilerService:
         source = json.loads(draft["source_json"])
         # The HR confirmation action acknowledges CONFIRM diagnostics for the
         # exact draft. ERROR diagnostics still block; quality gates publication.
-        parsed = JobScoringPolicy.model_validate(policy)
-        acknowledged = sorted(
-            {item.requirement_id for item in parsed.requirements}
-            | {item.group_id for item in parsed.requirement_groups})
-        validate_publishable_policy(policy, source,
-                                    confirmed_requirement_ids=acknowledged)
+        validate_sealed_policy(policy, source)
         # Allocation, source freezing and attestation share one transaction;
         # stale confirmations cannot leave an allocated partial version.
         version = self.repository.create_policy_version(context, job_id, policy,

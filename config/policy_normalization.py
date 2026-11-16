@@ -129,6 +129,52 @@ def normalization_diagnostics(policy):
     return diagnostics
 
 
+def _salary_period(text):
+    """Finite salary-period vocabulary; returns month by explicit default."""
+    value = unicodedata.normalize("NFKC", text or "").casefold()
+    for period, terms in (
+            ("year", ("年薪", "/年", "每年", "year", "annum")),
+            ("month", ("月薪", "/月", "每月", "month")),
+            ("day", ("日薪", "/天", "/日", "每天", "day")),
+            ("hour", ("时薪", "/时", "每小时", "hour"))):
+        if any(term in value for term in terms):
+            return period
+    return None
+
+
+def _normalize_salary_periods(result, diagnostics):
+    """Align salary predicate units with the explicit quote (default: month).
+
+    A compensation quote such as ``12K`` has no period marker.  v1 salary
+    predicates are monthly CNY K, so the safe ordinary interpretation is MONTH;
+    the requirement is marked reviewed instead of asking HR for a second round.
+    """
+    requirements = {item["requirement_id"]: item for item in result["requirements"]}
+    for condition in result["hard_filters"]:
+        if condition.get("field") != "expected_salary":
+            continue
+        requirement = requirements.get(condition.get("requirement_id"))
+        if requirement is None:
+            continue
+        detected = (_salary_period(requirement.get("source_text"))
+                    or _salary_period(requirement.get("label")))
+        target = detected or "month"
+        changed = condition.get("unit") != target
+        if changed:
+            condition["unit"] = target
+        if not detected and requirement.get("needs_confirmation"):
+            requirement["needs_confirmation"] = False
+            changed = True
+        if changed:
+            diagnostics.append({
+                "code": "NORMALIZED_SALARY_PERIOD", "severity": "WARNING",
+                "message": (f"Salary predicate unit normalized to {target.upper()}"
+                            + ("" if detected else " (explicit safe default)")),
+                "requirement_ids": [condition["requirement_id"]],
+            })
+
+
+
 def _unique_diagnostics(items):
     result = {}
     for item in items:
@@ -239,6 +285,8 @@ def normalize_policy(policy):
         diagnostics.append({"code": "NORMALIZED_POSITIVE_ANCHOR", "severity": "WARNING",
             "message": f"Added a dedicated POSITIVE anchor for {requirement_id!r}",
             "requirement_ids": [requirement_id]})
+    # Salary predicates default to MONTH when the quote carries no period marker.
+    _normalize_salary_periods(result, diagnostics)
     # Retained ambiguous/unsafe alternatives are explicit blockers, never guessed.
     interim = JobScoringPolicy.model_validate(result)
     diagnostics.extend(item.model_dump(mode="json") for item in normalization_diagnostics(interim))

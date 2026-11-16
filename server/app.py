@@ -19,6 +19,7 @@ from pydantic import ValidationError
 
 from config.policy_compiler import JobPolicyCompiler
 from config.policy_service import PolicyQualityBlocked
+from config.policy_validation import PolicyNotPublishable
 from engine.demo_models import MOCK_MODEL, DeterministicLLMClient, demo_tier3_response
 from engine.policy_llm_reviewer import PolicyReviewService
 from engine.policy_scoring_pipeline import PolicyScoringPipeline
@@ -251,6 +252,13 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
         return JSONResponse(status_code=409, content={
             "error_type": "ScanAlreadyRunning",
             "code": "SCAN_ALREADY_RUNNING", "message": str(exc)})
+
+    @app.exception_handler(PolicyNotPublishable)
+    def policy_not_publishable(request: Request, exc: PolicyNotPublishable):
+        return JSONResponse(status_code=409, content={
+            "error_type": "PolicyNotPublishable", "message": str(exc),
+            "diagnostics": [item.model_dump(mode="json")
+                            for item in exc.diagnostics]})
 
     @app.exception_handler(PolicyQualityBlocked)
     def quality_blocked(request: Request, exc: PolicyQualityBlocked):

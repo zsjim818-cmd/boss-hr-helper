@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import RLock
 import unicodedata
 
-from config.policy_validation import validate_publishable_policy
+from config.policy_validation import validate_sealed_policy
 from schemas.job_policy import JobScoringPolicy
 from schemas.prescreen import PrescreenExecutionProfile
 
@@ -150,7 +150,7 @@ class PolicyInterpreter:
                 self.cache_hits += 1
                 self._cache.move_to_end(key)
                 return existing
-        validate_publishable_policy(parsed, source_input)
+        validate_sealed_policy(parsed, source_input)
         requirements = {item.requirement_id: item for item in parsed.requirements}
         all_nodes = {*requirements, *(item.group_id for item in parsed.requirement_groups)}
         children = {member for group in parsed.requirement_groups for member in group.members}

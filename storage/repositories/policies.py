@@ -4,6 +4,19 @@ import json
 from .base import BaseRepository, check_snapshot, digest, json_dump, uid, utcnow
 
 
+def _has_blocking_diagnostics(raw_json) -> bool:
+    """Only ERROR diagnostics block; CONFIRM was acknowledged by HR confirmation."""
+    try:
+        items = json.loads(raw_json or "[]")
+    except (TypeError, ValueError):
+        return True
+    if not isinstance(items, list):
+        return True
+    return any(not isinstance(item, dict) or item.get("severity") == "ERROR"
+               for item in items)
+
+
+
 class PolicyRepository(BaseRepository):
     def create_execution_profile(self, context, profile_json, *, profile_id=None):
         check_snapshot(profile_json)
@@ -99,21 +112,15 @@ class PolicyRepository(BaseRepository):
                                  (context.org_id, job_id, source_draft_id))
                 if expected_draft_revision != draft["revision"] or draft["policy_json"] != json_dump(policy_json):
                     raise ValueError("Policy must match the explicitly selected draft revision")
-                if draft["diagnostics_json"] != "[]":
-                    raise ValueError("Resolve draft diagnostics before creating a publishable version")
+                if _has_blocking_diagnostics(draft["diagnostics_json"]):
+                    raise ValueError("Resolve blocking ERROR diagnostics before creating a publishable version")
                 source_draft_hash = draft["draft_hash"]
                 source_snapshot = json.loads(draft["source_json"])
             elif expected_draft_revision is not None:
                 raise ValueError("Draft revision requires source_draft_id")
             if generic:
-                from config.policy_validation import validate_publishable_policy
-                from schemas.job_policy import JobScoringPolicy
-                parsed = JobScoringPolicy.model_validate(policy_json)
-                acknowledged = sorted(
-                    {item.requirement_id for item in parsed.requirements}
-                    | {item.group_id for item in parsed.requirement_groups})
-                validate_publishable_policy(policy_json, source_snapshot,
-                                            confirmed_requirement_ids=acknowledged)
+                from config.policy_validation import validate_sealed_policy
+                validate_sealed_policy(policy_json, source_snapshot)
             if original_jd is None:
                 original_jd = source_snapshot.get("jd_text" if generic else "original_jd", job_target.get("raw_jd_text", ""))
             if hr_requirements is None:
@@ -163,7 +170,8 @@ class PolicyRepository(BaseRepository):
                 draft = self.one(connection, "SELECT * FROM policy_drafts WHERE org_id=? AND job_id=? AND draft_id=?",
                                  (context.org_id, job_id, policy["source_draft_id"]))
                 if (draft["revision"] != policy["draft_revision"] or draft["draft_hash"] != policy["source_draft_hash"]
-                        or draft["policy_json"] != policy["policy_json"] or draft["diagnostics_json"] != "[]"):
+                        or draft["policy_json"] != policy["policy_json"]
+                        or _has_blocking_diagnostics(draft["diagnostics_json"])):
                     raise ValueError("Draft changed or has unresolved diagnostics; confirmation is stale")
             connection.execute("""INSERT INTO policy_publications
                 (org_id,job_id,policy_id,policy_version,execution_profile_id,confirmation_hash,published_by)
