@@ -17,6 +17,7 @@ from browser.adapter import BrowserAdapter
 from browser.contracts import (BrowserError, BrowserHealth, CandidateCard,
                                CandidateDetail, GreetingOutcome)
 from browser.runtime import CDPConnectionManager
+from urllib.parse import urlsplit
 
 DEFAULT_BOSS_URL = "https://www.zhipin.com/web/chat/recommend"
 FRAME_SELECTOR = "iframe#recommendFrame"
@@ -42,6 +43,9 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
         self._page = None
         self._frame = None
         self._url = ""
+        host = (urlsplit(self.page_url).hostname or "").lower()
+        parts = host.split(".")
+        self._origin = ".".join(parts[-2:]) if len(parts) >= 2 else host
 
     # --------------------------------------------------------------- connect
     def connect(self) -> BrowserHealth:
@@ -64,7 +68,8 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
         return self.health()
 
     def _setup_page(self, url: str) -> None:
-        self._page = self.manager._open_page_impl(url, url, navigate=False)
+        self._page = self.manager._open_page_impl(
+            url, url, navigate=False, keep_origin=self._origin or None)
         self._url = self._page.url
         self._frame = self._page.frame_locator(FRAME_SELECTOR)
         self._preflight()
@@ -114,7 +119,8 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
 
     def _probe_state_impl(self) -> str:
         self._page = self.manager._open_page_impl(
-            self.page_url, self.page_url, navigate=False)
+            self.page_url, self.page_url, navigate=False,
+            keep_origin=self._origin or None)
         self._url = self._page.url
         self._frame = self._page.frame_locator(FRAME_SELECTOR)
         try:

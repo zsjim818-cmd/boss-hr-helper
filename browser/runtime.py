@@ -459,10 +459,25 @@ class CDPConnectionManager:
         """Open (or reuse) a tab whose URL starts with ``prefix``."""
         return self.run(lambda: self._open_page_impl(url, prefix or url))
 
-    def page_for(self, url: str, *, prefix: str | None = None):
+    def page_for(self, url: str, *, prefix: str | None = None,
+                 keep_origin: str | None = None):
         """Open/reuse a tab with stale-handle self-healing."""
         return self.run_with_recovery(
-            lambda: self._open_page_impl(url, prefix or url))
+            lambda: self._open_page_impl(url, prefix or url,
+                                         keep_origin=keep_origin))
+
+    @staticmethod
+    def _origin_of(url: str) -> str:
+        try:
+            return (urllib.parse.urlsplit(url).hostname or "").lower()
+        except ValueError:
+            return ""
+
+    @classmethod
+    def _same_origin(cls, page_url: str, origin: str) -> bool:
+        host = cls._origin_of(page_url)
+        origin = (origin or "").lower()
+        return bool(host and origin and (host == origin or host.endswith("." + origin)))
 
     def _require_browser_impl(self):
         if self._closed:
@@ -479,7 +494,8 @@ class CDPConnectionManager:
         except Exception:
             return False
 
-    def _open_page_impl(self, url: str, prefix: str, *, navigate: bool = True):
+    def _open_page_impl(self, url: str, prefix: str, *, navigate: bool = True,
+                        keep_origin: str | None = None):
         browser = self._require_browser_impl()
         contexts = list(browser.contexts)
         # 1) Exact target already open: refresh it in place (idempotent).
@@ -491,9 +507,16 @@ class CDPConnectionManager:
                     if navigate:
                         page.goto(url, wait_until="load", timeout=15_000)
                     return page
-        # 2) Reuse the browser's own blank tab instead of creating a new one.
-        #    This is what turns the headful "about:blank" window into the Mock
-        #    recommendation page on the very first connect.
+        # 2) A same-site page (login/captcha/recommend) is never refreshed
+        #    automatically: refreshing it breaks QR login and can loop forever.
+        if keep_origin and not navigate:
+            for context in contexts:
+                for page in list(context.pages):
+                    if not self._page_usable(page):
+                        continue
+                    if self._same_origin(page.url, keep_origin):
+                        return page
+        # 3) Reuse the browser's own blank tab instead of creating a new one.
         for context in contexts:
             for page in list(context.pages):
                 if not self._page_usable(page):

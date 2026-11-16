@@ -155,7 +155,8 @@ def _record_session_error(request, ctx, exc: BrowserError) -> None:
                   error_message=str(exc)[:2000], checked_at=_now())
 
 
-def _open_boss_readonly(request, ctx, source, *, job_id=None, repository=None) -> dict:
+def _open_boss_readonly(request, ctx, source, *, job_id=None, repository=None,
+                        navigate=False) -> dict:
     """Open the configured real BOSS page read-only and persist safe page facts.
 
     Login/captcha is reported as a state, never bypassed.  No greet/send control
@@ -179,6 +180,15 @@ def _open_boss_readonly(request, ctx, source, *, job_id=None, repository=None) -
     adapter = BossReadonlyCdpAdapter(runtime.manager, page_url=source.boss_url)
     visible, page_url, page_title, iframe = 0, source.boss_url, "", False
     error = None
+    if navigate:
+        try:
+            probe = adapter.probe_state()
+        except BrowserError:
+            probe = "DISCONNECTED"
+        if (probe == "READY"
+                and not (adapter._url or "").startswith(source.boss_url)):
+            runtime.manager.run(lambda: adapter._page.goto(
+                source.boss_url, wait_until="load", timeout=15_000))
     try:
         adapter.connect()
         visible = len(adapter.list_cards(0, 100))
@@ -263,7 +273,7 @@ def navigate_session(request, ctx, *, job_id: str, repository) -> dict:
                 "and BROWSER_ALLOW_REAL_BOSS_DOM=1 for read-only joint debugging",
                 recoverable=False)
         return _open_boss_readonly(request, ctx, source, job_id=job_id,
-                                   repository=repository)
+                                   repository=repository, navigate=True)
     if source.name == "disabled":
         raise BrowserError("UNSUPPORTED", "browser source is disabled", recoverable=False)
     kind = _job_kind(job["title"])
