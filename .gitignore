@@ -20,3 +20,6 @@ boss-true-img
 /reports/phase1_7_stage3/live/**/*.sqlite3
 /reports/phase1_7_stage3/live/**/*.sqlite3-wal
 /reports/phase1_7_stage3/live/**/*.sqlite3-shm
+/doc/
+/reports/
+/tests/
