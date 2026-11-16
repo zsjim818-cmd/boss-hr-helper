@@ -147,6 +147,17 @@ class CandidateRepository(BaseRepository):
             return self.one(conn, "SELECT * FROM job_candidate_inputs WHERE org_id=? AND job_id=? AND job_candidate_id=?",
                             (ctx.org_id, job_id, job_candidate_id))
 
+    def latest_resume_snapshot(self, ctx, job_id, job_candidate_id):
+        with self.read(ctx, job_id, "view") as conn:
+            candidate = self._job_candidate(conn, ctx, job_id, job_candidate_id)
+            row = conn.execute("""SELECT r.* FROM resume_snapshots r
+                JOIN candidate_acquisitions a ON a.org_id=r.org_id
+                  AND a.candidate_id=r.candidate_id AND a.resume_id=r.resume_id
+                WHERE r.org_id=? AND a.job_id=? AND a.job_candidate_id=?
+                ORDER BY a.captured_at DESC, r.captured_at DESC LIMIT 1""",
+                               (ctx.org_id, job_id, job_candidate_id)).fetchone()
+            return dict(row) if row is not None else None
+
     def get_resume_snapshot(self, ctx, job_id, job_candidate_id, resume_id):
         with self.read(ctx, job_id, "view") as conn:
             candidate = self._job_candidate(conn, ctx, job_id, job_candidate_id)

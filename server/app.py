@@ -30,7 +30,8 @@ from browser.runtime import BrowserRuntime
 from browser.sessions import BrowserSessionRegistry
 from browser.source import BrowserSourceConfig, load_browser_source
 from server.api import (browser_router, candidates_router, jobs_router,
-                        policies_router, reviews_router, scoring_router)
+                        policies_router, reviews_router, scoring_router,
+                        session_router)
 from server.auth import get_context, get_optional_context
 from server.demo_compiler import DemoJobPolicyCompiler
 from server.responses import RuntimeModeOut
@@ -171,11 +172,12 @@ def create_app(repository, *, mode=None, compiler_factory=None, pipeline_factory
     app.state.browser_adapter_factory = (
         browser_adapter_factory or _browser_factory(source, runtime, registry))
     app.state.browser_scan_results = {}
+    app.state.browser_scan_progress = {}
     app.state.browser_scan_cancel = set()
     app.state.executor = ThreadPoolExecutor(max_workers=max_workers)
 
     for router in (jobs_router, policies_router, candidates_router,
-                   scoring_router, reviews_router):
+                   scoring_router, reviews_router, session_router):
         app.include_router(router)
     if source.enabled:
         # Browser integration is independent of the model run mode; the Mock

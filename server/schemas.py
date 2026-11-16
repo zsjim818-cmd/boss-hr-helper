@@ -84,3 +84,8 @@ class BrowserScanRequest(ApiModel):
 
 class GreetingDryRunRequest(ApiModel):
     message: str = Field(default="您好，方便聊聊岗位机会吗？", min_length=1, max_length=500)
+
+
+class BrowserSessionNavigateRequest(ApiModel):
+    job_id: str | None = Field(default=None, max_length=200)
+    url: str | None = Field(default=None, max_length=2000)

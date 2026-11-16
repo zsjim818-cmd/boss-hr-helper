@@ -29,15 +29,39 @@ class CandidateListCollector:
                 pages: int = 3, page_size: int = 20,
                 expected_platform_job_id: str | None = None,
                 preview=None, max_details: int | None = None,
-                cancel_check=None, max_duration_seconds: float | None = None) -> CollectionReport:
+                cancel_check=None, max_duration_seconds: float | None = None,
+                progress_callback=None) -> CollectionReport:
         report = CollectionReport(job_id=job_id, batch_id=batch_id)
         seen: set[str] = set()
         started = time.monotonic()
         expected_platform = (expected_platform_job_id or "").strip() or None
 
+        def emit(stage: str) -> None:
+            if progress_callback is None:
+                return
+            try:
+                progress_callback({
+                    "stage": stage,
+                    "listed": report.listed,
+                    "collected": report.collected,
+                    "deduplicated": report.deduplicated,
+                    "preview_skipped": report.preview_skipped,
+                    "detail_attempted": report.detail_attempted,
+                    "detail_completed": report.detail_completed,
+                    "detail_partial": report.detail_partial,
+                    "imported": report.imported,
+                    "reused": report.reused,
+                    "failed": report.failed,
+                    "stop_reason": report.stop_reason,
+                    "pages_read": page + 1 if "page" in locals() else 0,
+                })
+            except Exception:
+                pass
+
         def timed_out() -> bool:
             return (max_duration_seconds is not None
                     and time.monotonic() - started >= max_duration_seconds)
+        emit("starting")
         for page in range(pages):
             if cancel_check is not None and cancel_check():
                 report.stop_reason = "CANCELLED"
@@ -65,6 +89,7 @@ class CandidateListCollector:
                     report.stop_reason = "PAGE_END"
                 break
             report.listed += len(cards)
+            emit("listing")
             stopped = False
             for card in cards:
                 if cancel_check is not None and cancel_check():
@@ -166,8 +191,10 @@ class CandidateListCollector:
                     "policy_version": acquired["job_candidate"]["policy_version"],
                     "completeness": resume.data_completeness,
                 })
+                emit("detail")
             if stopped:
                 break
         if not report.stop_reason:
             report.stop_reason = "MAX_PAGES"
+        emit("finished")
         return report

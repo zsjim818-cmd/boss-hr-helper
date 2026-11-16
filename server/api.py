@@ -4,6 +4,7 @@ All business logic is delegated to existing services and repositories; this
 module only translates HTTP to the trusted AccessContext and serialises results.
 """
 import json
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -15,6 +16,8 @@ from browser.contracts import BrowserError
 from engine.policy_validator import validate_policy_quality
 from schemas.job_policy import JobScoringPolicy
 from server.auth import get_context
+from server.browser_session import (connect_session, describe_state,
+                                    navigate_session, precheck)
 from server.responses import (BatchOut, BrowserScanOut, BrowserScanStatusOut,
                               CandidateDetailOut, CandidateListOut, CompileOut,
                               ConfirmOut, ContactSummaryOut, ContactsOut, DraftOut,
@@ -23,12 +26,12 @@ from server.responses import (BatchOut, BrowserScanOut, BrowserScanStatusOut,
                               RankingOut, ReviewOut, ReviewsOut, RowOut,
                               RuntimeModeOut, ScoreStartOut, SemanticPrepareOut,
                               TaskOut, VersionOut)
-from server.schemas import (BrowserScanRequest, CompilePolicyRequest,
-                            ConfirmDraftRequest, ContactRequest, CreateJobRequest,
-                            CreateVersionRequest, GreetingDryRunRequest,
-                            ImportCandidateRequest, PublishPolicyRequest,
-                            ReviewRequest, ScoreRequest, SemanticPrepareRequest,
-                            UpdateDraftRequest)
+from server.schemas import (BrowserScanRequest, BrowserSessionNavigateRequest,
+                            CompilePolicyRequest, ConfirmDraftRequest,
+                            ContactRequest, CreateJobRequest, CreateVersionRequest,
+                            GreetingDryRunRequest, ImportCandidateRequest,
+                            PublishPolicyRequest, ReviewRequest, ScoreRequest,
+                            SemanticPrepareRequest, UpdateDraftRequest)
 
 
 jobs_router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -167,6 +170,11 @@ def get_batch(job_id: str, batch_id: str, request: Request, ctx=Depends(get_cont
     return _row(_repo(request).get_scan_batch(ctx, job_id, batch_id))
 
 
+@candidates_router.get("/{job_id}/batches")
+def list_batches(job_id: str, request: Request, ctx=Depends(get_context), limit: int = 100):
+    return {"batches": _row(_repo(request).list_scan_batches(ctx, job_id, limit=limit))}
+
+
 @candidates_router.post("/{job_id}/batches/{batch_id}/candidates", response_model=ImportOut)
 def import_candidate(job_id: str, batch_id: str, body: ImportCandidateRequest,
                      request: Request, ctx=Depends(get_context)):
@@ -178,9 +186,10 @@ def import_candidate(job_id: str, batch_id: str, body: ImportCandidateRequest,
 @candidates_router.get("/{job_id}/candidates", response_model=CandidateListOut)
 def list_candidates(job_id: str, request: Request, ctx=Depends(get_context),
                     limit: int = 50, offset: int = 0, status: str | None = None,
-                    min_score: float | None = None):
+                    min_score: float | None = None, batch_id: str | None = None):
     result = _repo(request).list_job_candidates(
-        ctx, job_id, limit=limit, offset=offset, status=status, min_score=min_score)
+        ctx, job_id, limit=limit, offset=offset, status=status,
+        min_score=min_score, batch_id=batch_id)
     return {"total": result["total"], "items": _row(result["items"])}
 
 
@@ -196,6 +205,38 @@ def candidate_detail(job_id: str, job_candidate_id: str, request: Request,
             "evaluations": _row(history), "attempts": _row(attempts),
             "contact_summary": repo.pipeline_contact_summary(
                 ctx, job_id, job_candidate_id)}
+
+
+@candidates_router.get("/{job_id}/candidates/{job_candidate_id}/resume")
+def candidate_resume(job_id: str, job_candidate_id: str, request: Request,
+                     ctx=Depends(get_context)):
+    repo = _repo(request)
+    candidate = repo.get_job_candidate(ctx, job_id, job_candidate_id)
+    sealed = None
+    try:
+        sealed = repo.get_sealed_input(ctx, job_id, job_candidate_id)
+        snapshot = repo.get_resume_snapshot(
+            ctx, job_id, job_candidate_id, sealed["resume_id"])
+        is_sealed = True
+    except LookupError:
+        snapshot = repo.latest_resume_snapshot(ctx, job_id, job_candidate_id)
+        is_sealed = False
+    if snapshot is None:
+        raise HTTPException(status_code=404,
+                            detail="No resume snapshot exists for this candidate")
+    parsed = json.loads(snapshot["normalized_resume_json"])
+    if isinstance(parsed.get("_meta"), dict):
+        parsed["_meta"].pop("security_id", None)
+    return {
+        "job_candidate": _row(candidate),
+        "sealed": is_sealed,
+        "resume_id": snapshot["resume_id"],
+        "completeness": snapshot["completeness"],
+        "resume": _row(parsed),
+        "data_issues": json.loads(snapshot["data_issues_json"] or "[]"),
+        "collection_errors": json.loads(snapshot["collection_errors_json"] or "[]"),
+        "captured_at": snapshot["captured_at"],
+    }
 
 
 @candidates_router.get("/{job_id}/candidates/{job_candidate_id}/contact-summary",
@@ -270,8 +311,11 @@ def candidate_evaluations(job_id: str, job_candidate_id: str, request: Request,
 
 
 @scoring_router.get("/{job_id}/ranking", response_model=RankingOut)
-def ranking(job_id: str, request: Request, ctx=Depends(get_context), limit: int = 100):
-    return {"ranking": _row(_repo(request).job_candidate_ranking(ctx, job_id, limit=limit))}
+def ranking(job_id: str, request: Request, ctx=Depends(get_context), limit: int = 100,
+            batch_id: str | None = None, policy_version: int | None = None):
+    return {"ranking": _row(_repo(request).job_candidate_ranking(
+        ctx, job_id, limit=limit, batch_id=batch_id,
+        policy_version=policy_version))}
 
 
 @scoring_router.post("/{job_id}/semantic-prepare", response_model=SemanticPrepareOut)
@@ -298,6 +342,32 @@ def semantic_prepare(job_id: str, request: Request, ctx=Depends(get_context),
 
 # --------------------------------------------------------- local mock browser
 browser_router = APIRouter(prefix="/api/jobs", tags=["browser"])
+session_router = APIRouter(prefix="/api/browser", tags=["browser-session"])
+
+
+@session_router.get("/session")
+def browser_session(ctx=Depends(get_context), request: Request = None):
+    """Per-HR browser state machine; no other HR/org session is exposed."""
+    return describe_state(request, ctx)
+
+
+@session_router.post("/session/connect")
+def browser_session_connect(ctx=Depends(get_context), request: Request = None):
+    return connect_session(request, ctx)
+
+
+@session_router.post("/session/navigate")
+def browser_session_navigate(body: BrowserSessionNavigateRequest,
+                             ctx=Depends(get_context), request: Request = None):
+    if not body.job_id:
+        raise HTTPException(status_code=400, detail="job_id is required to navigate")
+    return navigate_session(request, ctx, job_id=body.job_id,
+                            repository=_repo(request))
+
+
+@browser_router.get("/{job_id}/browser/precheck")
+def browser_precheck(job_id: str, ctx=Depends(get_context), request: Request = None):
+    return precheck(request, ctx, job_id=job_id, repository=_repo(request))
 
 
 def _browser_adapter(request: Request, ctx, job_id):
@@ -334,6 +404,19 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
         account = registry.binding_for(ctx).browser_account_id
     cancel_key = (ctx.org_id, job_id, batch["batch_id"], ctx.user_id)
     request.app.state.browser_scan_cancel.discard(cancel_key)
+    progress = {"status": "RUNNING", "stage": "starting", "listed": 0,
+                "collected": 0, "deduplicated": 0, "preview_skipped": 0,
+                "detail_attempted": 0, "detail_completed": 0,
+                "detail_partial": 0, "imported": 0, "reused": 0,
+                "failed": 0, "pages_read": 0, "stop_reason": "",
+                "updated_at": time.time()}
+    request.app.state.browser_scan_progress[cancel_key] = progress
+
+    def progress_callback(update):
+        progress.update(update)
+        progress["status"] = "RUNNING"
+        progress["updated_at"] = time.time()
+
     run = repo.start_browser_scan(
         ctx, job_id, batch["batch_id"],
         source=request.app.state.browser_source.name, browser_account_id=account)
@@ -353,13 +436,28 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
             preview=preview,
             max_details=(body.max_details if body else 50),
             cancel_check=(lambda: cancel_key in request.app.state.browser_scan_cancel),
-            max_duration_seconds=(body.max_duration_seconds if body else 300))
+            max_duration_seconds=(body.max_duration_seconds if body else 300),
+            progress_callback=progress_callback)
     except BrowserError as exc:
+        progress.update({"status": "FAILED", "error_code": exc.code,
+                         "stage": "failed", "updated_at": time.time()})
         repo.finish_browser_scan(
             ctx, job_id, batch["batch_id"], status="FAILED", collected=0,
             imported=0, reused=0, failed=0, issues=[],
             error_code=exc.code, error_message=str(exc)[:2000],
             browser_account_id=account)
+        raise
+    except Exception as exc:  # noqa: BLE001 - never leave a RUNNING scan state
+        progress.update({"status": "FAILED", "error_code": "UNEXPECTED_STATE",
+                         "stage": "failed", "updated_at": time.time()})
+        try:
+            repo.finish_browser_scan(
+                ctx, job_id, batch["batch_id"], status="FAILED", collected=0,
+                imported=0, reused=0, failed=0, issues=[],
+                error_code="UNEXPECTED_STATE", error_message=str(exc)[:2000],
+                browser_account_id=account)
+        except Exception:
+            pass
         raise
     finally:
         if adapter is not None:
@@ -373,6 +471,8 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
                     "browser_account_id": getattr(adapter, "browser_account_id", account)})
     if report.stop_reason == "CANCELLED":
         request.app.state.browser_scan_cancel.discard(cancel_key)
+        progress.update({"status": "CANCELLED", "stage": "cancelled",
+                         "error_code": "CANCELLED", "updated_at": time.time()})
         repo.finish_browser_scan(
             ctx, job_id, batch["batch_id"], status="FAILED",
             collected=report.collected, imported=report.imported,
@@ -385,6 +485,8 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
     if report.collected == 0 and report.issues:
         # A fatal connection/DOM failure must not look like an empty page.
         first = report.issues[0]
+        progress.update({"status": "FAILED", "error_code": first.code,
+                         "stage": "failed", "updated_at": time.time()})
         repo.finish_browser_scan(
             ctx, job_id, batch["batch_id"], status="FAILED",
             collected=0, imported=0, reused=0, failed=report.failed,
@@ -394,6 +496,8 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
         raise BrowserError(first.code, first.message, recoverable=first.recoverable)
     if report.collected == 0:
         # An empty page is not proof that the account has zero candidates.
+        progress.update({"status": "FAILED", "error_code": "EMPTY_UNVERIFIED",
+                         "stage": "failed", "updated_at": time.time()})
         repo.finish_browser_scan(
             ctx, job_id, batch["batch_id"], status="FAILED",
             collected=0, imported=0, reused=0, failed=0, issues=[],
@@ -412,6 +516,11 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
         final_status = "COMPLETED_WITH_ERRORS"
         final_code = "MAX_DURATION"
         final_message = "scan stopped at the configured duration limit"
+    progress.update({
+        "status": "COMPLETED_WITH_ERRORS" if final_status.endswith("ERRORS")
+        else "COMPLETED",
+        "stage": "finished", "stop_reason": report.stop_reason,
+        "updated_at": time.time()})
     repo.finish_browser_scan(
         ctx, job_id, batch["batch_id"],
         status=final_status,
@@ -450,10 +559,14 @@ def browser_scan_status(job_id: str, batch_id: str, request: Request,
     status = run["status"]
     if status == "FAILED" and run["error_code"] == "CANCELLED":
         status = "CANCELLED"
+    progress = request.app.state.browser_scan_progress.get(
+        (ctx.org_id, job_id, batch["batch_id"], ctx.user_id))
     return {"status": status, "batch_id": run["batch_id"],
-            "source": run["source"], "result": result, "error": error}
+            "source": run["source"], "result": result, "error": error,
+            "progress": progress}
 
 
+@browser_router.post("/{job_id}/batches/{batch_id}/browser/cancel")
 @browser_router.post("/{job_id}/batches/{batch_id}/browser/scan/cancel")
 def browser_scan_cancel(job_id: str, batch_id: str, request: Request,
                         ctx=Depends(get_context)):

@@ -4,12 +4,21 @@
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <span style="font-weight: 600;">岗位候选人排名（最新正式结果，Deep 优先）</span>
-          <el-button size="small" @click="loadRanking">刷新</el-button>
+          <el-space>
+            <el-select v-model="batchId" size="small" style="width: 210px;"
+                       placeholder="全部批次" clearable @change="loadRanking">
+              <el-option v-for="item in batches" :key="item.batch_id"
+                         :label="`${item.batch_id.slice(0, 8)} · v${item.policy_version}`"
+                         :value="item.batch_id" />
+            </el-select>
+            <el-checkbox v-model="needsReviewOnly" @change="loadRanking">仅待核验</el-checkbox>
+            <el-button size="small" @click="loadRanking">刷新</el-button>
+          </el-space>
         </div>
       </template>
       <el-alert v-if="!store.activeJobId" type="info" :closable="false" show-icon
                 title="请先选择岗位" />
-      <el-table v-else :data="ranking" size="small" border highlight-current-row
+      <el-table v-else :data="displayedRanking" size="small" border highlight-current-row
                 @current-change="selectRanking">
         <el-table-column label="#" width="50">
           <template #default="{ $index }">{{ $index + 1 }}</template>
@@ -43,6 +52,7 @@
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <span style="font-weight: 600;">评估详情：{{ detail.job_candidate.candidate_key }}</span>
           <el-space v-if="detail" wrap>
+            <el-button size="small" @click="openResumeDrawer">查看简历详情</el-button>
             <el-button v-for="item in detail.evaluations" :key="item.pipeline_evaluation_id"
                        size="small"
                        :type="item.pipeline_evaluation_id === selectedEvaluationId ? 'primary' : 'default'"
@@ -244,6 +254,41 @@
         </el-tabs>
       </template>
     </el-card>
+
+    <el-drawer v-model="resumeDrawerVisible" size="55%"
+               :title="resumeDetail ? `简历详情：${resumeDetail.job_candidate.candidate_key}` : '简历详情'">
+      <template v-if="resumeDetail">
+        <el-descriptions :column="3" border size="small">
+          <el-descriptions-item label="姓名">{{ resumeDetail.resume.name || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="学历">{{ resumeDetail.resume.degree || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="年限">{{ resumeDetail.resume.work_years || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="完整度">{{ resumeDetail.completeness }}</el-descriptions-item>
+          <el-descriptions-item label="封存">{{ resumeDetail.sealed ? '已封存' : '未封存' }}</el-descriptions-item>
+          <el-descriptions-item label="期望">{{ resumeDetail.resume.expectation?.city || '—' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-divider content-position="left">工作经历</el-divider>
+        <el-table :data="resumeDetail.resume.work_experience || []" size="small" border>
+          <el-table-column prop="company" label="公司" width="160" />
+          <el-table-column prop="position" label="职位" width="140" />
+          <el-table-column prop="responsibility" label="职责/证据" />
+        </el-table>
+        <el-divider content-position="left">项目经历</el-divider>
+        <el-table :data="resumeDetail.resume.project_experience || []" size="small" border>
+          <el-table-column prop="name" label="项目" width="180" />
+          <el-table-column prop="role" label="角色" width="120" />
+          <el-table-column prop="description" label="描述" />
+        </el-table>
+        <el-divider content-position="left">教育背景</el-divider>
+        <el-table :data="resumeDetail.resume.education || []" size="small" border>
+          <el-table-column prop="school" label="学校" width="200" />
+          <el-table-column prop="degree" label="学历" width="120" />
+          <el-table-column prop="major" label="专业" />
+        </el-table>
+        <el-divider content-position="left">技能 / 采集元数据</el-divider>
+        <div>技能：{{ resumeDetail.resume.skills || '—' }}</div>
+        <pre style="white-space: pre-wrap; font-size: 12px;">{{ JSON.stringify(resumeDetail.resume._meta || {}, null, 2) }}</pre>
+      </template>
+    </el-drawer>
   </div>
 </template>
 
@@ -253,12 +298,17 @@ import { ElMessage } from 'element-plus'
 import { api, ApiError } from '@/api'
 import { captureScope, scopeValid } from '@/lib/requestGate'
 import { useAppStore } from '@/stores/useAppStore'
-import type { CandidateDetail, ContactAction, ContactSummary,
+import type { Batch, CandidateDetail, ContactAction, ContactSummary,
   GreetingDryRunResult, PipelineEvaluation, PreliminaryPayload, RankingEntry,
-  ReviewAction, ReviewEvent, Tier2Payload, Tier3Payload } from '@/types'
+  ResumeSnapshotResponse, ReviewAction, ReviewEvent, Tier2Payload, Tier3Payload } from '@/types'
 
 const store = useAppStore()
 const ranking = ref<RankingEntry[]>([])
+const batches = ref<Batch[]>([])
+const batchId = ref('')
+const needsReviewOnly = ref(false)
+const resumeDrawerVisible = ref(false)
+const resumeDetail = ref<ResumeSnapshotResponse | null>(null)
 const detail = ref<CandidateDetail | null>(null)
 const detailToken = ref(0)
 const selectedEvaluationId = ref('')
@@ -289,6 +339,10 @@ const activeEvaluation = computed<PipelineEvaluation | null>(() => {
   return detail.value.evaluations.find(
     (item) => item.pipeline_evaluation_id === selectedEvaluationId.value) || null
 })
+const displayedRanking = computed(() => {
+  if (!needsReviewOnly.value) return ranking.value
+  return ranking.value.filter((item) => item.scoring_status === 'NEEDS_REVIEW')
+})
 
 function statusTagType(status: string) {
   if (status === 'DEEP_SCORED') return 'success'
@@ -303,13 +357,41 @@ async function loadRanking() {
   const jobId = store.activeJobId
   const epoch = store.dataEpoch
   try {
-    const result = await api.ranking(jobId)
+    const result = await api.ranking(jobId, 100, {
+      batch_id: batchId.value || undefined,
+      policy_version: batchId.value
+        ? batches.value.find((item) => item.batch_id === batchId.value)?.policy_version
+        : undefined
+    })
     if (store.dataEpoch !== epoch || store.activeJobId !== jobId) return
     ranking.value = result.ranking
   } catch (error) {
     if (store.dataEpoch === epoch) {
       ElMessage.error(error instanceof ApiError ? error.message : String(error))
     }
+  }
+}
+
+async function loadBatches() {
+  if (!store.activeJobId) return
+  const jobId = store.activeJobId
+  try {
+    const result = await api.listBatches(jobId)
+    if (store.activeJobId !== jobId) return
+    batches.value = result.batches
+  } catch (error) {
+    ElMessage.error(error instanceof ApiError ? error.message : String(error))
+  }
+}
+
+async function openResumeDrawer() {
+  if (!store.activeJobId || !detail.value) return
+  try {
+    resumeDetail.value = await api.candidateResume(
+      store.activeJobId, detail.value.job_candidate.job_candidate_id)
+    resumeDrawerVisible.value = true
+  } catch (error) {
+    ElMessage.error(error instanceof ApiError ? error.message : String(error))
   }
 }
 
@@ -463,8 +545,22 @@ watch(() => store.dataEpoch, () => {
   reviewReason.value = ''
   greeting.value = null
   greetingError.value = ''
+  batches.value = []
+  batchId.value = ''
+  resumeDetail.value = null
+  resumeDrawerVisible.value = false
+  void loadBatches()
   void loadRanking()
 })
 
-onMounted(() => { void loadRanking() })
+watch(() => store.activeJobId, () => {
+  batchId.value = ''
+  void loadBatches()
+  void loadRanking()
+})
+
+onMounted(() => {
+  void loadBatches()
+  void loadRanking()
+})
 </script>

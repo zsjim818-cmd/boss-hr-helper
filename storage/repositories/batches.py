@@ -25,6 +25,15 @@ class ScanBatchRepository(BaseRepository):
             return self.one(conn, "SELECT * FROM scan_batches WHERE org_id=? AND job_id=? AND batch_id=?",
                             (ctx.org_id, job_id, batch_id))
 
+    def list_scan_batches(self, ctx, job_id, *, limit=100):
+        if type(limit) is not int or not 1 <= limit <= 500:
+            raise ValueError("limit must be an integer in [1,500]")
+        with self.read(ctx, job_id, "view") as conn:
+            return [dict(row) for row in conn.execute("""SELECT * FROM scan_batches
+                WHERE org_id=? AND job_id=?
+                ORDER BY started_at DESC, batch_id DESC LIMIT ?""",
+                                                    (ctx.org_id, job_id, limit))]
+
     def transition_scan_batch(self, ctx, job_id, batch_id, status):
         allowed = {"RUNNING": {"PAUSED", "COMPLETED", "CANCELLED"},
                    "PAUSED": {"RUNNING", "COMPLETED", "CANCELLED"}, "COMPLETED": set(), "CANCELLED": set()}

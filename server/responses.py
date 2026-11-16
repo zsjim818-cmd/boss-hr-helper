@@ -176,6 +176,7 @@ class BrowserScanStatusOut(Out):
     source: str | None = None
     result: dict[str, Any] | None = None
     error: dict[str, Any] | None = None
+    progress: dict[str, Any] | None = None
 
 
 class GreetingDryRunOut(Out):

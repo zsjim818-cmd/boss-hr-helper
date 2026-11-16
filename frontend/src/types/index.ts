@@ -208,6 +208,8 @@ export interface Batch {
   policy_version: number
   status: string
   created_at?: string
+  started_at?: string
+  completed_at?: string | null
 }
 
 // -------------------------------------------------------------- pipeline
@@ -324,11 +326,32 @@ export interface TaskResult {
 export interface CandidateListItem {
   job_candidate: JobCandidate
   latest_evaluation: PipelineEvaluation | null
+  resume_summary?: {
+    name?: string
+    degree?: string
+    work_years?: string
+    salary?: string
+    completeness?: string
+    resume_id?: string
+  }
+  sealed?: boolean
+  contact_summary?: ContactSummary
 }
 
 export interface CandidateList {
   total: number
   items: CandidateListItem[]
+}
+
+export interface ResumeSnapshotResponse {
+  job_candidate: JobCandidate
+  sealed: boolean
+  resume_id: string
+  completeness: string
+  resume: Record<string, any>
+  data_issues: Array<Record<string, any>>
+  collection_errors: string[]
+  captured_at: string
 }
 
 export interface CandidateDetail {
@@ -417,11 +440,73 @@ export interface BrowserScanResult {
 }
 
 export interface BrowserScanStatus {
-  status: 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'FAILED' | string
+  status: 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'FAILED' | 'CANCELLED' | string
   batch_id?: string | null
   source?: string | null
   result: BrowserScanResult | null
   error?: { code: string; message: string; recoverable?: boolean } | null
+  progress?: ScanProgress | null
+}
+
+export interface ScanProgress {
+  status: string
+  stage?: string
+  listed?: number
+  collected?: number
+  deduplicated?: number
+  preview_skipped?: number
+  detail_attempted?: number
+  detail_completed?: number
+  detail_partial?: number
+  imported?: number
+  reused?: number
+  failed?: number
+  pages_read?: number
+  stop_reason?: string
+  error_code?: string
+  updated_at?: number
+}
+
+export type BrowserSessionState =
+  'DISCONNECTED' | 'LOGIN_REQUIRED' | 'CAPTCHA_BLOCKED' | 'READY'
+  | 'REAL_CONTRACT_UNVERIFIED' | 'DISABLED'
+
+export interface BrowserSession {
+  state: BrowserSessionState
+  source: string
+  source_label: string
+  real_contract_verified: boolean
+  real_pii_storage_ready: boolean
+  profile_id?: string | null
+  connected: boolean
+  browser?: string
+  page_title: string
+  page_url: string
+  iframe_detected: boolean
+  platform_job_id: string
+  page_job_id: string
+  page_job_title: string
+  filter_summary: string
+  visible_cards: number
+  checked_at?: string | null
+  error_code?: string | null
+  error_message?: string | null
+  actions: string[]
+}
+
+export interface BrowserPrecheck {
+  job_id: string
+  job_title: string
+  page_job_id: string
+  page_job_title: string
+  platform_job_id: string
+  filter_summary: string
+  visible_cards: number
+  iframe_detected: boolean
+  job_mismatch: boolean
+  warnings: string[]
+  checked_at: string
+  source: string
 }
 
 export type GreetingDryRunState =

@@ -3,11 +3,12 @@
 // as a thrown ApiError so the UI can show a real error banner.
 import axios, { AxiosError } from 'axios'
 import type {
-  ApiErrorPayload, Batch, BrowserScanResult, BrowserScanStatus, CandidateDetail,
-  CandidateList, CompileResult, ContactAction, ContactEvent, ContactSummary,
-  GreetingDryRunResult, ImportResult, Job, JobScoringPolicy, PipelineEvaluation,
-  PolicyDraft, QualityReport, RankingEntry, ReviewAction, ReviewEvent, RuntimeMode,
-  ScoreStartResult, ScoringMode, SemanticPrepareResult, TaskResult,
+  ApiErrorPayload, Batch, BrowserPrecheck, BrowserScanResult, BrowserScanStatus,
+  BrowserSession, BrowserSessionState, CandidateDetail, CandidateList,
+  CompileResult, ContactAction, ContactEvent, ContactSummary, GreetingDryRunResult,
+  ImportResult, Job, JobScoringPolicy, PipelineEvaluation, PolicyDraft,
+  QualityReport, RankingEntry, ResumeSnapshotResponse, ReviewAction, ReviewEvent,
+  RuntimeMode, ScoreStartResult, ScoringMode, SemanticPrepareResult, TaskResult,
   LocalIdentity, PolicyDiagnostic
 } from '@/types'
 
@@ -107,14 +108,19 @@ export const api = {
 
   // batches / candidates
   createBatch: (jobId: string) => call<Batch>(http.post(`/jobs/${jobId}/batches`)),
+  listBatches: (jobId: string, limit = 100) =>
+    call<{ batches: Batch[] }>(http.get(`/jobs/${jobId}/batches`, { params: { limit } })),
   getBatch: (jobId: string, batchId: string) => call<Batch>(http.get(`/jobs/${jobId}/batches/${batchId}`)),
   importCandidate: (jobId: string, batchId: string,
                     payload: { candidate_key: string; resume: Record<string, unknown>; source?: string }) =>
     call<ImportResult>(http.post(`/jobs/${jobId}/batches/${batchId}/candidates`, payload)),
-  listCandidates: (jobId: string, params: { limit?: number; offset?: number; status?: string; min_score?: number }) =>
+  listCandidates: (jobId: string, params: { limit?: number; offset?: number; status?: string;
+                                            min_score?: number; batch_id?: string }) =>
     call<CandidateList>(http.get(`/jobs/${jobId}/candidates`, { params })),
   candidateDetail: (jobId: string, jobCandidateId: string) =>
     call<CandidateDetail>(http.get(`/jobs/${jobId}/candidates/${jobCandidateId}`)),
+  candidateResume: (jobId: string, jobCandidateId: string) =>
+    call<ResumeSnapshotResponse>(http.get(`/jobs/${jobId}/candidates/${jobCandidateId}/resume`)),
   candidateEvaluations: (jobId: string, jobCandidateId: string) =>
     call<{ latest: PipelineEvaluation | null; history: PipelineEvaluation[] }>(
       http.get(`/jobs/${jobId}/candidates/${jobCandidateId}/evaluations`)),
@@ -129,8 +135,9 @@ export const api = {
                  payload: { scoring_mode: ScoringMode; idempotency_key?: string; batch_id?: string }) =>
     call<ScoreStartResult>(http.post(`/jobs/${jobId}/candidates/${jobCandidateId}/score`, payload)),
   task: (jobId: string, taskId: string) => call<TaskResult>(http.get(`/jobs/${jobId}/tasks/${taskId}`)),
-  ranking: (jobId: string, limit = 100) =>
-    call<{ ranking: RankingEntry[] }>(http.get(`/jobs/${jobId}/ranking`, { params: { limit } })),
+  ranking: (jobId: string, limit = 100, params: { batch_id?: string; policy_version?: number } = {}) =>
+    call<{ ranking: RankingEntry[] }>(
+      http.get(`/jobs/${jobId}/ranking`, { params: { limit, ...params } })),
 
   // reviews / contact
   appendReview: (jobId: string, evaluationId: string, payload: { action: ReviewAction; reason: string }) =>
@@ -143,15 +150,25 @@ export const api = {
     call<{ events: ContactEvent[] }>(http.get(`/jobs/${jobId}/evaluations/${evaluationId}/contact`)),
 
   // local mock browser (mock/cdp_mock sources only; never a real BOSS send)
+  browserSession: () => call<BrowserSession>(http.get('/browser/session')),
+  browserSessionConnect: () => call<BrowserSession>(http.post('/browser/session/connect')),
+  browserSessionNavigate: (jobId: string) =>
+    call<BrowserSession>(http.post('/browser/session/navigate', { job_id: jobId })),
+  browserPrecheck: (jobId: string) =>
+    call<BrowserPrecheck>(http.get(`/jobs/${jobId}/browser/precheck`)),
   browserScan: (jobId: string, batchId: string,
                 payload: { pages?: number; page_size?: number;
                            platform_job_id?: string; filter_summary?: string;
-                           filters_confirmed?: boolean; max_details?: number }) =>
+                           filters_confirmed?: boolean; max_details?: number;
+                           max_duration_seconds?: number }) =>
     call<BrowserScanResult>(
       http.post(`/jobs/${jobId}/batches/${batchId}/browser/scan`, payload)),
   browserScanStatus: (jobId: string, batchId: string) =>
     call<BrowserScanStatus>(
       http.get(`/jobs/${jobId}/batches/${batchId}/browser/scan`)),
+  browserCancel: (jobId: string, batchId: string) =>
+    call<{ cancel_requested: boolean }>(
+      http.post(`/jobs/${jobId}/batches/${batchId}/browser/cancel`)),
   contactSummary: (jobId: string, jobCandidateId: string) =>
     call<ContactSummary>(
       http.get(`/jobs/${jobId}/candidates/${jobCandidateId}/contact-summary`)),

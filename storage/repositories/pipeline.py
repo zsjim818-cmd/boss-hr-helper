@@ -546,15 +546,27 @@ class PipelineRepository(BaseRepository):
 
     # ------------------------------------------------------- listing/ranking
     def list_job_candidates(self, ctx, job_id, *, limit=50, offset=0, status=None,
-                            min_score=None):
+                            min_score=None, batch_id=None):
         if type(limit) is not int or not 1 <= limit <= 200:
             raise ValueError("limit must be an integer in [1,200]")
         if type(offset) is not int or offset < 0:
             raise ValueError("offset must be a non-negative integer")
         with self.read(ctx, job_id, "view") as conn:
             self.one(conn, "SELECT 1 FROM jobs WHERE org_id=? AND job_id=?", (ctx.org_id, job_id))
-            rows = [dict(row) for row in conn.execute("""SELECT jc.* FROM job_candidates jc
-                WHERE jc.org_id=? AND jc.job_id=? ORDER BY jc.first_seen_at, jc.job_candidate_id""",
+            if batch_id is not None:
+                self.one(conn, """SELECT 1 FROM scan_batches
+                    WHERE org_id=? AND job_id=? AND batch_id=?""",
+                         (ctx.org_id, job_id, batch_id))
+                rows = [dict(row) for row in conn.execute("""SELECT jc.* FROM job_candidates jc
+                    WHERE jc.org_id=? AND jc.job_id=? AND EXISTS(
+                      SELECT 1 FROM candidate_acquisitions a
+                      WHERE a.org_id=jc.org_id AND a.job_id=jc.job_id
+                        AND a.job_candidate_id=jc.job_candidate_id AND a.batch_id=?)
+                    ORDER BY jc.first_seen_at, jc.job_candidate_id""",
+                                                          (ctx.org_id, job_id, batch_id))]
+            else:
+                rows = [dict(row) for row in conn.execute("""SELECT jc.* FROM job_candidates jc
+                    WHERE jc.org_id=? AND jc.job_id=? ORDER BY jc.first_seen_at, jc.job_candidate_id""",
                                                       (ctx.org_id, job_id))]
         results = {}
         for row in rows:
@@ -572,14 +584,60 @@ class PipelineRepository(BaseRepository):
                 continue
             if min_score is not None and ((latest or {}).get("total_score") or -1) < min_score:
                 continue
-            enriched.append({"job_candidate": row, "latest_evaluation": latest})
+            resume_summary = {}
+            sealed = False
+            try:
+                sealed_input = self.get_sealed_input(ctx, job_id, row["job_candidate_id"])
+                snapshot = self.get_resume_snapshot(
+                    ctx, job_id, row["job_candidate_id"], sealed_input["resume_id"])
+                sealed = True
+            except LookupError:
+                snapshot = self.latest_resume_snapshot(
+                    ctx, job_id, row["job_candidate_id"])
+            if snapshot is not None:
+                try:
+                    parsed = json.loads(snapshot["normalized_resume_json"])
+                except ValueError:
+                    parsed = {}
+                expectation = parsed.get("expectation")
+                salary = expectation.get("salary") if isinstance(expectation, dict) else None
+                resume_summary = {
+                    "name": parsed.get("name", ""),
+                    "degree": parsed.get("degree", ""),
+                    "work_years": parsed.get("work_years", ""),
+                    "salary": salary or "",
+                    "completeness": snapshot["completeness"],
+                    "resume_id": snapshot["resume_id"],
+                }
+            enriched.append({
+                "job_candidate": row,
+                "latest_evaluation": latest,
+                "resume_summary": resume_summary,
+                "sealed": sealed,
+                "contact_summary": self.pipeline_contact_summary(
+                    ctx, job_id, row["job_candidate_id"]),
+            })
         return {"total": len(enriched), "items": enriched[offset:offset + limit]}
 
-    def job_candidate_ranking(self, ctx, job_id, *, limit=100):
+    def job_candidate_ranking(self, ctx, job_id, *, limit=100,
+                              batch_id=None, policy_version=None):
         if type(limit) is not int or not 1 <= limit <= 500:
             raise ValueError("limit must be an integer in [1,500]")
         with self.read(ctx, job_id, "view") as conn:
             self.one(conn, "SELECT 1 FROM jobs WHERE org_id=? AND job_id=?", (ctx.org_id, job_id))
+            clauses, params = "", [ctx.org_id, job_id, ctx.org_id, job_id]
+            if batch_id is not None:
+                self.one(conn, """SELECT 1 FROM scan_batches
+                    WHERE org_id=? AND job_id=? AND batch_id=?""",
+                         (ctx.org_id, job_id, batch_id))
+                clauses += """ AND EXISTS(SELECT 1 FROM candidate_acquisitions a
+                    WHERE a.org_id=e.org_id AND a.job_id=e.job_id
+                      AND a.job_candidate_id=e.job_candidate_id AND a.batch_id=?)"""
+                params.append(batch_id)
+            if policy_version is not None:
+                clauses += " AND e.policy_version=?"
+                params.append(int(policy_version))
+            params.append(limit)
             rows = [dict(row) for row in conn.execute("""SELECT e.pipeline_evaluation_id,
                     e.job_candidate_id, e.candidate_key, e.total_score, e.scoring_status,
                     e.routing_suggestion, e.policy_id, e.policy_version, e.scoring_mode, e.created_at
@@ -592,7 +650,7 @@ class PipelineRepository(BaseRepository):
                       FROM pipeline_evaluations
                       WHERE org_id=? AND job_id=?) ranked
                   ON ranked.job_candidate_id=e.job_candidate_id AND ranked.rn=1
-                WHERE e.org_id=? AND e.job_id=?
+                WHERE e.org_id=? AND e.job_id=?""" + clauses + """
                 ORDER BY (e.total_score IS NULL), e.total_score DESC, e.created_at
-                LIMIT ?""", (ctx.org_id, job_id, ctx.org_id, job_id, limit))]
+                LIMIT ?""", params)]
         return rows
