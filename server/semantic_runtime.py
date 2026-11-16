@@ -108,6 +108,17 @@ class LiveSemanticRuntime:
         With a candidate only, the candidate's first binding is used.
         """
         from engine.embedding_service import PolicyEmbeddingService, ResumeEmbeddingService
+        # The HTTP API passes the job_candidates primary key.  Embedding assets
+        # are keyed by the candidates primary key, so resolve it explicitly and
+        # keep the legacy direct-candidate_id call working.
+        candidate_id = job_candidate_id
+        if job_candidate_id is not None:
+            from storage.repositories.base import NotFound
+            try:
+                candidate_id = self.repository.get_job_candidate(
+                    context, job_id, job_candidate_id)["candidate_id"]
+            except (NotFound, LookupError):
+                candidate_id = job_candidate_id
         if job_candidate_id is not None:
             expected = self.repository.expected_candidate_policy(
                 context, job_id, job_candidate_id, batch_id)
@@ -129,6 +140,7 @@ class LiveSemanticRuntime:
             result["candidate"] = ResumeEmbeddingService(
                 self.repository, self.model()).prepare_candidate(
                 context, job_id, job_candidate_id)
+            result["candidate_id"] = candidate_id
         return result
 
     def semantic_service(self, repository):
