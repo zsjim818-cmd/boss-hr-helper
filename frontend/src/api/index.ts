@@ -117,8 +117,16 @@ export const api = {
     call<ImportResult>(http.post(`/jobs/${jobId}/batches/${batchId}/candidates`, payload)),
   listCandidates: (jobId: string, params: { limit?: number; offset?: number; status?: string;
                                             min_score?: number; batch_id?: string;
-                                            tab?: string; keyword?: string }) =>
+                                            tab?: string; keyword?: string;
+                                            sort_by?: string; sort_order?: string }) =>
     call<CandidateList>(http.get(`/jobs/${jobId}/candidates`, { params })),
+  deleteCandidate: (jobId: string, jobCandidateId: string) =>
+    call<{ deleted: number; job_candidate_ids: string[] }>(
+      http.delete(`/jobs/${jobId}/candidates/${jobCandidateId}`)),
+  deleteCandidates: (jobId: string, jobCandidateIds: string[]) =>
+    call<{ deleted: number; job_candidate_ids: string[] }>(
+      http.post(`/jobs/${jobId}/candidates/batch-delete`,
+                { job_candidate_ids: jobCandidateIds })),
   candidateDetail: (jobId: string, jobCandidateId: string) =>
     call<CandidateDetail>(http.get(`/jobs/${jobId}/candidates/${jobCandidateId}`)),
   candidateResume: (jobId: string, jobCandidateId: string) =>
@@ -141,7 +149,8 @@ export const api = {
                  payload: { scoring_mode: ScoringMode; idempotency_key?: string; batch_id?: string }) =>
     call<ScoreStartResult>(http.post(`/jobs/${jobId}/candidates/${jobCandidateId}/score`, payload)),
   task: (jobId: string, taskId: string) => call<TaskResult>(http.get(`/jobs/${jobId}/tasks/${taskId}`)),
-  ranking: (jobId: string, limit = 100, params: { batch_id?: string; policy_version?: number } = {}) =>
+  ranking: (jobId: string, limit = 100, params: { batch_id?: string; policy_version?: number;
+                                                   sort_by?: string; sort_order?: string } = {}) =>
     call<{ ranking: RankingEntry[] }>(
       http.get(`/jobs/${jobId}/ranking`, { params: { limit, ...params } })),
 

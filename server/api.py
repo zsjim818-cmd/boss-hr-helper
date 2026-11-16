@@ -26,7 +26,8 @@ from server.responses import (BatchOut, BrowserScanOut, BrowserScanStatusOut,
                               RankingOut, ReviewOut, ReviewsOut, RowOut,
                               RuntimeModeOut, ScoreStartOut, SemanticPrepareOut,
                               TaskOut, VersionOut)
-from server.schemas import (BrowserScanRequest, BrowserSessionConnectRequest,
+from server.schemas import (BatchDeleteCandidatesRequest, BrowserScanRequest,
+                            BrowserSessionConnectRequest,
                             BrowserSessionNavigateRequest,
                             CompilePolicyRequest, ConfirmDraftRequest,
                             ContactRequest, CreateJobRequest, CreateVersionRequest,
@@ -189,16 +190,34 @@ def import_candidate(job_id: str, batch_id: str, body: ImportCandidateRequest,
 def list_candidates(job_id: str, request: Request, ctx=Depends(get_context),
                     limit: int = 50, offset: int = 0, status: str | None = None,
                     min_score: float | None = None, batch_id: str | None = None,
-                    tab: str | None = None, keyword: str | None = None):
+                    tab: str | None = None, keyword: str | None = None,
+                    sort_by: str | None = None, sort_order: str = "asc"):
     try:
         result = _repo(request).list_job_candidates(
             ctx, job_id, limit=limit, offset=offset, status=status,
-            min_score=min_score, batch_id=batch_id, tab=tab, keyword=keyword)
+            min_score=min_score, batch_id=batch_id, tab=tab, keyword=keyword,
+            sort_by=sort_by, sort_order=sort_order)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
     return {"total": result["total"], "items": _row(result["items"]),
             "tab": result["tab"], "keyword": result["keyword"],
             "limit": result["limit"], "offset": result["offset"]}
+
+
+@candidates_router.post("/{job_id}/candidates/batch-delete")
+def batch_delete_candidates(job_id: str, body: BatchDeleteCandidatesRequest,
+                            request: Request, ctx=Depends(get_context)):
+    try:
+        return _repo(request).delete_job_candidates(
+            ctx, job_id, body.job_candidate_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
+@candidates_router.delete("/{job_id}/candidates/{job_candidate_id}")
+def delete_candidate(job_id: str, job_candidate_id: str, request: Request,
+                     ctx=Depends(get_context)):
+    return _repo(request).delete_job_candidate(ctx, job_id, job_candidate_id)
 
 
 @candidates_router.get("/{job_id}/candidates/{job_candidate_id}", response_model=CandidateDetailOut)
@@ -388,10 +407,16 @@ def candidate_evaluations(job_id: str, job_candidate_id: str, request: Request,
 
 @scoring_router.get("/{job_id}/ranking", response_model=RankingOut)
 def ranking(job_id: str, request: Request, ctx=Depends(get_context), limit: int = 100,
-            batch_id: str | None = None, policy_version: int | None = None):
-    return {"ranking": _row(_repo(request).job_candidate_ranking(
-        ctx, job_id, limit=limit, batch_id=batch_id,
-        policy_version=policy_version))}
+            batch_id: str | None = None, policy_version: int | None = None,
+            sort_by: str | None = None, sort_order: str = "asc"):
+    try:
+        rows = _repo(request).job_candidate_ranking(
+            ctx, job_id, limit=limit, batch_id=batch_id,
+            policy_version=policy_version, sort_by=sort_by,
+            sort_order=sort_order)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return {"ranking": _row(rows)}
 
 
 @scoring_router.post("/{job_id}/semantic-prepare", response_model=SemanticPrepareOut)

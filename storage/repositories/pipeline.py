@@ -549,7 +549,8 @@ class PipelineRepository(BaseRepository):
                        "needs_review_or_failed", "review"}
 
     def list_job_candidates(self, ctx, job_id, *, limit=50, offset=0, status=None,
-                            min_score=None, batch_id=None, tab=None, keyword=None):
+                            min_score=None, batch_id=None, tab=None, keyword=None,
+                            sort_by=None, sort_order="asc"):
         """Server-side filtered/paginated candidate list.
 
         ``batch_id``, ``tab`` and ``keyword`` are pushed into SQL (including the
@@ -567,6 +568,30 @@ class PipelineRepository(BaseRepository):
         tab = None if tab in (None, "", "all") else ("needs_review_or_failed"
                                                     if tab == "review" else tab)
         keyword = (keyword or "").strip()
+        if sort_order not in ("asc", "desc"):
+            raise ValueError("sort_order must be asc or desc")
+        sort_columns = {
+            "candidate": "COALESCE(json_extract(r.normalized_resume_json,'$.name'), jc.candidate_key)",
+            "candidate_key": "jc.candidate_key",
+            "degree": ("CASE json_extract(r.normalized_resume_json,'$.degree') "
+                       "WHEN '博士' THEN 6 WHEN '硕士研究生' THEN 5 WHEN '硕士' THEN 5 "
+                       "WHEN '本科' THEN 4 WHEN '学士' THEN 4 WHEN '大专' THEN 3 "
+                       "WHEN '专科' THEN 2 ELSE 0 END"),
+            "work_years": ("CAST(REPLACE(REPLACE(COALESCE("
+                           "json_extract(r.normalized_resume_json,'$.work_years'),''),"
+                           "'年',''),'以上','') AS REAL)"),
+            "salary": ("CAST(COALESCE(json_extract("
+                       "r.normalized_resume_json,'$.expectation.salary'),'') AS REAL)"),
+            "sealed": "CASE WHEN v.job_candidate_id IS NULL THEN 0 ELSE 1 END",
+            "status": "COALESCE(le.scoring_status,'')",
+            "score": "COALESCE(le.total_score,-1)",
+            "routing": "COALESCE(le.routing_suggestion,'')",
+            "policy": "jc.policy_version",
+            "created_at": "jc.first_seen_at",
+        }
+        if sort_by not in (None, "", *sort_columns):
+            raise ValueError("Unsupported candidate sort field")
+        direction = "DESC" if sort_order == "desc" else "ASC"
         prefix = """WITH ranked AS (
             SELECT e.*, ROW_NUMBER() OVER (
                 PARTITION BY e.job_candidate_id
@@ -577,8 +602,17 @@ class PipelineRepository(BaseRepository):
         body = """
         FROM job_candidates jc
         LEFT JOIN latest le ON le.job_candidate_id=jc.job_candidate_id
+        LEFT JOIN job_candidate_input_versions v
+          ON v.org_id=jc.org_id AND v.job_id=jc.job_id
+         AND v.job_candidate_id=jc.job_candidate_id AND v.is_current=1
+        LEFT JOIN resume_snapshots r
+          ON r.org_id=jc.org_id AND r.candidate_id=jc.candidate_id
+         AND r.resume_id=v.resume_id
         WHERE jc.org_id=? AND jc.job_id=?"""
-        clauses, params = [], []
+        clauses, params = ["""
+            AND NOT EXISTS(SELECT 1 FROM job_candidate_deletions d
+              WHERE d.org_id=jc.org_id AND d.job_id=jc.job_id
+                AND d.job_candidate_id=jc.job_candidate_id)"""], []
         if batch_id is not None:
             with self.read(ctx, job_id, "view") as conn:
                 self.one(conn, """SELECT 1 FROM scan_batches
@@ -626,7 +660,11 @@ class PipelineRepository(BaseRepository):
                                  common).fetchone()[0]
             rows = [dict(row) for row in conn.execute(
                 prefix + " SELECT jc.* " + where_sql +
-                " ORDER BY jc.first_seen_at, jc.job_candidate_id LIMIT ? OFFSET ?",
+                (" ORDER BY " + sort_columns[sort_by] + " " + direction +
+                 ", jc.first_seen_at, jc.job_candidate_id"
+                 if sort_by else
+                 " ORDER BY jc.first_seen_at, jc.job_candidate_id") +
+                " LIMIT ? OFFSET ?",
                 common + [limit, offset])]
             results = {}
             if rows:
@@ -681,12 +719,30 @@ class PipelineRepository(BaseRepository):
                 "keyword": keyword, "limit": limit, "offset": offset}
 
     def job_candidate_ranking(self, ctx, job_id, *, limit=100,
-                              batch_id=None, policy_version=None):
+                              batch_id=None, policy_version=None,
+                              sort_by=None, sort_order="asc"):
         if type(limit) is not int or not 1 <= limit <= 500:
             raise ValueError("limit must be an integer in [1,500]")
+        if sort_order not in ("asc", "desc"):
+            raise ValueError("sort_order must be asc or desc")
+        sort_columns = {
+            "score": "e.total_score",
+            "candidate": "e.candidate_key",
+            "status": "e.scoring_status",
+            "routing": "e.routing_suggestion",
+            "policy": "e.policy_version",
+            "review_status": "review_status",
+            "contacted": "contacted",
+            "created_at": "e.created_at",
+        }
+        if sort_by not in (None, "", *sort_columns):
+            raise ValueError("Unsupported ranking sort field")
         with self.read(ctx, job_id, "view") as conn:
             self.one(conn, "SELECT 1 FROM jobs WHERE org_id=? AND job_id=?", (ctx.org_id, job_id))
-            clauses, params = "", [ctx.org_id, job_id, ctx.org_id, job_id]
+            clauses, params = """
+                AND NOT EXISTS(SELECT 1 FROM job_candidate_deletions d
+                  WHERE d.org_id=e.org_id AND d.job_id=e.job_id
+                    AND d.job_candidate_id=e.job_candidate_id)""", [ctx.org_id, job_id, ctx.org_id, job_id]
             if batch_id is not None:
                 self.one(conn, """SELECT 1 FROM scan_batches
                     WHERE org_id=? AND job_id=? AND batch_id=?""",
@@ -698,10 +754,25 @@ class PipelineRepository(BaseRepository):
             if policy_version is not None:
                 clauses += " AND e.policy_version=?"
                 params.append(int(policy_version))
+            if sort_by == "score":
+                order = ("ORDER BY (e.total_score IS NULL) ASC, e.total_score " +
+                         ("DESC" if sort_order == "desc" else "ASC"))
+            elif sort_by:
+                order = "ORDER BY " + sort_columns[sort_by] + " " + sort_order.upper()
+            else:
+                order = "ORDER BY (e.total_score IS NULL), e.total_score DESC, e.created_at"
             params.append(limit)
             rows = [dict(row) for row in conn.execute("""SELECT e.pipeline_evaluation_id,
                     e.job_candidate_id, e.candidate_key, e.total_score, e.scoring_status,
-                    e.routing_suggestion, e.policy_id, e.policy_version, e.scoring_mode, e.created_at
+                    e.routing_suggestion, e.policy_id, e.policy_version, e.scoring_mode, e.created_at,
+                    (SELECT r.action FROM pipeline_hr_reviews r
+                      WHERE r.org_id=e.org_id AND r.job_id=e.job_id
+                        AND r.pipeline_evaluation_id=e.pipeline_evaluation_id
+                      ORDER BY r.created_at DESC LIMIT 1) AS review_status,
+                    EXISTS(SELECT 1 FROM pipeline_contact_events c
+                      WHERE c.org_id=e.org_id AND c.job_id=e.job_id
+                        AND c.job_candidate_id=e.job_candidate_id
+                        AND c.action='CONTACTED') AS contacted
                 FROM pipeline_evaluations e
                 JOIN (SELECT job_candidate_id,
                              ROW_NUMBER() OVER (
@@ -711,7 +782,6 @@ class PipelineRepository(BaseRepository):
                       FROM pipeline_evaluations
                       WHERE org_id=? AND job_id=?) ranked
                   ON ranked.job_candidate_id=e.job_candidate_id AND ranked.rn=1
-                WHERE e.org_id=? AND e.job_id=?""" + clauses + """
-                ORDER BY (e.total_score IS NULL), e.total_score DESC, e.created_at
+                WHERE e.org_id=? AND e.job_id=?""" + clauses + " " + order + """
                 LIMIT ?""", params)]
         return rows

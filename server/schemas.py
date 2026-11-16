@@ -103,3 +103,7 @@ class PrecheckConfirmRequest(ApiModel):
 
 class ReextractRequest(ApiModel):
     batch_id: str | None = Field(default=None, max_length=200)
+
+
+class BatchDeleteCandidatesRequest(ApiModel):
+    job_candidate_ids: list[str] = Field(min_length=1, max_length=200)

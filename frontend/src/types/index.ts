@@ -380,6 +380,8 @@ export interface RankingEntry {
   policy_version: number
   scoring_mode: ScoringMode
   created_at: string
+  review_status?: string | null
+  contacted?: number | boolean
 }
 
 export interface ReviewEvent {

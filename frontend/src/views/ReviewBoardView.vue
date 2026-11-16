@@ -12,38 +12,61 @@
                          :value="item.batch_id" />
             </el-select>
             <el-checkbox v-model="needsReviewOnly" @change="loadRanking">仅待核验</el-checkbox>
+            <el-button v-if="selectedRanking.length" size="small" type="danger"
+                       @click="deleteSelectedRanking">
+              批量删除 (已选 {{ selectedRanking.length }})
+            </el-button>
             <el-button size="small" @click="loadRanking">刷新</el-button>
           </el-space>
         </div>
       </template>
       <el-alert v-if="!store.activeJobId" type="info" :closable="false" show-icon
                 title="请先选择岗位" />
-      <el-table v-else :data="displayedRanking" size="small" border highlight-current-row
-                @current-change="selectRanking">
+      <el-table v-else ref="rankingTable" :data="displayedRanking" size="small" border
+                highlight-current-row @current-change="selectRanking"
+                @selection-change="handleRankingSelection"
+                @sort-change="handleRankingSort">
+        <el-table-column type="selection" width="44" />
         <el-table-column label="#" width="50">
           <template #default="{ $index }">{{ $index + 1 }}</template>
         </el-table-column>
-        <el-table-column prop="candidate_key" label="候选人" width="180" />
-        <el-table-column label="状态" width="150">
+        <el-table-column prop="candidate_key" label="候选人" sortable="custom" width="180" />
+        <el-table-column label="状态" prop="status" sortable="custom" width="150">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.scoring_status)" size="small">
               {{ row.scoring_status }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="总分" width="90">
+        <el-table-column label="总分" prop="score" sortable="custom" width="90">
           <template #default="{ row }">{{ row.total_score ?? '—' }}</template>
         </el-table-column>
-        <el-table-column label="路由建议" width="160">
+        <el-table-column label="路由建议" prop="routing" sortable="custom" width="160">
           <template #default="{ row }">{{ row.routing_suggestion || '—' }}</template>
         </el-table-column>
         <el-table-column label="模式" width="100">
           <template #default="{ row }">{{ row.scoring_mode }}</template>
         </el-table-column>
-        <el-table-column label="Policy" width="110">
+        <el-table-column label="Policy" prop="policy" sortable="custom" width="110">
           <template #default="{ row }">v{{ row.policy_version }}</template>
         </el-table-column>
-        <el-table-column prop="created_at" label="时间" />
+        <el-table-column label="审核状态" prop="review_status" sortable="custom" width="120">
+          <template #default="{ row }">{{ row.review_status || '未审核' }}</template>
+        </el-table-column>
+        <el-table-column label="联系状态" prop="contacted" sortable="custom" width="110">
+          <template #default="{ row }">
+            {{ row.contacted ? '已联系' : '未联系' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="时间" sortable="custom" />
+        <el-table-column label="操作" width="140" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" link type="primary"
+                       @click.stop="selectRankingRow(row)">查看</el-button>
+            <el-button size="small" link type="danger"
+                       @click.stop="deleteRanking(row)">删除</el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
 
@@ -294,7 +317,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, ApiError } from '@/api'
 import { captureScope, scopeValid } from '@/lib/requestGate'
 import { useAppStore } from '@/stores/useAppStore'
@@ -304,6 +327,10 @@ import type { Batch, CandidateDetail, ContactAction, ContactSummary,
 
 const store = useAppStore()
 const ranking = ref<RankingEntry[]>([])
+const rankingTable = ref<any>(null)
+const selectedRanking = ref<RankingEntry[]>([])
+const rankingSortBy = ref('')
+const rankingSortOrder = ref<'asc' | 'desc'>('asc')
 const batches = ref<Batch[]>([])
 const batchId = ref('')
 const needsReviewOnly = ref(false)
@@ -352,6 +379,62 @@ function statusTagType(status: string) {
   return 'info'
 }
 
+function handleRankingSelection(rows: RankingEntry[]) {
+  selectedRanking.value = rows
+}
+
+function handleRankingSort({ prop, order }: { prop: string; order: string | null }) {
+  rankingSortBy.value = order ? prop : ''
+  rankingSortOrder.value = order === 'descending' ? 'desc' : 'asc'
+  void loadRanking()
+}
+
+function selectRankingRow(row: RankingEntry) {
+  void selectRanking(row)
+}
+
+async function deleteRankingRows(ids: string[]) {
+  if (!store.activeJobId || !ids.length) return
+  const jobId = store.activeJobId
+  try {
+    await ElMessageBox.confirm(
+      `确认删除选中的 ${ids.length} 名候选人？删除后排名与评分台中将不再显示。`,
+      '删除候选人', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
+  } catch {
+    return
+  }
+  const deletedCurrent = Boolean(
+    detail.value && ids.includes(detail.value.job_candidate.job_candidate_id))
+  try {
+    const result = await api.deleteCandidates(jobId, ids)
+    if (store.activeJobId !== jobId) return
+    ElMessage.success(`已删除 ${result.deleted} 名候选人`)
+    rankingTable.value?.clearSelection()
+    selectedRanking.value = []
+    await loadRanking()
+    if (deletedCurrent) {
+      const first = displayedRanking.value[0]
+      if (first) await selectRanking(first)
+      else {
+        detail.value = null
+        selectedEvaluationId.value = ''
+        reviews.value = []
+        contactSummary.value = null
+      }
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof ApiError ? error.message : String(error))
+  }
+}
+
+function deleteRanking(row: RankingEntry) {
+  void deleteRankingRows([row.job_candidate_id])
+}
+
+function deleteSelectedRanking() {
+  void deleteRankingRows(selectedRanking.value.map((item) => item.job_candidate_id))
+}
+
 async function loadRanking() {
   if (!store.activeJobId) return
   const jobId = store.activeJobId
@@ -361,7 +444,9 @@ async function loadRanking() {
       batch_id: batchId.value || undefined,
       policy_version: batchId.value
         ? batches.value.find((item) => item.batch_id === batchId.value)?.policy_version
-        : undefined
+        : undefined,
+      sort_by: rankingSortBy.value || undefined,
+      sort_order: rankingSortBy.value ? rankingSortOrder.value : undefined
     })
     if (store.dataEpoch !== epoch || store.activeJobId !== jobId) return
     ranking.value = result.ranking

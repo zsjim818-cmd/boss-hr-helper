@@ -229,6 +229,10 @@
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <span style="font-weight: 600;">批次候选人（共 {{ candidateTotal }} 人）</span>
               <el-space>
+                <el-button v-if="selectedCandidates.length" size="small" type="danger"
+                           @click="deleteSelectedCandidates">
+                  批量删除 (已选 {{ selectedCandidates.length }})
+                </el-button>
                 <el-input v-model="candidateKeyword" size="small" clearable
                           placeholder="搜索姓名 / candidate_key" style="width: 220px;"
                           @keyup.enter="searchCandidates" @clear="searchCandidates" />
@@ -247,30 +251,34 @@
             <el-radio-button value="deep">Deep</el-radio-button>
             <el-radio-button value="review">待核验/失败</el-radio-button>
           </el-radio-group>
-          <el-table :data="candidates" size="small" border highlight-current-row
-                    row-style="cursor: pointer;" @row-click="selectCandidate">
-            <el-table-column label="候选人" width="170">
+          <el-table ref="candidateTable" :data="candidates" size="small" border
+                    highlight-current-row row-style="cursor: pointer;"
+                    @row-click="selectCandidate" @selection-change="handleCandidateSelection"
+                    @sort-change="handleCandidateSort">
+            <el-table-column type="selection" width="44" />
+            <el-table-column label="候选人" prop="candidate" sortable="custom" width="170">
               <template #default="{ row }">
                 <div>{{ row.resume_summary?.name || row.job_candidate.candidate_key }}</div>
                 <div style="font-size: 11px; color: #909399;">{{ row.job_candidate.candidate_key }}</div>
               </template>
             </el-table-column>
-            <el-table-column label="学历/年限" width="110">
-              <template #default="{ row }">
-                {{ row.resume_summary?.degree || '—' }} / {{ row.resume_summary?.work_years || '—' }}
-              </template>
+            <el-table-column label="学历" prop="degree" sortable="custom" width="90">
+              <template #default="{ row }">{{ row.resume_summary?.degree || '—' }}</template>
             </el-table-column>
-            <el-table-column label="期望薪资" width="100">
+            <el-table-column label="年限" prop="work_years" sortable="custom" width="80">
+              <template #default="{ row }">{{ row.resume_summary?.work_years || '—' }}</template>
+            </el-table-column>
+            <el-table-column label="期望薪资" prop="salary" sortable="custom" width="100">
               <template #default="{ row }">{{ row.resume_summary?.salary || '—' }}</template>
             </el-table-column>
-            <el-table-column label="封存" width="70">
+            <el-table-column label="封存" prop="sealed" sortable="custom" width="80">
               <template #default="{ row }">
                 <el-tag :type="row.sealed ? 'success' : 'info'" size="small">
                   {{ row.sealed ? 'Sealed' : '未封存' }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="最新状态" width="140">
+            <el-table-column label="最新状态" prop="status" sortable="custom" width="140">
               <template #default="{ row }">
                 <el-tag v-if="row.latest_evaluation"
                         :type="statusTagType(row.latest_evaluation.scoring_status)" size="small">
@@ -279,13 +287,13 @@
                 <el-tag v-else type="info" size="small">未评分</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="总分" width="70">
+            <el-table-column label="总分" prop="score" sortable="custom" width="80">
               <template #default="{ row }">{{ row.latest_evaluation?.total_score ?? '—' }}</template>
             </el-table-column>
-            <el-table-column label="路由" width="120">
+            <el-table-column label="路由" prop="routing" sortable="custom" width="130">
               <template #default="{ row }">{{ row.latest_evaluation?.routing_suggestion || '—' }}</template>
             </el-table-column>
-            <el-table-column label="Policy" width="70">
+            <el-table-column label="Policy" prop="policy" sortable="custom" width="80">
               <template #default="{ row }">v{{ row.job_candidate.policy_version }}</template>
             </el-table-column>
             <el-table-column label="联系" width="100">
@@ -296,10 +304,12 @@
                 <el-tag v-else type="info" size="small">未联系</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="90" fixed="right">
+            <el-table-column label="操作" width="140" fixed="right">
               <template #default="{ row }">
                 <el-button size="small" link type="primary"
                            @click.stop="openResume(row)">查看简历</el-button>
+                <el-button size="small" link type="danger"
+                           @click.stop="deleteCandidate(row)">删除</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -387,7 +397,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api, ApiError } from '@/api'
 import { captureScope, scopeValid } from '@/lib/requestGate'
 import { useAppStore } from '@/stores/useAppStore'
@@ -437,6 +447,10 @@ const candidatePage = ref(1)
 const candidatePageSize = ref(10)
 const candidateTotal = ref(0)
 const candidateKeyword = ref('')
+const selectedCandidates = ref<CandidateListItem[]>([])
+const candidateTable = ref<any>(null)
+const candidateSortBy = ref('')
+const candidateSortOrder = ref<'asc' | 'desc'>('asc')
 const reextracting = ref(false)
 const resumeDrawerVisible = ref(false)
 const resumeDetail = ref<ResumeSnapshotResponse | null>(null)
@@ -1198,6 +1212,54 @@ function searchCandidates() {
   void refreshCandidates()
 }
 
+function handleCandidateSelection(rows: CandidateListItem[]) {
+  selectedCandidates.value = rows
+}
+
+function handleCandidateSort({ prop, order }: { prop: string; order: string | null }) {
+  candidateSortBy.value = order ? prop : ''
+  candidateSortOrder.value = order === 'descending' ? 'desc' : 'asc'
+  candidatePage.value = 1
+  void refreshCandidates()
+}
+
+async function deleteCandidates(jobCandidateIds: string[]) {
+  if (!store.activeJobId || !jobCandidateIds.length) return
+  const jobId = store.activeJobId
+  try {
+    await ElMessageBox.confirm(
+      `确认删除选中的 ${jobCandidateIds.length} 名候选人？删除后列表与排名中将不再显示。`,
+      '删除候选人', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
+  } catch {
+    return
+  }
+  try {
+    const result = await api.deleteCandidates(jobId, jobCandidateIds)
+    if (store.activeJobId !== jobId) return
+    ElMessage.success(`已删除 ${result.deleted} 名候选人`)
+    candidateTable.value?.clearSelection()
+    selectedCandidates.value = []
+    if (selectedCandidate.value
+        && jobCandidateIds.includes(selectedCandidate.value.job_candidate.job_candidate_id)) {
+      selectedCandidate.value = null
+      evaluation.value = null
+      task.value = null
+    }
+    await refreshCandidates()
+  } catch (error) {
+    ElMessage.error(errorText(error))
+  }
+}
+
+function deleteCandidate(row: CandidateListItem) {
+  void deleteCandidates([row.job_candidate.job_candidate_id])
+}
+
+function deleteSelectedCandidates() {
+  void deleteCandidates(selectedCandidates.value.map(
+    (item) => item.job_candidate.job_candidate_id))
+}
+
 async function refreshCandidates() {
   if (!store.activeJobId) return
   const jobId = store.activeJobId
@@ -1209,7 +1271,9 @@ async function refreshCandidates() {
       offset: (page - 1) * candidatePageSize.value,
       batch_id: batch.value?.batch_id,
       tab: tabParam.value,
-      keyword: candidateKeyword.value.trim() || undefined
+      keyword: candidateKeyword.value.trim() || undefined,
+      sort_by: candidateSortBy.value || undefined,
+      sort_order: candidateSortBy.value ? candidateSortOrder.value : undefined
     })
     if (store.dataEpoch !== epoch || store.activeJobId !== jobId) return
     candidates.value = result.items

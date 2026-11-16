@@ -156,6 +156,34 @@ class CandidateRepository(BaseRepository):
             self.audit(conn, ctx, "candidate.created", identifier, {"job_id": job_id})
             return self.one(conn, "SELECT * FROM candidates WHERE org_id=? AND candidate_id=?", (ctx.org_id, identifier))
 
+    def delete_job_candidate(self, ctx, job_id, job_candidate_id):
+        return self.delete_job_candidates(ctx, job_id, [job_candidate_id])
+
+    def delete_job_candidates(self, ctx, job_id, job_candidate_ids):
+        if not isinstance(job_candidate_ids, (list, tuple)) or not job_candidate_ids:
+            raise ValueError("job_candidate_ids must be a non-empty list")
+        if len(job_candidate_ids) > 200:
+            raise ValueError("At most 200 candidates can be deleted at once")
+        identifiers = []
+        for value in job_candidate_ids:
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError("job_candidate_ids must contain non-empty strings")
+            if value not in identifiers:
+                identifiers.append(value)
+        with self.tx(ctx, job_id, "edit") as conn:
+            deleted = 0
+            for job_candidate_id in identifiers:
+                self._job_candidate(conn, ctx, job_id, job_candidate_id)
+                cursor = conn.execute("""INSERT OR IGNORE INTO job_candidate_deletions
+                    (org_id,job_id,job_candidate_id,deleted_by)
+                    VALUES(?,?,?,?)""",
+                                      (ctx.org_id, job_id, job_candidate_id, ctx.user_id))
+                deleted += max(0, cursor.rowcount)
+            self.audit(conn, ctx, "candidate.deleted", identifiers[0],
+                       {"job_id": job_id, "job_candidate_ids": identifiers,
+                        "deleted": deleted})
+            return {"deleted": deleted, "job_candidate_ids": identifiers}
+
     def get_job_candidate(self, ctx, job_id, job_candidate_id):
         with self.read(ctx, job_id, "view") as conn:
             return self._job_candidate(conn, ctx, job_id, job_candidate_id)
