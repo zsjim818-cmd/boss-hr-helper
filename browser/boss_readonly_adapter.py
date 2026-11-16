@@ -20,6 +20,10 @@ from browser.runtime import CDPConnectionManager
 from urllib.parse import urlsplit
 
 DEFAULT_BOSS_URL = "https://www.zhipin.com/web/chat/recommend"
+BOSS_HOME_URL = "https://www.zhipin.com/"
+AUTH_URL_MARKERS = ("/web/user", "/zppassport", "login", "ka=bticket")
+TICKET_URL_MARKERS = ("ka=bticket", "logout?source=ticket")
+LOGIN_MESSAGE = "当前处于 BOSS 登录页，请先在浏览器中扫码登录招聘端账号"
 FRAME_SELECTOR = "iframe#recommendFrame"
 CARD_SELECTOR = ".job-card-box"
 DETAIL_PANEL = "#detail-panel"
@@ -46,6 +50,7 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
         host = (urlsplit(self.page_url).hostname or "").lower()
         parts = host.split(".")
         self._origin = ".".join(parts[-2:]) if len(parts) >= 2 else host
+        self._ticket_recovered = False
 
     # --------------------------------------------------------------- connect
     def connect(self) -> BrowserHealth:
@@ -67,10 +72,30 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
                                recoverable=True) from exc
         return self.health()
 
+    def _guard_page(self) -> None:
+        """Fail fast on login/ticket URLs instead of waiting for the iframe."""
+        page = self._page
+        if page is None:
+            raise BrowserError("BROWSER_CLOSED",
+                               "BOSS page is not open; call connect() first",
+                               recoverable=True)
+        url = (page.url or "").lower()
+        if any(marker in url for marker in TICKET_URL_MARKERS):
+            if not self._ticket_recovered:
+                self._ticket_recovered = True
+                page.goto(BOSS_HOME_URL, wait_until="domcontentloaded",
+                          timeout=15_000)
+                url = (page.url or "").lower()
+            raise BrowserError("AUTH_REQUIRED", LOGIN_MESSAGE, recoverable=True)
+        if (any(marker in url for marker in AUTH_URL_MARKERS)
+                or urlsplit(page.url or "").path in ("", "/")):
+            raise BrowserError("AUTH_REQUIRED", LOGIN_MESSAGE, recoverable=True)
+
     def _setup_page(self, url: str) -> None:
         self._page = self.manager._open_page_impl(
             url, url, navigate=False, keep_origin=self._origin or None)
         self._url = self._page.url
+        self._guard_page()
         self._frame = self._page.frame_locator(FRAME_SELECTOR)
         self._preflight()
         # Wait for the recommendation iframe to render its list.
@@ -122,8 +147,9 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
             self.page_url, self.page_url, navigate=False,
             keep_origin=self._origin or None)
         self._url = self._page.url
-        self._frame = self._page.frame_locator(FRAME_SELECTOR)
         try:
+            self._guard_page()
+            self._frame = self._page.frame_locator(FRAME_SELECTOR)
             self._preflight()
         except BrowserError as exc:
             if exc.code == "AUTH_REQUIRED":
@@ -155,6 +181,7 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
             lambda: self._list_cards_impl(page, page_size))
 
     def _list_cards_impl(self, page: int, page_size: int) -> list[CandidateCard]:
+        self._guard_page()
         frame = self._require_frame()
         try:
             self._preflight()
@@ -193,6 +220,7 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
             lambda: self._open_detail_impl(identity))
 
     def _open_detail_impl(self, identity: str) -> CandidateDetail:
+        self._guard_page()
         frame = self._require_frame()
         try:
             self._preflight()
@@ -241,6 +269,7 @@ class BossReadonlyCdpAdapter(BrowserAdapter):
 
     def _send_greeting_impl(self, identity: str, message: str,
                             dry_run: bool) -> GreetingOutcome:
+        self._guard_page()
         frame = self._require_frame()
         try:
             card = frame.locator(f'{CARD_SELECTOR}[data-geek-id="{identity}"]')
