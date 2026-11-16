@@ -52,6 +52,20 @@ class CandidateRepository(BaseRepository):
             return dict(meta) if isinstance(meta, dict) else {}
         return {}
 
+    @staticmethod
+    def _ensure_manual_meta(resume, candidate_key):
+        """Manual imports may omit platform metadata; synthesize the contract."""
+        if not isinstance(resume, dict):
+            return resume
+        value = dict(resume)
+        meta = dict(value.get("_meta") or {})
+        meta.setdefault("candidate_key", candidate_key)
+        suffix = candidate_key.split(":", 1)[1] if ":" in candidate_key else candidate_key
+        meta.setdefault("encrypt_geek_id", suffix or candidate_key)
+        meta.setdefault("encrypt_job_id", "")
+        value["_meta"] = meta
+        return value
+
     def _validate_binding_identity(self, job_id, candidate_key, resume, source):
         """The binding identity is derived server-side; page metadata cannot override it.
 
@@ -373,6 +387,8 @@ class CandidateRepository(BaseRepository):
             raise ValueError("candidate_key and source must be non-empty strings")
         if external_id is not None and (not isinstance(external_id, str) or not external_id.strip()):
             raise ValueError("external_id must be a non-empty stable source identifier")
+        if source != "browser" and resume is not None:
+            resume = self._ensure_manual_meta(resume, candidate_key)
         self._validate_binding_identity(job_id, candidate_key, resume, source)
         with self.tx(ctx, job_id, "collect") as conn:
             batch = self._active_batch(conn, ctx, job_id, batch_id)
