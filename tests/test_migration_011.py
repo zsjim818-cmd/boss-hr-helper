@@ -78,8 +78,9 @@ class Migration011AcceptanceTests(unittest.TestCase):
 
         upgraded = Database(path)
         result = upgraded.migrate()
-        self.assertEqual(result["schema_version"], 11)
-        self.assertEqual(result["applied"], ["011_browser_persistence.sql"])
+        self.assertEqual(result["schema_version"], 12)
+        self.assertEqual(result["applied"], ["011_browser_persistence.sql",
+                                             "012_workbench_persistence.sql"])
         check = upgraded.check()
         self.assertTrue(check["ok"], check)
         self.assertEqual(check["foreign_key_violations"], [])
@@ -183,9 +184,9 @@ class Migration011AcceptanceTests(unittest.TestCase):
         finally:
             connection.close()
 
-        # Fresh v11 build reproduces a valid schema.
+        # Fresh v12 build reproduces a valid schema.
         fresh = Database(self.root / "fresh.sqlite3")
-        self.assertEqual(fresh.migrate()["schema_version"], 11)
+        self.assertEqual(fresh.migrate()["schema_version"], 12)
         self.assertTrue(fresh.check()["ok"])
 
     def test_failed_012_rolls_back_without_partial_state(self):
@@ -212,7 +213,7 @@ class Migration011AcceptanceTests(unittest.TestCase):
         self.assertEqual(self._rows(path, "pipeline_evaluations", "pipeline_evaluation_id"),
                          before)
         recovered = Database(path).migrate()
-        self.assertEqual(recovered["schema_version"], 11)
+        self.assertEqual(recovered["schema_version"], 12)
 
 
 if __name__ == "__main__":

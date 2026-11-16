@@ -93,9 +93,13 @@
                         type="warning" show-icon :closable="false" style="margin-top: 8px;"
                         :title="warning" />
               <el-checkbox v-model="precheckConfirmed" :disabled="precheck.job_mismatch"
-                           style="margin-top: 10px;">
+                           style="margin-top: 10px;" @change="persistConfirmation">
                 我已核对页面岗位与筛选条件，确认开始只读扫描
               </el-checkbox>
+              <el-tag v-if="precheck.confirmed_at" type="success" size="small"
+                      style="margin-left: 10px;">
+                确认已持久化（F5/重启后保留）
+              </el-tag>
             </template>
             <el-alert v-else type="info" show-icon :closable="false" style="margin-top: 8px;"
                       title="请先打开推荐页并读取预检结果；未完成预检时不能开始扫描。" />
@@ -223,8 +227,12 @@
         <el-card shadow="never">
           <template #header>
             <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="font-weight: 600;">批次候选人（{{ filteredCandidates.length }} / {{ candidates.length }}）</span>
+              <span style="font-weight: 600;">批次候选人（共 {{ candidateTotal }} 人）</span>
               <el-space>
+                <el-input v-model="candidateKeyword" size="small" clearable
+                          placeholder="搜索姓名 / candidate_key" style="width: 220px;"
+                          @keyup.enter="searchCandidates" @clear="searchCandidates" />
+                <el-button size="small" @click="searchCandidates">搜索</el-button>
                 <el-tag v-if="selectedCandidate" size="small" type="info">
                   已选 {{ selectedCandidate.job_candidate.candidate_key }}
                 </el-tag>
@@ -239,7 +247,7 @@
             <el-radio-button value="deep">Deep</el-radio-button>
             <el-radio-button value="review">待核验/失败</el-radio-button>
           </el-radio-group>
-          <el-table :data="pageCandidates" size="small" border highlight-current-row
+          <el-table :data="candidates" size="small" border highlight-current-row
                     row-style="cursor: pointer;" @row-click="selectCandidate">
             <el-table-column label="候选人" width="170">
               <template #default="{ row }">
@@ -295,9 +303,13 @@
               </template>
             </el-table-column>
           </el-table>
-          <el-pagination v-model:current-page="candidatePage" :page-size="candidatePageSize"
-                         :total="filteredCandidates.length" layout="prev, pager, next, total"
-                         style="margin-top: 10px; justify-content: flex-end;" />
+          <el-pagination v-model:current-page="candidatePage"
+                         v-model:page-size="candidatePageSize"
+                         :page-sizes="[10, 20, 50]"
+                         :total="candidateTotal"
+                         layout="prev, pager, next, sizes, total"
+                         style="margin-top: 10px; justify-content: flex-end;"
+                         @current-change="refreshCandidates" />
         </el-card>
       </el-col>
     </el-row>
@@ -348,6 +360,10 @@
         <div>技能：{{ resumeDetail.resume.skills || '—' }}</div>
         <pre style="white-space: pre-wrap; font-size: 12px;">{{ JSON.stringify(resumeDetail.resume._meta || {}, null, 2) }}</pre>
         <el-space wrap style="margin-top: 12px;">
+          <el-button size="small" :loading="reextracting" type="primary" plain
+                     @click="reextractResume">
+            重新提取详情并更新快照
+          </el-button>
           <el-button size="small" :loading="preparing" @click="prepareSemantic">语义准备</el-button>
           <el-button size="small" type="warning" :loading="scoringFast" @click="score('fast_mode')">Fast 初筛</el-button>
           <el-button size="small" type="danger" :loading="scoringDeep" @click="score('deep_mode')">Deep 深评</el-button>
@@ -418,7 +434,10 @@ const progress = ref<ScanProgress | null>(null)
 const progressTimer = ref<number | null>(null)
 const filterTab = ref('all')
 const candidatePage = ref(1)
-const candidatePageSize = 10
+const candidatePageSize = ref(10)
+const candidateTotal = ref(0)
+const candidateKeyword = ref('')
+const reextracting = ref(false)
 const resumeDrawerVisible = ref(false)
 const resumeDetail = ref<ResumeSnapshotResponse | null>(null)
 const batchResultVisible = ref(false)
@@ -475,6 +494,9 @@ const sessionTagType = computed(() => {
 const canScan = computed(() => Boolean(
   batch.value && session.value?.state === 'READY' && precheck.value
   && !precheck.value.job_mismatch && precheckConfirmed.value && !scanning.value))
+const tabParam = computed(() => (
+  filterTab.value === 'review' ? 'needs_review_or_failed'
+    : filterTab.value === 'all' ? undefined : filterTab.value))
 const progressPercent = computed(() => {
   if (progress.value?.status === 'COMPLETED') return 100
   if (progress.value?.status === 'COMPLETED_WITH_ERRORS'
@@ -488,25 +510,6 @@ const progressStatus = computed(() => {
   if (progress.value?.status === 'COMPLETED') return 'success'
   return undefined
 })
-const filteredCandidates = computed(() => {
-  const tag = filterTab.value
-  if (tag === 'all') return candidates.value
-  if (tag === 'unscored') return candidates.value.filter((item) => !item.latest_evaluation)
-  if (tag === 'fast') return candidates.value.filter(
-    (item) => item.latest_evaluation?.scoring_mode === 'fast_mode')
-  if (tag === 'deep') return candidates.value.filter(
-    (item) => item.latest_evaluation?.scoring_mode === 'deep_mode')
-  return candidates.value.filter((item) => {
-    const status: string | undefined = item.latest_evaluation?.scoring_status
-    return status === 'NEEDS_REVIEW' || status === 'HARD_FILTERED'
-      || status === 'TECHNICAL_FAILED' || status === 'DATA_INCOMPLETE'
-      || item.latest_evaluation === null
-  })
-})
-const pageCandidates = computed(() => {
-  const start = (candidatePage.value - 1) * candidatePageSize
-  return filteredCandidates.value.slice(start, start + candidatePageSize)
-})
 const taskTagType = computed(() => {
   if (!task.value) return 'info'
   if (task.value.status === 'SUCCEEDED') return 'success'
@@ -514,7 +517,14 @@ const taskTagType = computed(() => {
   return 'warning'
 })
 
-watch(filterTab, () => { candidatePage.value = 1 })
+watch(filterTab, () => {
+  candidatePage.value = 1
+  void refreshCandidates()
+})
+watch(candidatePageSize, () => {
+  candidatePage.value = 1
+  void refreshCandidates()
+})
 
 function applyTemplate() {
   const template = templates.find((item) => item.key === templateKey.value)
@@ -605,15 +615,72 @@ async function runPrecheck() {
   precheckError.value = ''
   precheckConfirmed.value = false
   try {
-    precheck.value = await api.browserPrecheck(store.activeJobId)
+    precheck.value = await api.browserPrecheck(store.activeJobId,
+                                               batchId.value || undefined)
     if (precheck.value.job_mismatch) {
       precheckError.value = precheck.value.warnings.join('；')
+    } else if (precheck.value.confirmed) {
+      precheckConfirmed.value = true
     }
   } catch (error) {
     precheck.value = null
     precheckError.value = errorText(error)
   } finally {
     precheckLoading.value = false
+  }
+}
+
+function restoredPrecheck(item: Batch): BrowserPrecheck {
+  let summary = ''
+  try {
+    const parsed = JSON.parse(item.filter_summary_json || '[]')
+    summary = typeof parsed === 'string' ? parsed : (parsed.summary || '')
+  } catch {
+    summary = ''
+  }
+  return {
+    job_id: item.job_id,
+    job_title: '',
+    page_job_id: item.job_id,
+    page_job_title: '',
+    platform_job_id: item.platform_job_id || '',
+    filter_summary: summary,
+    visible_cards: 0,
+    iframe_detected: true,
+    job_mismatch: false,
+    warnings: [],
+    checked_at: item.filters_confirmed_at || '',
+    source: session.value?.source || '',
+    batch_id: item.batch_id,
+    confirmed: true,
+    confirmed_at: item.filters_confirmed_at,
+    confirmed_by: item.confirmed_by
+  }
+}
+
+async function persistConfirmation(value: unknown) {
+  if (!value || !store.activeJobId || !batchId.value || !precheck.value) return
+  const jobId = store.activeJobId
+  try {
+    const saved = await api.browserConfirmPrecheck(jobId, batchId.value, {
+      platform_job_id: precheck.value.platform_job_id || '',
+      filter_summary: precheck.value.filter_summary || '',
+      visible_cards: precheck.value.visible_cards || 0
+    })
+    if (store.activeJobId !== jobId) return
+    batch.value = saved
+    precheck.value = {
+      ...precheck.value,
+      confirmed: true,
+      confirmed_at: saved.filters_confirmed_at,
+      confirmed_by: saved.confirmed_by
+    }
+    batches.value = batches.value.map((item) => (
+      item.batch_id === saved.batch_id ? saved : item))
+    ElMessage.success('预检确认已保存到批次（F5/重启后保留）')
+  } catch (error) {
+    precheckConfirmed.value = false
+    ElMessage.error(errorText(error))
   }
 }
 
@@ -637,8 +704,10 @@ async function selectBatch(id: string) {
   const selected = batches.value.find((item) => item.batch_id === id) || null
   batch.value = selected
   batchId.value = id
-  precheckConfirmed.value = false
-  precheck.value = null
+  const persisted = Boolean(selected?.filters_confirmed_at)
+  precheckConfirmed.value = persisted
+  precheck.value = selected && persisted ? restoredPrecheck(selected) : null
+  precheckError.value = ''
   scanReport.value = null
   scanStatus.value = ''
   scanErrorCode.value = ''
@@ -908,17 +977,27 @@ async function scoreBatch(mode: ScoringMode) {
   }
 }
 
+function searchCandidates() {
+  candidatePage.value = 1
+  void refreshCandidates()
+}
+
 async function refreshCandidates() {
   if (!store.activeJobId) return
   const jobId = store.activeJobId
   const epoch = store.dataEpoch
+  const page = candidatePage.value
   try {
     const result = await api.listCandidates(jobId, {
-      limit: 200,
-      batch_id: batch.value?.batch_id
+      limit: candidatePageSize.value,
+      offset: (page - 1) * candidatePageSize.value,
+      batch_id: batch.value?.batch_id,
+      tab: tabParam.value,
+      keyword: candidateKeyword.value.trim() || undefined
     })
     if (store.dataEpoch !== epoch || store.activeJobId !== jobId) return
     candidates.value = result.items
+    candidateTotal.value = result.total
     const current = selectedCandidate.value
     const stillPresent = current && result.items.find(
       (item) => item.job_candidate.job_candidate_id === current.job_candidate.job_candidate_id)
@@ -932,6 +1011,28 @@ async function refreshCandidates() {
     }
   } catch (error) {
     if (store.dataEpoch === epoch) ElMessage.error(errorText(error))
+  }
+}
+
+async function reextractResume() {
+  if (!store.activeJobId || !resumeDetail.value) return
+  const jobId = store.activeJobId
+  const jcid = resumeDetail.value.job_candidate.job_candidate_id
+  reextracting.value = true
+  try {
+    const result = await api.reextractCandidate(jobId, jcid, batchId.value || undefined)
+    if (store.activeJobId !== jobId) return
+    await refreshCandidates()
+    resumeDetail.value = await api.candidateResume(jobId, jcid)
+    if (result.sealed && result.updated) {
+      ElMessage.success(`${result.message}（输入版本 v${result.input_version}）`)
+    } else {
+      ElMessage.warning(result.message)
+    }
+  } catch (error) {
+    ElMessage.error(errorText(error))
+  } finally {
+    reextracting.value = false
   }
 }
 
@@ -952,6 +1053,9 @@ watch(() => store.dataEpoch, () => {
   scanErrorCode.value = ''
   scanErrorText.value = ''
   progress.value = null
+  candidatePage.value = 1
+  candidateTotal.value = 0
+  candidateKeyword.value = ''
   stopProgressPolling()
   void loadSession()
   void loadBatches()
@@ -961,6 +1065,9 @@ watch(() => store.dataEpoch, () => {
 watch(() => store.activeJobId, () => {
   precheck.value = null
   precheckConfirmed.value = false
+  candidatePage.value = 1
+  candidateTotal.value = 0
+  candidateKeyword.value = ''
   void loadBatches()
   void refreshCandidates()
 })

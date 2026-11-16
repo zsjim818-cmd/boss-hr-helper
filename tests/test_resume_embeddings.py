@@ -81,15 +81,22 @@ class ResumeEmbeddingTests(PrescreenDatabaseCase):
         self.assertEqual(second["resume_id"], first["resume_id"])
         self.assertEqual(self.embedder.encoded_count, before)
 
-    def test_later_collection_never_replaces_sealed_semantic_input(self):
+    def test_explicit_recollection_versions_the_sealed_semantic_input(self):
         original = self.acquired["sealed_input"]["resume_id"]
         newer = self.resume("candidate", advantage="负责新增销售流程并交付另一份完整材料。")
-        self.repo.append_resume_snapshot(
+        snapshot = self.repo.append_resume_snapshot(
             self.ctx, "job", self.acquired["job_candidate"]["job_candidate_id"], newer,
             batch_id=self.acquired["job_candidate"]["first_batch_id"])
         result = self.service.prepare_candidate(
             self.ctx, "job", self.acquired["job_candidate"]["job_candidate_id"])
-        self.assertEqual(result["resume_id"], original)
+        self.assertEqual(result["resume_id"], snapshot["resume_id"])
+        self.assertNotEqual(result["resume_id"], original)
+        # The previous version stays readable as an immutable input version.
+        versions = self.repo.list_input_versions(
+            self.ctx, "job", self.acquired["job_candidate"]["job_candidate_id"])
+        self.assertEqual([item["resume_id"] for item in versions],
+                         [original, snapshot["resume_id"]])
+        self.assertEqual(versions[0]["is_current"], 0)
 
     def test_same_candidate_resume_across_jobs_reuses_vectors_not_score_results(self):
         # Build a second isolated fixture in the same DB with a stable source identity.

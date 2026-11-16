@@ -210,6 +210,10 @@ export interface Batch {
   created_at?: string
   started_at?: string
   completed_at?: string | null
+  platform_job_id?: string | null
+  filter_summary_json?: string
+  filters_confirmed_at?: string | null
+  confirmed_by?: string | null
 }
 
 // -------------------------------------------------------------- pipeline
@@ -341,6 +345,10 @@ export interface CandidateListItem {
 export interface CandidateList {
   total: number
   items: CandidateListItem[]
+  tab?: string
+  keyword?: string
+  limit?: number
+  offset?: number
 }
 
 export interface ResumeSnapshotResponse {
@@ -446,6 +454,17 @@ export interface BrowserScanStatus {
   result: BrowserScanResult | null
   error?: { code: string; message: string; recoverable?: boolean } | null
   progress?: ScanProgress | null
+  run_token?: string
+  metrics?: {
+    pages_read: number
+    cards_seen: number
+    cards_deduped: number
+    details_opened: number
+    details_completed: number
+    details_partial: number
+    prescreen_skipped: number
+    stop_reason: string | null
+  }
 }
 
 export interface ScanProgress {
@@ -464,6 +483,7 @@ export interface ScanProgress {
   pages_read?: number
   stop_reason?: string
   error_code?: string
+  run_token?: string
   updated_at?: number
 }
 
@@ -507,6 +527,26 @@ export interface BrowserPrecheck {
   warnings: string[]
   checked_at: string
   source: string
+  batch_id?: string
+  confirmed?: boolean
+  confirmed_at?: string | null
+  confirmed_by?: string | null
+  confirmed_platform_job_id?: string
+  confirmed_filter_summary_json?: string
+}
+
+export interface CandidateReextractResult {
+  job_candidate: JobCandidate
+  updated: boolean
+  is_new_version: boolean
+  input_version: number | null
+  sealed: boolean
+  resume_id: string
+  completeness: string
+  data_issues: Array<Record<string, any>>
+  collection_errors: string[]
+  batch_id: string
+  message: string
 }
 
 export type GreetingDryRunState =

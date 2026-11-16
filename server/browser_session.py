@@ -195,7 +195,7 @@ def navigate_session(request, ctx, *, job_id: str, repository) -> dict:
     return describe_state(request, ctx)
 
 
-def precheck(request, ctx, *, job_id: str, repository) -> dict:
+def precheck(request, ctx, *, job_id: str, repository, batch_id: str | None = None) -> dict:
     source = request.app.state.browser_source
     stored = _store(request).get(_key(ctx), {})
     if source.name in ("disabled", "boss_readonly"):
@@ -217,6 +217,17 @@ def precheck(request, ctx, *, job_id: str, repository) -> dict:
             f"页面当前岗位为 {page_title!r}，与系统选中岗位 {job['title']!r} 不一致")
     if not stored.get("iframe_detected"):
         warnings.append("未检测到推荐页 iframe；页面可能尚未加载完成")
+    confirmation = {}
+    if batch_id:
+        batch = repository.get_scan_batch(ctx, job_id, batch_id)
+        confirmation = {
+            "batch_id": batch["batch_id"],
+            "confirmed": bool(batch["filters_confirmed_at"]),
+            "confirmed_at": batch["filters_confirmed_at"],
+            "confirmed_by": batch["confirmed_by"],
+            "confirmed_platform_job_id": batch["platform_job_id"] or "",
+            "confirmed_filter_summary_json": batch["filter_summary_json"] or "[]",
+        }
     return {
         "job_id": job_id,
         "job_title": job["title"],
@@ -230,4 +241,35 @@ def precheck(request, ctx, *, job_id: str, repository) -> dict:
         "warnings": warnings,
         "checked_at": _now(),
         "source": source.name,
+        **confirmation,
     }
+
+
+def confirm_precheck(request, ctx, *, job_id, batch_id, platform_job_id,
+                     filter_summary, visible_cards, repository):
+    """Persist a human confirmation, refusing a page/job mismatch."""
+    source = request.app.state.browser_source
+    if source.name in ("disabled", "boss_readonly"):
+        raise BrowserError(
+            "REAL_CONTRACT_UNVERIFIED" if source.name == "boss_readonly" else "UNSUPPORTED",
+            "precheck confirmation is unavailable for this browser source",
+            recoverable=False)
+    stored = _store(request).get(_key(ctx), {})
+    if not stored.get("page_url"):
+        raise BrowserError("PAGE_MISMATCH",
+                           "run the page precheck before confirming",
+                           recoverable=True)
+    if stored.get("job_id") and stored["job_id"] != job_id:
+        raise BrowserError(
+            "PAGE_MISMATCH",
+            f"page is showing {stored.get('job_title')!r}, not the selected job",
+            recoverable=True)
+    if (stored.get("platform_job_id") and platform_job_id
+            and stored["platform_job_id"] != platform_job_id):
+        raise BrowserError(
+            "PAGE_MISMATCH",
+            "confirmed platform job id differs from the page read-back",
+            recoverable=True)
+    return repository.confirm_batch_precheck(
+        ctx, job_id, batch_id, platform_job_id=platform_job_id,
+        filter_summary=filter_summary, visible_cards=visible_cards)

@@ -69,6 +69,15 @@ class BaseRepository:
 
     one = staticmethod(one)
 
+    @staticmethod
+    def current_input_table(connection):
+        """Prefer the 012 current-version view; stay readable on older schemas."""
+        found = connection.execute("""SELECT 1 FROM sqlite_master
+            WHERE type IN ('view','table')
+              AND name='job_candidate_inputs_current'""").fetchone()
+        return ("job_candidate_inputs_current" if found is not None
+                else "job_candidate_inputs")
+
     def _authorize(self, connection, context, job_id=None, permission="view"):
         if not isinstance(context, AccessContext):
             raise PermissionDenied("A trusted AccessContext is required")

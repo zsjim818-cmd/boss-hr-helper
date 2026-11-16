@@ -397,9 +397,10 @@ class EmbeddingRepository(BaseRepository):
     def _sealed_resume(connection, org_id, job_id, job_candidate_id, resume_id):
         return BaseRepository.one(connection, """SELECT i.candidate_id,i.resume_id,r.content_hash,
                    r.raw_resume_json,r.normalized_resume_json,r.completeness,r.is_scorable
-            FROM job_candidate_inputs i JOIN resume_snapshots r
+            FROM %s i JOIN resume_snapshots r
               ON r.org_id=i.org_id AND r.candidate_id=i.candidate_id AND r.resume_id=i.resume_id
-            WHERE i.org_id=? AND i.job_id=? AND i.job_candidate_id=? AND i.resume_id=?""",
+            WHERE i.org_id=? AND i.job_id=? AND i.job_candidate_id=? AND i.resume_id=?""" %
+                     BaseRepository.current_input_table(connection),
             (org_id, job_id, job_candidate_id, resume_id))
 
     def persist_resume_chunks(self, context, job_id, job_candidate_id, resume_id,
@@ -673,8 +674,9 @@ class EmbeddingRepository(BaseRepository):
                 if policy_id is not None or policy_version is not None:
                     raise ValueError("Resume build attempts cannot reference a policy")
                 _require_text(chunker_version, "chunker_version")
-                self.one(connection, """SELECT 1 FROM job_candidate_inputs i
-                    WHERE i.org_id=? AND i.job_id=? AND i.candidate_id=? AND i.resume_id=?""",
+                self.one(connection, """SELECT 1 FROM %s i
+                    WHERE i.org_id=? AND i.job_id=? AND i.candidate_id=? AND i.resume_id=?""" %
+                         self.current_input_table(connection),
                     (context.org_id, job_id, candidate_id, resume_id))
                 if status == "SUCCEEDED":
                     self.one(connection, """SELECT 1 FROM resume_embedding_manifests

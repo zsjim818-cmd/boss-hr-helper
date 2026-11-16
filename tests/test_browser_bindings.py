@@ -30,7 +30,7 @@ class BrowserBindingPersistenceTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory(prefix="bindings_")
         self.addCleanup(self.directory.cleanup)
         self.database = Database(Path(self.directory.name) / "db.sqlite3")
-        self.assertEqual(self.database.migrate()["schema_version"], 11)
+        self.assertEqual(self.database.migrate()["schema_version"], 12)
         self.repo = RecruitmentRepository(self.database)
         system = ProvisioningContext("binding persistence")
         self.repo.create_user(system, "b:owner", user_id="owner")

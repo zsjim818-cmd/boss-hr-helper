@@ -123,11 +123,11 @@ class PipelineRepository(BaseRepository):
                     r.resume_id, p.policy_hash, p.policy_json,
                     p.policy_version AS binding_policy_version
                 FROM job_candidates jc
-                JOIN job_candidate_inputs i ON i.org_id=jc.org_id AND i.job_id=jc.job_id
+                JOIN %s i ON i.org_id=jc.org_id AND i.job_id=jc.job_id
                   AND i.job_candidate_id=jc.job_candidate_id
                 JOIN resume_snapshots r ON r.org_id=jc.org_id AND r.candidate_id=jc.candidate_id
                   AND r.resume_id=i.resume_id
-                JOIN job_policy_versions p ON p.org_id=jc.org_id AND p.job_id=jc.job_id""" + policy_join + """
+                JOIN job_policy_versions p ON p.org_id=jc.org_id AND p.job_id=jc.job_id""" % self.current_input_table(conn) + policy_join + """
                 WHERE jc.org_id=? AND jc.job_id=? AND jc.job_candidate_id=?""", params)
 
     def _validate_pipeline_formal_result(self, conn, ctx, job_id, result,
@@ -545,45 +545,105 @@ class PipelineRepository(BaseRepository):
                             (ctx.org_id, job_id, event_id)), False
 
     # ------------------------------------------------------- listing/ranking
+    _CANDIDATE_TABS = {"all", "unscored", "fast", "deep",
+                       "needs_review_or_failed", "review"}
+
     def list_job_candidates(self, ctx, job_id, *, limit=50, offset=0, status=None,
-                            min_score=None, batch_id=None):
+                            min_score=None, batch_id=None, tab=None, keyword=None):
+        """Server-side filtered/paginated candidate list.
+
+        ``batch_id``, ``tab`` and ``keyword`` are pushed into SQL (including the
+        latest-evaluation window) so ``total``, ``limit`` and ``offset`` describe
+        the real filtered set rather than a client-side slice.
+        """
         if type(limit) is not int or not 1 <= limit <= 200:
             raise ValueError("limit must be an integer in [1,200]")
         if type(offset) is not int or offset < 0:
             raise ValueError("offset must be a non-negative integer")
-        with self.read(ctx, job_id, "view") as conn:
-            self.one(conn, "SELECT 1 FROM jobs WHERE org_id=? AND job_id=?", (ctx.org_id, job_id))
-            if batch_id is not None:
+        if tab not in (None, "") and tab not in self._CANDIDATE_TABS:
+            raise ValueError("Unsupported candidate tab")
+        if keyword is not None and not isinstance(keyword, str):
+            raise ValueError("keyword must be a string")
+        tab = None if tab in (None, "", "all") else ("needs_review_or_failed"
+                                                    if tab == "review" else tab)
+        keyword = (keyword or "").strip()
+        prefix = """WITH ranked AS (
+            SELECT e.*, ROW_NUMBER() OVER (
+                PARTITION BY e.job_candidate_id
+                ORDER BY (e.scoring_mode='deep_mode') DESC, e.created_at DESC,
+                         e.pipeline_evaluation_id DESC) AS rn
+            FROM pipeline_evaluations e WHERE e.org_id=? AND e.job_id=?
+        ), latest AS (SELECT * FROM ranked WHERE rn=1)"""
+        body = """
+        FROM job_candidates jc
+        LEFT JOIN latest le ON le.job_candidate_id=jc.job_candidate_id
+        WHERE jc.org_id=? AND jc.job_id=?"""
+        clauses, params = [], []
+        if batch_id is not None:
+            with self.read(ctx, job_id, "view") as conn:
                 self.one(conn, """SELECT 1 FROM scan_batches
                     WHERE org_id=? AND job_id=? AND batch_id=?""",
                          (ctx.org_id, job_id, batch_id))
-                rows = [dict(row) for row in conn.execute("""SELECT jc.* FROM job_candidates jc
-                    WHERE jc.org_id=? AND jc.job_id=? AND EXISTS(
-                      SELECT 1 FROM candidate_acquisitions a
-                      WHERE a.org_id=jc.org_id AND a.job_id=jc.job_id
-                        AND a.job_candidate_id=jc.job_candidate_id AND a.batch_id=?)
-                    ORDER BY jc.first_seen_at, jc.job_candidate_id""",
-                                                          (ctx.org_id, job_id, batch_id))]
-            else:
-                rows = [dict(row) for row in conn.execute("""SELECT jc.* FROM job_candidates jc
-                    WHERE jc.org_id=? AND jc.job_id=? ORDER BY jc.first_seen_at, jc.job_candidate_id""",
-                                                      (ctx.org_id, job_id))]
-        results = {}
-        for row in rows:
-            with self.read(ctx, job_id, "view") as conn:
-                found = conn.execute("""SELECT * FROM pipeline_evaluations
-                    WHERE org_id=? AND job_id=? AND job_candidate_id=?
-                    ORDER BY (scoring_mode='deep_mode') DESC, created_at DESC,
-                             pipeline_evaluation_id DESC LIMIT 1""",
-                                     (ctx.org_id, job_id, row["job_candidate_id"])).fetchone()
-                results[row["job_candidate_id"]] = dict(found) if found else None
+            clauses.append(""" AND EXISTS(SELECT 1 FROM candidate_acquisitions a
+                WHERE a.org_id=jc.org_id AND a.job_id=jc.job_id
+                  AND a.job_candidate_id=jc.job_candidate_id AND a.batch_id=?)""")
+            params.append(batch_id)
+        if tab == "unscored":
+            clauses.append(" AND le.pipeline_evaluation_id IS NULL")
+        elif tab == "fast":
+            clauses.append(" AND le.scoring_mode='fast_mode'")
+        elif tab == "deep":
+            clauses.append(" AND le.scoring_mode='deep_mode'")
+        elif tab == "needs_review_or_failed":
+            clauses.append(""" AND (le.pipeline_evaluation_id IS NULL OR
+                le.scoring_status IN ('NEEDS_REVIEW','HARD_FILTERED',
+                                      'TECHNICAL_FAILED','DATA_INCOMPLETE'))""")
+        if status is not None:
+            clauses.append(" AND le.scoring_status=?")
+            params.append(status)
+        if min_score is not None:
+            clauses.append(" AND (le.total_score IS NOT NULL AND le.total_score>=?)")
+            params.append(min_score)
+        if keyword:
+            escaped = (keyword.replace("\\", "\\\\").replace("%", "\\%")
+                       .replace("_", "\\_"))
+            like = f"%{escaped}%"
+            clauses.append(""" AND (jc.candidate_key LIKE ? ESCAPE '\\'
+                OR EXISTS(SELECT 1 FROM job_candidate_input_versions v
+                  JOIN resume_snapshots r ON r.org_id=v.org_id
+                    AND r.candidate_id=v.candidate_id AND r.resume_id=v.resume_id
+                  WHERE v.org_id=jc.org_id AND v.job_id=jc.job_id
+                    AND v.job_candidate_id=jc.job_candidate_id AND v.is_current=1
+                    AND (json_extract(r.normalized_resume_json,'$.name') LIKE ? ESCAPE '\\'
+                      OR json_extract(r.normalized_resume_json,'$.degree') LIKE ? ESCAPE '\\')))""")
+            params.extend([like, like, like])
+        where_sql = body + "".join(clauses)
+        common = [ctx.org_id, job_id, ctx.org_id, job_id] + params
+        with self.read(ctx, job_id, "view") as conn:
+            self.one(conn, "SELECT 1 FROM jobs WHERE org_id=? AND job_id=?",
+                     (ctx.org_id, job_id))
+            total = conn.execute(prefix + " SELECT COUNT(*) " + where_sql,
+                                 common).fetchone()[0]
+            rows = [dict(row) for row in conn.execute(
+                prefix + " SELECT jc.* " + where_sql +
+                " ORDER BY jc.first_seen_at, jc.job_candidate_id LIMIT ? OFFSET ?",
+                common + [limit, offset])]
+            results = {}
+            if rows:
+                identifiers = [row["job_candidate_id"] for row in rows]
+                marks = ",".join("?" for _ in identifiers)
+                found = conn.execute(
+                    """SELECT * FROM pipeline_evaluations
+                       WHERE org_id=? AND job_id=? AND job_candidate_id IN ("""
+                    + marks + """)
+                       ORDER BY (scoring_mode='deep_mode') DESC, created_at DESC,
+                                pipeline_evaluation_id DESC""",
+                    [ctx.org_id, job_id] + identifiers)
+                for row in found:
+                    results.setdefault(row["job_candidate_id"], dict(row))
         enriched = []
         for row in rows:
             latest = results.get(row["job_candidate_id"])
-            if status is not None and (latest or {}).get("scoring_status") != status:
-                continue
-            if min_score is not None and ((latest or {}).get("total_score") or -1) < min_score:
-                continue
             resume_summary = {}
             sealed = False
             try:
@@ -617,7 +677,8 @@ class PipelineRepository(BaseRepository):
                 "contact_summary": self.pipeline_contact_summary(
                     ctx, job_id, row["job_candidate_id"]),
             })
-        return {"total": len(enriched), "items": enriched[offset:offset + limit]}
+        return {"total": total, "items": enriched, "tab": tab or "all",
+                "keyword": keyword, "limit": limit, "offset": offset}
 
     def job_candidate_ranking(self, ctx, job_id, *, limit=100,
                               batch_id=None, policy_version=None):

@@ -72,6 +72,31 @@ def http_json(method: str, path: str, payload=None):
         return exc.code, parsed
 
 
+def extra_resume(key: str, index: int) -> dict:
+    """A complete manual resume for server-side pagination E2E seeding."""
+    geek = key.split(":", 1)[1]
+    return {
+        "name": f"补录候选人{index}",
+        "degree": "本科",
+        "work_years": "4年",
+        "job_status": "离职-随时到岗",
+        "active_status": "今日活跃",
+        "expectation": {"city": "北京", "salary": "12K/月", "position": "Java工程师"},
+        "skills": "Java, SQL, Spring Boot",
+        "work_experience": [{
+            "company": "补录演示公司",
+            "position": "Java工程师",
+            "responsibility": "负责Java后端接口开发与SQL优化，编写接口自动化测试。",
+            "keywords": []}],
+        "project_experience": [],
+        "education": [{"school": "补录大学", "degree": "本科"}],
+        "certifications": [],
+        "advantage": "",
+        "_meta": {"candidate_key": key, "encrypt_geek_id": geek,
+                  "encrypt_job_id": "boss-job-job-java"},
+    }
+
+
 def seed_policy(job_id: str, job_title: str, jd_text: str) -> str:
     """Publish a sealed policy through the public HTTP API (owner identity)."""
     status, compiled = http_json("POST", f"/api/jobs/{job_id}/policies/compile", {
@@ -286,7 +311,19 @@ def run_browser():
               page.locator("text=页面岗位").count() > 0
               and page.locator("text=可见卡片").count() > 0)
         page.locator(".el-checkbox").first.click()
-        page.wait_for_timeout(300)
+        page.wait_for_selector("text=预检确认已保存到批次", timeout=30000)
+        page.wait_for_timeout(400)
+        check("precheck confirmation persisted to batch",
+              page.locator("text=确认已持久化").count() > 0)
+
+        # F5 must keep the persisted HR precheck confirmation.
+        page.reload(wait_until="networkidle")
+        page.wait_for_selector(".el-checkbox", timeout=30000)
+        page.wait_for_timeout(1500)
+        check("precheck confirmation survives F5",
+              page.locator(".el-checkbox").first.is_checked()
+              and page.locator("text=确认已持久化").count() > 0)
+
         page.get_by_role("button", name="开始只读扫描").click()
         page.wait_for_selector("text=扫描完成", timeout=90000)
         page.wait_for_timeout(1200)
@@ -300,9 +337,20 @@ def run_browser():
         check("scanner enables scoring for scanned candidate",
               page.get_by_role("button", name="Fast 初筛").is_enabled())
 
-        # F5 must restore the latest batch and persisted scan status.
+        # Server-side pagination: seed extra candidates into the same batch.
         status, batch_body = http_json("GET", "/api/jobs/job-java/batches")
         restored_batch = batch_body["batches"][0]["batch_id"]
+        for index in range(1, 9):
+            key = f"job-java:extra-{index}"
+            status, seeded = http_json(
+                "POST",
+                f"/api/jobs/job-java/batches/{restored_batch}/candidates",
+                {"candidate_key": key, "resume": extra_resume(key, index),
+                 "source": "manual"})
+            if status != 200:
+                raise RuntimeError(f"extra import failed: {status} {seeded}")
+
+        # F5 must restore the latest batch, persisted scan status and page 1.
         page.reload(wait_until="networkidle")
         page.wait_for_selector(".el-select", timeout=30000)
         page.wait_for_timeout(1800)
@@ -310,6 +358,17 @@ def run_browser():
               page.get_by_text(restored_batch, exact=False).count() > 0)
         check("scan status restored after F5",
               page.locator("text=COMPLETED").count() > 0)
+        check("server pagination shows the filtered total",
+              page.locator("text=共 11 人").count() > 0)
+        page.locator(".btn-next").click()
+        page.wait_for_timeout(900)
+        second_page_rows = page.locator(".el-table__body tr").all_inner_texts()
+        check("server pagination switches page",
+              len(second_page_rows) == 1
+              and any("extra-8" in row for row in second_page_rows),
+              str(second_page_rows))
+        page.locator(".btn-prev").click()
+        page.wait_for_timeout(700)
 
         # Resume snapshot drawer for the scanned candidate.
         page.get_by_role("button", name="查看简历").first.click()
@@ -318,6 +377,11 @@ def run_browser():
         check("resume drawer shows sealed snapshot",
               page.locator("text=工作经历").count() > 0
               and page.locator("text=已封存").count() > 0)
+        page.get_by_role("button", name="重新提取详情并更新快照").click()
+        page.wait_for_selector("text=简历内容未变化", timeout=60000)
+        page.wait_for_timeout(600)
+        check("single candidate re-extract keeps the sealed snapshot",
+              page.locator("text=简历内容未变化").count() > 0)
         page.keyboard.press("Escape")
         page.wait_for_timeout(400)
 

@@ -16,6 +16,7 @@ boss-true-img
 /data/*.sqlite3
 /data/*.sqlite3-wal
 /data/*.sqlite3-shm
+/data/*.bak_sprint*
 /reports/phase1_7_stage3/live/**/*.sqlite3
 /reports/phase1_7_stage3/live/**/*.sqlite3-wal
 /reports/phase1_7_stage3/live/**/*.sqlite3-shm

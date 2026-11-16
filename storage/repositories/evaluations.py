@@ -29,9 +29,10 @@ class EvaluationRepository(BaseRepository):
             if existing:
                 return dict(existing)
             source = self.one(conn, """SELECT i.*, p.execution_profile_id
-                FROM job_candidate_inputs i JOIN job_policy_versions p
+                FROM %s i JOIN job_policy_versions p
                   ON p.org_id=i.org_id AND p.job_id=i.job_id AND p.policy_id=i.policy_id
-                WHERE i.org_id=? AND i.job_id=? AND i.job_candidate_id=?""",
+                WHERE i.org_id=? AND i.job_id=? AND i.job_candidate_id=?""" %
+                               self.current_input_table(conn),
                                (ctx.org_id, job_id, job_candidate_id))
             task_id = task_id or uid()
             identity = {k: source[k] for k in ("org_id", "job_id", "job_candidate_id", "candidate_id", "policy_id", "policy_version", "resume_id", "execution_profile_id")}

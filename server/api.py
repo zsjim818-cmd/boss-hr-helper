@@ -16,8 +16,8 @@ from browser.contracts import BrowserError
 from engine.policy_validator import validate_policy_quality
 from schemas.job_policy import JobScoringPolicy
 from server.auth import get_context
-from server.browser_session import (connect_session, describe_state,
-                                    navigate_session, precheck)
+from server.browser_session import (confirm_precheck, connect_session,
+                                    describe_state, navigate_session, precheck)
 from server.responses import (BatchOut, BrowserScanOut, BrowserScanStatusOut,
                               CandidateDetailOut, CandidateListOut, CompileOut,
                               ConfirmOut, ContactSummaryOut, ContactsOut, DraftOut,
@@ -30,7 +30,8 @@ from server.schemas import (BrowserScanRequest, BrowserSessionNavigateRequest,
                             CompilePolicyRequest, ConfirmDraftRequest,
                             ContactRequest, CreateJobRequest, CreateVersionRequest,
                             GreetingDryRunRequest, ImportCandidateRequest,
-                            PublishPolicyRequest, ReviewRequest, ScoreRequest,
+                            PrecheckConfirmRequest, PublishPolicyRequest,
+                            ReextractRequest, ReviewRequest, ScoreRequest,
                             SemanticPrepareRequest, UpdateDraftRequest)
 
 
@@ -186,11 +187,17 @@ def import_candidate(job_id: str, batch_id: str, body: ImportCandidateRequest,
 @candidates_router.get("/{job_id}/candidates", response_model=CandidateListOut)
 def list_candidates(job_id: str, request: Request, ctx=Depends(get_context),
                     limit: int = 50, offset: int = 0, status: str | None = None,
-                    min_score: float | None = None, batch_id: str | None = None):
-    result = _repo(request).list_job_candidates(
-        ctx, job_id, limit=limit, offset=offset, status=status,
-        min_score=min_score, batch_id=batch_id)
-    return {"total": result["total"], "items": _row(result["items"])}
+                    min_score: float | None = None, batch_id: str | None = None,
+                    tab: str | None = None, keyword: str | None = None):
+    try:
+        result = _repo(request).list_job_candidates(
+            ctx, job_id, limit=limit, offset=offset, status=status,
+            min_score=min_score, batch_id=batch_id, tab=tab, keyword=keyword)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return {"total": result["total"], "items": _row(result["items"]),
+            "tab": result["tab"], "keyword": result["keyword"],
+            "limit": result["limit"], "offset": result["offset"]}
 
 
 @candidates_router.get("/{job_id}/candidates/{job_candidate_id}", response_model=CandidateDetailOut)
@@ -239,8 +246,71 @@ def candidate_resume(job_id: str, job_candidate_id: str, request: Request,
     }
 
 
-@candidates_router.get("/{job_id}/candidates/{job_candidate_id}/contact-summary",
-                       response_model=ContactSummaryOut)
+@candidates_router.post("/{job_id}/candidates/{job_candidate_id}/re-extract")
+def candidate_reextract(job_id: str, job_candidate_id: str, request: Request,
+                        ctx=Depends(get_context),
+                        body: ReextractRequest | None = None):
+    """Re-open one candidate detail and seal a new immutable input version.
+
+    Only a complete, validated re-read can move the current sealed input; a
+    still-PARTIAL result is stored for diagnosis but never unlocks scoring.
+    """
+    from browser.contracts import BrowserError
+    from browser.identity import CandidateDetailParser, CandidateIdentityResolver
+    repo = _repo(request)
+    candidate = repo.get_job_candidate(ctx, job_id, job_candidate_id)
+    identity = CandidateIdentityResolver.from_candidate_key(
+        candidate["candidate_key"] or "")
+    if not identity:
+        raise HTTPException(
+            status_code=409,
+            detail="REIDENTIFY_FAILED: candidate key has no stable platform identity")
+    adapter = _browser_adapter(request, ctx, job_id)
+    try:
+        adapter.connect()
+        detail = adapter.open_detail(identity)
+        CandidateIdentityResolver.assert_match(identity, detail.identity)
+        resume = CandidateDetailParser().parse(detail, job_id=job_id)
+        if resume.meta.candidate_key != candidate["candidate_key"]:
+            raise BrowserError(
+                "IDENTITY_MISMATCH",
+                "re-read candidate key differs from the existing candidate",
+                recoverable=False)
+    except BrowserError:
+        raise
+    finally:
+        try:
+            adapter.close()
+        except Exception:
+            pass
+    try:
+        result = repo.append_candidate_input_version(
+            ctx, job_id, job_candidate_id,
+            resume.model_dump(by_alias=True, mode="json"),
+            batch_id=(body.batch_id if body else None), source="browser")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    snapshot = result["snapshot"]
+    sealed = result["sealed_input"]
+    return {
+        "job_candidate": _row(candidate),
+        "updated": bool(result["is_new_version"]),
+        "is_new_version": bool(result["is_new_version"]),
+        "input_version": result["input_version"],
+        "sealed": sealed is not None,
+        "resume_id": snapshot["resume_id"],
+        "completeness": snapshot["completeness"],
+        "data_issues": json.loads(snapshot["data_issues_json"] or "[]"),
+        "collection_errors": json.loads(snapshot["collection_errors_json"] or "[]"),
+        "batch_id": result["batch_id"],
+        "message": ("新的封存输入版本已创建，可重新评分"
+                    if result["is_new_version"] else
+                    "重新采集结果仍不完整，不能进入正式评分"
+                    if sealed is None else "简历内容未变化，复用当前封存版本"),
+    }
+
+
+@candidates_router.get("/{job_id}/candidates/{job_candidate_id}/contact-summary",                       response_model=ContactSummaryOut)
 def candidate_contact_summary(job_id: str, job_candidate_id: str, request: Request,
                               ctx=Depends(get_context)):
     """Candidate-level contact state shared by fast/deep evaluations.
@@ -260,12 +330,17 @@ def start_scoring(job_id: str, job_candidate_id: str, body: ScoreRequest,
     expected = repo.expected_candidate_policy(
         ctx, job_id, job_candidate_id, body.batch_id)
     try:
-        repo.get_sealed_input(ctx, job_id, job_candidate_id)
+        sealed_input = repo.get_sealed_input(ctx, job_id, job_candidate_id)
     except LookupError:
         raise HTTPException(
             status_code=409,
             detail="Candidate has no sealed scoring input; re-collect the resume first "
                    "(incomplete information is never scored)") from None
+    # A new input version is a new scoring context: the same UI idempotency key
+    # must not reuse a task that was created for an earlier resume snapshot.
+    input_version = int((sealed_input or {}).get("input_version") or 1)
+    idempotency_key = (f"{body.idempotency_key}:iv{input_version}"
+                       if body.idempotency_key else None)
     pipeline = pipeline_factory(repo)
     existing = pipeline.reusable_result(ctx, job_id, job_candidate_id,
                                         body.scoring_mode, batch_id=body.batch_id)
@@ -273,7 +348,7 @@ def start_scoring(job_id: str, job_candidate_id: str, body: ScoreRequest,
             and existing["policy_version"] == expected["policy_version"]):
         return {"reused": True, "task": None, "evaluation": _row(existing)}
     task = repo.create_pipeline_task(ctx, job_id, job_candidate_id, body.scoring_mode,
-                                     idempotency_key=body.idempotency_key,
+                                     idempotency_key=idempotency_key,
                                      batch_id=body.batch_id)
     if task["status"] == "SUCCEEDED" and task["pipeline_evaluation_id"]:
         evaluation = repo.get_pipeline_result(
@@ -366,8 +441,22 @@ def browser_session_navigate(body: BrowserSessionNavigateRequest,
 
 
 @browser_router.get("/{job_id}/browser/precheck")
-def browser_precheck(job_id: str, ctx=Depends(get_context), request: Request = None):
-    return precheck(request, ctx, job_id=job_id, repository=_repo(request))
+def browser_precheck(job_id: str, request: Request, ctx=Depends(get_context),
+                     batch_id: str | None = None):
+    return precheck(request, ctx, job_id=job_id, repository=_repo(request),
+                    batch_id=batch_id)
+
+
+@browser_router.post("/{job_id}/batches/{batch_id}/browser/precheck/confirm")
+def browser_precheck_confirm(job_id: str, batch_id: str,
+                             body: PrecheckConfirmRequest, request: Request,
+                             ctx=Depends(get_context)):
+    return confirm_precheck(
+        request, ctx, job_id=job_id, batch_id=batch_id,
+        platform_job_id=body.platform_job_id,
+        filter_summary=body.filter_summary,
+        visible_cards=body.visible_cards,
+        repository=_repo(request))
 
 
 def _browser_adapter(request: Request, ctx, job_id):
@@ -398,6 +487,10 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
             status_code=409,
             detail="FILTERS_UNCONFIRMED: confirm the recommended-page job/filters "
                    "before starting a scan")
+    repo.confirm_batch_precheck(
+        ctx, job_id, batch["batch_id"],
+        platform_job_id=(body.platform_job_id or ""),
+        filter_summary=(body.filter_summary or ""), visible_cards=0)
     registry = getattr(request.app.state, "browser_session_registry", None)
     account = None
     if registry is not None and request.app.state.browser_source.name != "boss_readonly":
@@ -412,14 +505,57 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
                 "updated_at": time.time()}
     request.app.state.browser_scan_progress[cancel_key] = progress
 
+    run = repo.start_browser_scan(
+        ctx, job_id, batch["batch_id"],
+        source=request.app.state.browser_source.name, browser_account_id=account)
+    run_token = run["run_token"]
+    last_persist = {"at": 0.0, "stage": None}
+
+    def persist_progress(update):
+        """Persist counters, throttled but always on a stage transition."""
+        stage = update.get("stage")
+        now = time.monotonic()
+        if (stage == last_persist["stage"] and now - last_persist["at"] < 0.5
+                and stage not in ("finished", "failed", "cancelled")):
+            return
+        last_persist["at"] = now
+        last_persist["stage"] = stage
+        try:
+            repo.update_browser_scan_progress(
+                ctx, job_id, batch["batch_id"], run_token,
+                pages_read=update.get("pages_read"),
+                cards_seen=update.get("listed"),
+                cards_deduped=update.get("deduplicated"),
+                details_opened=update.get("detail_attempted"),
+                details_completed=update.get("detail_completed"),
+                details_partial=update.get("detail_partial"),
+                prescreen_skipped=update.get("preview_skipped"),
+                collected=update.get("collected"),
+                imported=update.get("imported"),
+                reused=update.get("reused"),
+                failed=update.get("failed"),
+                stop_reason=(update.get("stop_reason") or None))
+        except Exception:
+            # Progress persistence is best-effort and must never abort a scan.
+            pass
+
     def progress_callback(update):
         progress.update(update)
         progress["status"] = "RUNNING"
         progress["updated_at"] = time.time()
+        persist_progress(update)
 
-    run = repo.start_browser_scan(
-        ctx, job_id, batch["batch_id"],
-        source=request.app.state.browser_source.name, browser_account_id=account)
+    def scan_metrics():
+        return {
+            "pages_read": int(progress.get("pages_read") or 0),
+            "cards_seen": int(progress.get("listed") or 0),
+            "cards_deduped": int(progress.get("deduplicated") or 0),
+            "details_opened": int(progress.get("detail_attempted") or 0),
+            "details_completed": int(progress.get("detail_completed") or 0),
+            "details_partial": int(progress.get("detail_partial") or 0),
+            "prescreen_skipped": int(progress.get("preview_skipped") or 0),
+            "stop_reason": progress.get("stop_reason") or None,
+        }
     adapter = None
     try:
         adapter = _browser_adapter(request, ctx, job_id)
@@ -445,7 +581,8 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
             ctx, job_id, batch["batch_id"], status="FAILED", collected=0,
             imported=0, reused=0, failed=0, issues=[],
             error_code=exc.code, error_message=str(exc)[:2000],
-            browser_account_id=account)
+            browser_account_id=account, run_token=run_token,
+            metrics=scan_metrics())
         raise
     except Exception as exc:  # noqa: BLE001 - never leave a RUNNING scan state
         progress.update({"status": "FAILED", "error_code": "UNEXPECTED_STATE",
@@ -455,7 +592,8 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
                 ctx, job_id, batch["batch_id"], status="FAILED", collected=0,
                 imported=0, reused=0, failed=0, issues=[],
                 error_code="UNEXPECTED_STATE", error_message=str(exc)[:2000],
-                browser_account_id=account)
+                browser_account_id=account, run_token=run_token,
+                metrics=scan_metrics())
         except Exception:
             pass
         raise
@@ -479,7 +617,8 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
             reused=report.reused, failed=report.failed,
             issues=[issue.model_dump(mode="json") for issue in report.issues],
             error_code="CANCELLED", error_message="scan cancelled by operator",
-            browser_account_id=payload["browser_account_id"])
+            browser_account_id=payload["browser_account_id"],
+            run_token=run_token, metrics=scan_metrics())
         raise BrowserError("CANCELLED", "scan cancelled by operator",
                            recoverable=True)
     if report.collected == 0 and report.issues:
@@ -492,7 +631,8 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
             collected=0, imported=0, reused=0, failed=report.failed,
             issues=[issue.model_dump(mode="json") for issue in report.issues],
             error_code=first.code, error_message=first.message,
-            browser_account_id=payload["browser_account_id"])
+            browser_account_id=payload["browser_account_id"],
+            run_token=run_token, metrics=scan_metrics())
         raise BrowserError(first.code, first.message, recoverable=first.recoverable)
     if report.collected == 0:
         # An empty page is not proof that the account has zero candidates.
@@ -504,7 +644,8 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
             error_code="EMPTY_UNVERIFIED",
             error_message="No cards were read; an empty page cannot be treated as a "
                           "verified zero-candidate result",
-            browser_account_id=payload["browser_account_id"])
+            browser_account_id=payload["browser_account_id"],
+            run_token=run_token, metrics=scan_metrics())
         raise BrowserError(
             "EMPTY_UNVERIFIED",
             "no candidates were read; empty result is not verified",
@@ -528,7 +669,8 @@ def browser_scan(job_id: str, batch_id: str, request: Request,
         reused=report.reused, failed=report.failed,
         issues=[issue.model_dump(mode="json") for issue in report.issues],
         error_code=final_code, error_message=final_message,
-        browser_account_id=payload["browser_account_id"])
+        browser_account_id=payload["browser_account_id"],
+        run_token=run_token, metrics=scan_metrics())
     return payload
 
 
@@ -559,11 +701,40 @@ def browser_scan_status(job_id: str, batch_id: str, request: Request,
     status = run["status"]
     if status == "FAILED" and run["error_code"] == "CANCELLED":
         status = "CANCELLED"
-    progress = request.app.state.browser_scan_progress.get(
+    memory_progress = request.app.state.browser_scan_progress.get(
         (ctx.org_id, job_id, batch["batch_id"], ctx.user_id))
+    # After a process restart only the persisted counters exist; expose the same
+    # shape the live poller uses so the UI does not lose its statistics.
+    persisted_progress = {
+        "status": status,
+        "stage": ("finished" if status in ("COMPLETED", "COMPLETED_WITH_ERRORS")
+                  else "failed" if status == "FAILED" else
+                  "cancelled" if status == "CANCELLED" else "running"),
+        "pages_read": run["pages_read"],
+        "listed": run["cards_seen"],
+        "collected": run["collected"],
+        "deduplicated": run["cards_deduped"],
+        "preview_skipped": run["prescreen_skipped"],
+        "detail_attempted": run["details_opened"],
+        "detail_completed": run["details_completed"],
+        "detail_partial": run["details_partial"],
+        "imported": run["imported"],
+        "reused": run["reused"],
+        "failed": run["failed"],
+        "stop_reason": run["stop_reason"] or "",
+        "run_token": run["run_token"],
+        "updated_at": run["updated_at"],
+    }
+    progress = memory_progress or persisted_progress
+    if memory_progress is not None:
+        progress = {**persisted_progress, **memory_progress}
     return {"status": status, "batch_id": run["batch_id"],
             "source": run["source"], "result": result, "error": error,
-            "progress": progress}
+            "progress": progress, "run_token": run["run_token"],
+            "metrics": {key: run[key] for key in (
+                "pages_read", "cards_seen", "cards_deduped", "details_opened",
+                "details_completed", "details_partial", "prescreen_skipped",
+                "stop_reason")}}
 
 
 @browser_router.post("/{job_id}/batches/{batch_id}/browser/cancel")

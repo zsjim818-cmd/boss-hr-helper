@@ -90,7 +90,7 @@ class CollectorWorkflowTests(PipelineCase):
         self.assertEqual(report.imported, 1)
         self.assertEqual(report.stop_reason, "MAX_DETAILS")
 
-    def test_new_resume_snapshot_versioning_is_blocked_without_012(self):
+    def test_new_resume_snapshot_creates_a_new_input_version(self):
         resume = resume_for("job:geek-java-1")
         resume["_meta"]["encrypt_geek_id"] = "geek-java-1"
         resume["_meta"]["encrypt_job_id"] = "boss-job-job"
@@ -98,6 +98,7 @@ class CollectorWorkflowTests(PipelineCase):
             self.ctx, "job", self.batch["batch_id"], "job:geek-java-1",
             source="browser", resume=resume)
         jcid = acquired["job_candidate"]["job_candidate_id"]
+        first_resume_id = acquired["sealed_input"]["resume_id"]
         pipeline = PolicyScoringPipeline(
             self.repo, semantic_service=RecordingSemantic(self.repo),
             review_service=RecordingReview(self.repo))
@@ -110,17 +111,27 @@ class CollectorWorkflowTests(PipelineCase):
         changed["advantage"] = "新增可核验项目证据"
         snapshot = self.repo.append_resume_snapshot(
             self.ctx, "job", jcid, changed, batch_id=self.batch["batch_id"])
-        with self.assertRaises(ValueError) as captured:
-            self.repo.reseal_candidate_input(
-                self.ctx, "job", jcid, snapshot["resume_id"])
-        self.assertIn("INPUT_VERSIONING_REQUIRES_012", str(captured.exception))
-        self.assertEqual(
-            self.repo.get_sealed_input(self.ctx, "job", jcid)["resume_id"],
-            acquired["sealed_input"]["resume_id"])
-        self.assertEqual(len(self.repo.list_pipeline_results(self.ctx, "job", jcid)), 1)
+
+        # Migration 012 appends version 2 and supersedes (never rewrites) v1.
+        current = self.repo.get_sealed_input(self.ctx, "job", jcid)
+        self.assertEqual(current["resume_id"], snapshot["resume_id"])
+        self.assertEqual(current["input_version"], 2)
+        versions = self.repo.list_input_versions(self.ctx, "job", jcid)
+        self.assertEqual([item["input_version"] for item in versions], [1, 2])
+        self.assertEqual(versions[0]["resume_id"], first_resume_id)
+        self.assertEqual(versions[0]["is_current"], 0)
+        self.assertIsNotNone(versions[0]["superseded_at"])
+        self.assertEqual(versions[1]["is_current"], 1)
+
+        # The historical evaluation still points at the original snapshot.
         self.assertEqual(
             self.repo.get_pipeline_result(self.ctx, "job", first_id)["resume_id"],
-            acquired["sealed_input"]["resume_id"])
+            first_resume_id)
+        second = pipeline.run_and_persist(
+            self.ctx, "job", jcid, scoring_mode="deep_mode",
+            batch_id=self.batch["batch_id"])
+        self.assertEqual(second["evaluation"]["resume_id"], snapshot["resume_id"])
+        self.assertEqual(len(self.repo.list_pipeline_results(self.ctx, "job", jcid)), 2)
 
     def test_parser_separates_platform_job_id_and_drops_security_id(self):
         raw = resume_template("java", "geek-1", "job")

@@ -5,6 +5,7 @@ import axios, { AxiosError } from 'axios'
 import type {
   ApiErrorPayload, Batch, BrowserPrecheck, BrowserScanResult, BrowserScanStatus,
   BrowserSession, BrowserSessionState, CandidateDetail, CandidateList,
+  CandidateReextractResult,
   CompileResult, ContactAction, ContactEvent, ContactSummary, GreetingDryRunResult,
   ImportResult, Job, JobScoringPolicy, PipelineEvaluation, PolicyDraft,
   QualityReport, RankingEntry, ResumeSnapshotResponse, ReviewAction, ReviewEvent,
@@ -115,12 +116,17 @@ export const api = {
                     payload: { candidate_key: string; resume: Record<string, unknown>; source?: string }) =>
     call<ImportResult>(http.post(`/jobs/${jobId}/batches/${batchId}/candidates`, payload)),
   listCandidates: (jobId: string, params: { limit?: number; offset?: number; status?: string;
-                                            min_score?: number; batch_id?: string }) =>
+                                            min_score?: number; batch_id?: string;
+                                            tab?: string; keyword?: string }) =>
     call<CandidateList>(http.get(`/jobs/${jobId}/candidates`, { params })),
   candidateDetail: (jobId: string, jobCandidateId: string) =>
     call<CandidateDetail>(http.get(`/jobs/${jobId}/candidates/${jobCandidateId}`)),
   candidateResume: (jobId: string, jobCandidateId: string) =>
     call<ResumeSnapshotResponse>(http.get(`/jobs/${jobId}/candidates/${jobCandidateId}/resume`)),
+  reextractCandidate: (jobId: string, jobCandidateId: string, batchId?: string) =>
+    call<CandidateReextractResult>(
+      http.post(`/jobs/${jobId}/candidates/${jobCandidateId}/re-extract`,
+                { batch_id: batchId })),
   candidateEvaluations: (jobId: string, jobCandidateId: string) =>
     call<{ latest: PipelineEvaluation | null; history: PipelineEvaluation[] }>(
       http.get(`/jobs/${jobId}/candidates/${jobCandidateId}/evaluations`)),
@@ -154,8 +160,14 @@ export const api = {
   browserSessionConnect: () => call<BrowserSession>(http.post('/browser/session/connect')),
   browserSessionNavigate: (jobId: string) =>
     call<BrowserSession>(http.post('/browser/session/navigate', { job_id: jobId })),
-  browserPrecheck: (jobId: string) =>
-    call<BrowserPrecheck>(http.get(`/jobs/${jobId}/browser/precheck`)),
+  browserPrecheck: (jobId: string, batchId?: string) =>
+    call<BrowserPrecheck>(http.get(`/jobs/${jobId}/browser/precheck`,
+                                   { params: batchId ? { batch_id: batchId } : {} })),
+  browserConfirmPrecheck: (jobId: string, batchId: string,
+                           payload: { platform_job_id: string; filter_summary: string;
+                                      visible_cards: number }) =>
+    call<Batch>(http.post(
+      `/jobs/${jobId}/batches/${batchId}/browser/precheck/confirm`, payload)),
   browserScan: (jobId: string, batchId: string,
                 payload: { pages?: number; page_size?: number;
                            platform_job_id?: string; filter_summary?: string;

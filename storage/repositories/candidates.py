@@ -2,7 +2,7 @@
 from pydantic import ValidationError
 
 from schemas import ResumeData
-from storage.repositories.base import BaseRepository, uid, json_dump, digest
+from storage.repositories.base import BaseRepository, uid, json_dump, digest, utcnow
 
 
 def prepare_resume(resume):
@@ -38,6 +38,11 @@ def prepare_resume(resume):
 
 
 class CandidateRepository(BaseRepository):
+    @staticmethod
+    def _has_input_versions(conn):
+        return conn.execute("""SELECT 1 FROM sqlite_master
+            WHERE type='table' AND name='job_candidate_input_versions'""").fetchone() is not None
+
     @staticmethod
     def _resume_meta(resume):
         if isinstance(resume, ResumeData):
@@ -142,10 +147,41 @@ class CandidateRepository(BaseRepository):
             return self._job_candidate(conn, ctx, job_id, job_candidate_id)
 
     def get_sealed_input(self, ctx, job_id, job_candidate_id):
+        """Current sealed scoring input (versioned after migration 012)."""
         with self.read(ctx, job_id, "view") as conn:
             self._job_candidate(conn, ctx, job_id, job_candidate_id)
-            return self.one(conn, "SELECT * FROM job_candidate_inputs WHERE org_id=? AND job_id=? AND job_candidate_id=?",
+            if self._has_input_versions(conn):
+                return self.one(conn, """SELECT * FROM job_candidate_inputs_current
+                    WHERE org_id=? AND job_id=? AND job_candidate_id=?""",
+                                (ctx.org_id, job_id, job_candidate_id))
+            return self.one(conn, """SELECT * FROM job_candidate_inputs
+                WHERE org_id=? AND job_id=? AND job_candidate_id=?""",
                             (ctx.org_id, job_id, job_candidate_id))
+
+    def get_input_version(self, ctx, job_id, job_candidate_id, input_version):
+        with self.read(ctx, job_id, "view") as conn:
+            self._job_candidate(conn, ctx, job_id, job_candidate_id)
+            return self.one(conn, """SELECT * FROM job_candidate_input_versions
+                WHERE org_id=? AND job_id=? AND job_candidate_id=? AND input_version=?""",
+                            (ctx.org_id, job_id, job_candidate_id, int(input_version)))
+
+    def list_input_versions(self, ctx, job_id, job_candidate_id):
+        with self.read(ctx, job_id, "view") as conn:
+            self._job_candidate(conn, ctx, job_id, job_candidate_id)
+            return [dict(row) for row in conn.execute("""SELECT * FROM
+                job_candidate_input_versions
+                WHERE org_id=? AND job_id=? AND job_candidate_id=?
+                ORDER BY input_version""",
+                (ctx.org_id, job_id, job_candidate_id))]
+
+    def latest_running_batch(self, ctx, job_id):
+        with self.read(ctx, job_id, "view") as conn:
+            row = conn.execute("""SELECT * FROM scan_batches
+                WHERE org_id=? AND job_id=? AND status='RUNNING'
+                ORDER BY started_at DESC, batch_id DESC LIMIT 1""",
+                               (ctx.org_id, job_id)).fetchone()
+            return dict(row) if row is not None else None
+
 
     def latest_resume_snapshot(self, ctx, job_id, job_candidate_id):
         with self.read(ctx, job_id, "view") as conn:
@@ -263,9 +299,73 @@ class CandidateRepository(BaseRepository):
         conn.execute("INSERT INTO job_candidate_inputs(org_id,job_id,job_candidate_id,candidate_id,policy_id,policy_version,resume_id,sealed_by) "
                      "VALUES(?,?,?,?,?,?,?,?)", (ctx.org_id, job_id, row["job_candidate_id"], row["candidate_id"], row["policy_id"],
                                                 row["policy_version"], resume_id, ctx.user_id))
+        if self._has_input_versions(conn):
+            conn.execute("""INSERT INTO job_candidate_input_versions
+                (org_id,job_id,job_candidate_id,input_version,candidate_id,policy_id,
+                 policy_version,resume_id,sealed_by,is_current)
+                VALUES(?,?,?,1,?,?,?,?,?,1)""",
+                         (ctx.org_id, job_id, row["job_candidate_id"], row["candidate_id"],
+                          row["policy_id"], row["policy_version"], resume_id, ctx.user_id))
+            self.audit(conn, ctx, "candidate_input.sealed", row["job_candidate_id"],
+                       {"job_id": job_id, "resume_id": resume_id,
+                        "policy_id": row["policy_id"], "input_version": 1})
+            return self.one(conn, """SELECT * FROM job_candidate_input_versions
+                WHERE org_id=? AND job_id=? AND job_candidate_id=? AND input_version=1""",
+                            (ctx.org_id, job_id, row["job_candidate_id"]))
         self.audit(conn, ctx, "candidate_input.sealed", row["job_candidate_id"], {"job_id": job_id, "resume_id": resume_id, "policy_id": row["policy_id"]})
         return self.one(conn, "SELECT * FROM job_candidate_inputs WHERE org_id=? AND job_id=? AND job_candidate_id=?",
                         (ctx.org_id, job_id, row["job_candidate_id"]))
+
+    def _seal_version(self, conn, ctx, job_id, row, resume_id, *, reason="RESUME_RECOLLECTED"):
+        """Append a new current input version; never rewrite history."""
+        if not self._has_input_versions(conn):
+            raise ValueError(
+                "INPUT_VERSIONING_REQUIRES_012: sealed inputs are immutable; "
+                "apply migration 012 before re-scoring enriched resumes")
+        snapshot = self.one(conn, """SELECT * FROM resume_snapshots
+            WHERE org_id=? AND candidate_id=? AND resume_id=?""",
+                            (ctx.org_id, row["candidate_id"], resume_id))
+        if not snapshot["is_scorable"]:
+            raise ValueError("Only a complete, valid resume can become a sealed input version")
+        current = conn.execute("""SELECT * FROM job_candidate_input_versions
+            WHERE org_id=? AND job_id=? AND job_candidate_id=? AND is_current=1""",
+                               (ctx.org_id, job_id, row["job_candidate_id"])).fetchone()
+        if current is not None and current["resume_id"] == resume_id:
+            return dict(current), False
+        version = 1 if current is None else int(current["input_version"]) + 1
+        now = utcnow()
+        legacy = conn.execute("""SELECT 1 FROM job_candidate_inputs
+            WHERE org_id=? AND job_id=? AND job_candidate_id=?""",
+                              (ctx.org_id, job_id, row["job_candidate_id"])).fetchone()
+        if legacy is None:
+            conn.execute("""INSERT INTO job_candidate_inputs
+                (org_id,job_id,job_candidate_id,candidate_id,policy_id,
+                 policy_version,resume_id,sealed_by)
+                VALUES(?,?,?,?,?,?,?,?)""",
+                         (ctx.org_id, job_id, row["job_candidate_id"],
+                          row["candidate_id"], row["policy_id"],
+                          row["policy_version"], resume_id, ctx.user_id))
+        if current is not None:
+            conn.execute("""UPDATE job_candidate_input_versions
+                SET is_current=0, superseded_at=?, superseded_by=?, supersede_reason=?
+                WHERE org_id=? AND job_id=? AND job_candidate_id=? AND input_version=?""",
+                         (now, ctx.user_id, reason, ctx.org_id, job_id,
+                          row["job_candidate_id"], current["input_version"]))
+        conn.execute("""INSERT INTO job_candidate_input_versions
+            (org_id,job_id,job_candidate_id,input_version,candidate_id,policy_id,
+             policy_version,resume_id,sealed_by,is_current)
+            VALUES(?,?,?,?,?,?,?,?,?,1)""",
+                     (ctx.org_id, job_id, row["job_candidate_id"], version,
+                      row["candidate_id"], row["policy_id"], row["policy_version"],
+                      resume_id, ctx.user_id))
+        self.audit(conn, ctx, "candidate_input.version_sealed",
+                   row["job_candidate_id"],
+                   {"job_id": job_id, "resume_id": resume_id,
+                    "input_version": version, "reason": reason})
+        return self.one(conn, """SELECT * FROM job_candidate_input_versions
+            WHERE org_id=? AND job_id=? AND job_candidate_id=? AND input_version=?""",
+                        (ctx.org_id, job_id, row["job_candidate_id"], version)), True
+
 
     def acquire_candidate_for_job(self, ctx, job_id, batch_id, candidate_key, *, source="boss", external_id=None,
                                   resume=None, candidate_id=None, capture_id=None):
@@ -289,9 +389,30 @@ class CandidateRepository(BaseRepository):
                 row = dict(existing)
             snapshot = self._snapshot(conn, ctx, identifier, resume) if resume is not None else None
             acquisition = self._acquisition(conn, ctx, job_id, row, batch_id, snapshot, source, capture_id)
-            sealed = self._seal(conn, ctx, job_id, row, snapshot["resume_id"]) if snapshot and snapshot["is_scorable"] else None
+            sealed = None
+            if snapshot is not None and snapshot["is_scorable"]:
+                table = ("job_candidate_inputs_current"
+                         if self._has_input_versions(conn)
+                         else "job_candidate_inputs")
+                existing_input = conn.execute(
+                    f"""SELECT * FROM {table}
+                        WHERE org_id=? AND job_id=? AND job_candidate_id=?""",
+                    (ctx.org_id, job_id, row["job_candidate_id"])).fetchone()
+                if existing_input is not None:
+                    # A routine re-scan never replaces an audited sealed input.
+                    # Version changes are explicit (re-extract/reseal/append).
+                    sealed = dict(existing_input)
+                elif self._has_input_versions(conn):
+                    sealed, _ = self._seal_version(conn, ctx, job_id, row,
+                                                   snapshot["resume_id"])
+                else:
+                    sealed = self._seal(conn, ctx, job_id, row,
+                                        snapshot["resume_id"])
             if sealed is None:
-                found = conn.execute("SELECT * FROM job_candidate_inputs WHERE org_id=? AND job_id=? AND job_candidate_id=?",
+                table = ("job_candidate_inputs_current"
+                         if self._has_input_versions(conn)
+                         else "job_candidate_inputs")
+                found = conn.execute(f"SELECT * FROM {table} WHERE org_id=? AND job_id=? AND job_candidate_id=?",
                                      (ctx.org_id, job_id, row["job_candidate_id"])).fetchone()
                 sealed = dict(found) if found else None
             self.audit(conn, ctx, "candidate.acquired", acquisition["acquisition_id"], {"job_id": job_id, "batch_id": batch_id, "is_new": is_new})
@@ -304,7 +425,7 @@ class CandidateRepository(BaseRepository):
             snapshot = self._snapshot(conn, ctx, row["candidate_id"], resume)
             self._acquisition(conn, ctx, job_id, row, batch_id, snapshot, "manual")
             if snapshot["is_scorable"]:
-                self._seal(conn, ctx, job_id, row, snapshot["resume_id"])
+                self._seal_version(conn, ctx, job_id, row, snapshot["resume_id"])
             self.audit(conn, ctx, "resume.appended", snapshot["resume_id"], {"job_id": job_id, "job_candidate_id": job_candidate_id, "batch_id": batch_id})
             return snapshot
 
@@ -314,11 +435,11 @@ class CandidateRepository(BaseRepository):
             return self._seal(conn, ctx, job_id, row, resume_id)
 
     def reseal_candidate_input(self, ctx, job_id, job_candidate_id, resume_id):
-        """New input versions are blocked until an additive 012 migration exists.
+        """Append a new current input version from an already acquired snapshot.
 
-        ``job_candidate_inputs`` is intentionally immutable (migration 002/005
-        triggers).  Overwriting the sealed snapshot would silently rewrite the
-        audit trail, so no application-level shortcut is allowed here.
+        Migration 012 keeps the legacy ``job_candidate_inputs`` row and every
+        historical version untouched; only ``is_current`` moves.  The previous
+        evaluation remains immutable and readable.
         """
         with self.tx(ctx, job_id, "collect") as conn:
             row = self._job_candidate(conn, ctx, job_id, job_candidate_id)
@@ -328,13 +449,53 @@ class CandidateRepository(BaseRepository):
             if not snapshot["is_scorable"]:
                 raise ValueError(
                     "Only a complete, valid resume can replace the sealed input")
-            existing = conn.execute("""SELECT * FROM job_candidate_inputs
-                WHERE org_id=? AND job_id=? AND job_candidate_id=?""",
-                                    (ctx.org_id, job_id, job_candidate_id)).fetchone()
-            if existing is None:
-                return self._seal(conn, ctx, job_id, row, resume_id)
-            if existing["resume_id"] == resume_id:
-                return dict(existing)
-            raise ValueError(
-                "INPUT_VERSIONING_REQUIRES_012: sealed inputs are immutable; add an "
-                "additive input-version migration before re-scoring enriched resumes")
+            acquired = conn.execute("""SELECT 1 FROM candidate_acquisitions
+                WHERE org_id=? AND job_id=? AND job_candidate_id=?
+                  AND candidate_id=? AND resume_id=?""",
+                                    (ctx.org_id, job_id, job_candidate_id,
+                                     row["candidate_id"], resume_id)).fetchone()
+            if acquired is None:
+                raise ValueError(
+                    "The replacement resume must be acquired for this candidate/job")
+            sealed, _ = self._seal_version(conn, ctx, job_id, row, resume_id)
+            return sealed
+
+    def append_candidate_input_version(self, ctx, job_id, job_candidate_id,
+                                       resume, *, batch_id=None,
+                                       source="browser"):
+        """Acquire a fresh detail snapshot and seal it as the next input version.
+
+        PARTIAL snapshots are stored for diagnosis/audit but never become a
+        scoring input, so a still-incomplete resume cannot unlock scoring.
+        """
+        with self.tx(ctx, job_id, "collect") as conn:
+            row = self._job_candidate(conn, ctx, job_id, job_candidate_id)
+            if batch_id is None:
+                found = conn.execute("""SELECT * FROM scan_batches
+                    WHERE org_id=? AND job_id=? AND status='RUNNING'
+                    ORDER BY started_at DESC, batch_id DESC LIMIT 1""",
+                                     (ctx.org_id, job_id)).fetchone()
+                if found is None:
+                    raise ValueError("NO_RUNNING_BATCH: create a RUNNING batch first")
+                batch_id = found["batch_id"]
+            self._active_batch(conn, ctx, job_id, batch_id)
+            snapshot = self._snapshot(conn, ctx, row["candidate_id"], resume)
+            self._acquisition(conn, ctx, job_id, row, batch_id, snapshot, source)
+            sealed = None
+            created = False
+            if snapshot["is_scorable"]:
+                sealed, created = self._seal_version(
+                    conn, ctx, job_id, row, snapshot["resume_id"])
+            else:
+                found = conn.execute("""SELECT * FROM job_candidate_inputs_current
+                    WHERE org_id=? AND job_id=? AND job_candidate_id=?""",
+                                     (ctx.org_id, job_id, job_candidate_id)).fetchone()
+                sealed = dict(found) if found is not None else None
+            self.audit(conn, ctx, "resume.reextracted", snapshot["resume_id"],
+                       {"job_id": job_id, "job_candidate_id": job_candidate_id,
+                        "batch_id": batch_id, "sealed": sealed is not None,
+                        "new_version": created})
+            return {"snapshot": snapshot, "sealed_input": sealed,
+                    "input_version": (sealed or {}).get("input_version"),
+                    "is_new_version": created,
+                    "batch_id": batch_id}

@@ -89,3 +89,13 @@ class GreetingDryRunRequest(ApiModel):
 class BrowserSessionNavigateRequest(ApiModel):
     job_id: str | None = Field(default=None, max_length=200)
     url: str | None = Field(default=None, max_length=2000)
+
+
+class PrecheckConfirmRequest(ApiModel):
+    platform_job_id: str = Field(default="", max_length=200)
+    filter_summary: str = Field(default="", max_length=500)
+    visible_cards: int = Field(default=0, ge=0, le=10000)
+
+
+class ReextractRequest(ApiModel):
+    batch_id: str | None = Field(default=None, max_length=200)

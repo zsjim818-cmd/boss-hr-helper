@@ -1,5 +1,5 @@
 """Job-scoped scanning batches with an immutable published-policy binding."""
-from storage.repositories.base import BaseRepository, uid, utcnow
+from storage.repositories.base import BaseRepository, json_dump, uid, utcnow
 
 
 class ScanBatchRepository(BaseRepository):
@@ -33,6 +33,38 @@ class ScanBatchRepository(BaseRepository):
                 WHERE org_id=? AND job_id=?
                 ORDER BY started_at DESC, batch_id DESC LIMIT ?""",
                                                     (ctx.org_id, job_id, limit))]
+
+    def confirm_batch_precheck(self, ctx, job_id, batch_id, *,
+                               platform_job_id="", filter_summary="",
+                               visible_cards=0):
+        """Persist the HR's confirmed page job/filter snapshot on the batch."""
+        if platform_job_id is None or not isinstance(platform_job_id, str):
+            raise ValueError("platform_job_id must be a string")
+        if not isinstance(filter_summary, str):
+            raise ValueError("filter_summary must be a string")
+        if type(visible_cards) is not int or visible_cards < 0:
+            raise ValueError("visible_cards must be a non-negative integer")
+        payload = json_dump({"summary": filter_summary[:500],
+                             "visible_cards": visible_cards})
+        with self.tx(ctx, job_id, "collect") as conn:
+            batch = self.one(conn, """SELECT * FROM scan_batches
+                WHERE org_id=? AND job_id=? AND batch_id=?""",
+                             (ctx.org_id, job_id, batch_id))
+            if batch["status"] != "RUNNING":
+                raise ValueError("Only a RUNNING batch can accept a precheck confirmation")
+            now = utcnow()
+            conn.execute("""UPDATE scan_batches
+                SET platform_job_id=?, filter_summary_json=?,
+                    filters_confirmed_at=?, confirmed_by=?
+                WHERE org_id=? AND job_id=? AND batch_id=?""",
+                         (platform_job_id.strip()[:200], payload, now,
+                          ctx.user_id, ctx.org_id, job_id, batch_id))
+            self.audit(conn, ctx, "scan_batch.precheck_confirmed", batch_id,
+                       {"job_id": job_id, "platform_job_id": platform_job_id,
+                        "visible_cards": visible_cards})
+            return self.one(conn, """SELECT * FROM scan_batches
+                WHERE org_id=? AND job_id=? AND batch_id=?""",
+                            (ctx.org_id, job_id, batch_id))
 
     def transition_scan_batch(self, ctx, job_id, batch_id, status):
         allowed = {"RUNNING": {"PAUSED", "COMPLETED", "CANCELLED"},
