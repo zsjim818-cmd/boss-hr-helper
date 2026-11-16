@@ -1,0 +1,51 @@
+{
+  "name": "周承宇",
+  "age": "22岁",
+  "degree": "硕士研究生",
+  "work_years": "0年",
+  "job_status": "应届生-周内到岗",
+  "active_status": "刚刚活跃",
+  "expectation": {
+    "position": "AI自动化开发专员",
+    "city": "深圳",
+    "salary": "9-11K"
+  },
+  "advantage": "长江大学人工智能硕士在读，求职Java后端实习。熟悉Spring Boot、Spring Cloud、MySQL、Redis、RabbitMQ和Elasticsearch。LocalLife项目完成9个控制器、30余个RESTful接口，以Redis Lua、Redisson和RabbitMQ实现秒杀；电商项目中实践Gateway鉴权、Seata事务、Sentinel限流。暂无Agent项目证据。",
+  "skills": "熟悉Java基础语法、面向对象、集合框架、异常处理、泛型及Stream API；了解多线程、线程池、ThreadLocal和常用锁机制。熟悉Spring Boot、Spring MVC等开发框架，理解Spring IoC、AOP、Bean生命周期及事务传播机制；能够使用MyBatis-Plus完成数据持久化，具备Spring Security、JWT鉴权及角色权限控制实践。熟悉Spring Cloud Alibaba微服务体系，具备Nacos服务注册与配置管理、OpenFeign远程调用、Gateway统一路由及用户信息透传实践；了解Sentinel限流降级和Seata XA分布式事务的使用。熟悉MySQL、SQL、索引、事务和常见数据库设计方法；熟悉Redis常用数据结构、持久化与缓存策略，了解Redisson分布式锁及Lua原子操作。具备RabbitMQ实际使用经验，能够通过消息队列实现业务异步解耦和订单延迟处理；能够使用Elasticsearch完成商品数据索引和检索。熟悉RESTful API和常见后端分层架构；熟悉Git、Maven、JUnit、Mockito、Flyway、Docker Compose和常用Linux命令；通过CET-6。",
+  "work_experience": [],
+  "project_experience": [
+    {
+      "name": "LocalLife——本地商户发现与社交点评平台",
+      "role": "后端开发",
+      "start": "2026.03",
+      "end": "2026.05",
+      "description": "技术栈：Spring Boot、MyBatis-Plus、MySQL、Redis、Redisson、RabbitMQ、Lua。项目简介：面向本地生活消费场景设计的商户发现与内容互动平台，为用户提供验证码登录、附近商户查询、探店内容发布、关注与点赞、连续签到及限时优惠券抢购等功能。系统围绕热点数据访问和秒杀流量突增场景，引入Redis缓存、Lua原子校验、分布式锁及消息队列，降低数据库压力并提升请求处理能力。负责用户、商户、探店内容、社交关系及优惠券订单等核心模块的后端设计，完成9个业务控制器和30余个RESTful接口。基于Redis Hash构建无状态登录体系，以随机Token作为身份凭证，通过双层拦截器完成登录校验、用户上下文传递及登录有效期续期，支持服务多实例共享登录状态。封装通用缓存访问组件，采用Cache Aside保证商铺数据更新后的缓存一致性，并通过缓存空值和逻辑过期异步重建分别缓解缓存穿透与热点Key查询问题。设计优惠券异步秒杀链路，利用Lua脚本原子完成库存校验、库存预扣和重复购买判断，将数据库写入操作交由RabbitMQ异步处理，缩短秒杀接口同步执行链路。基于时间戳与Redis自增序列实现分布式订单ID；通过Redisson用户粒度分布式锁、数据库条件更新等机制控制重复下单与库存超卖风险。使用Redis GEO实现指定范围内商户的距离排序与分页查询，避免在关系型数据库中执行复杂的地理距离计算。基于Redis ZSet实现点赞用户排行和推模式Feed流，通过时间戳游标与偏移量完成关注动态的滚动分页。使用Redis Set维护用户关注关系并通过集合交集查询共同关注；使用Bitmap和BitField实现低存储成本的月度签到及连续签到统计。"
+    },
+    {
+      "name": "优选购-分布式电商交易平台",
+      "role": "后端开发",
+      "start": "2026.05",
+      "end": "2026.08",
+      "description": "技术栈：Spring Boot、Spring Cloud Alibaba、Nacos、OpenFeign、Gateway、Sentinel、Seata、RabbitMQ、Elasticsearch、MySQL、MyBatis-Plus、Docker。项目简介：面向在线零售场景开发的微服务电商交易平台，围绕用户、商品、购物车、订单及支付等核心业务进行服务拆分，实现商品检索、购物车管理、订单创建、库存扣减、余额支付和订单超时处理等功能，并针对跨服务事务、异步消息和服务异常等问题进行了专项设计。按用户、商品、购物车、交易和支付等业务领域拆分微服务，使用Nacos实现服务注册与发现，基于OpenFeign完成服务间调用。使用Spring Cloud Gateway作为系统统一入口，结合JWT实现登录认证、用户信息透传和接口权限校验，并增加用户数据归属与内部接口访问控制。基于Seata XA模式保证创建订单、扣减库存和扣减余额等跨服务操作的事务一致性，当任意环节发生异常时统一回滚。使用RabbitMQ解耦核心交易流程，实现商品售出事件异步处理和订单延迟关单，并配置消费重试及异常消息处理策略。使用Elasticsearch建立商品搜索索引，完成约8.8万条商品数据初始化，将复杂商品检索从关系型数据库中拆分出来。基于Sentinel实现网关路由级流量控制，并为Feign调用配置降级策略；对扣库存、扣余额等写操作采用快速失败，防止静默降级产生业务脏数据。使用Docker在Linux虚拟机中部署MySQL、Nacos、Seata、RabbitMQ和Elasticsearch，完成本地微服务运行环境搭建。"
+    }
+  ],
+  "education": [
+    {
+      "school": "长江大学",
+      "major": "人工智能",
+      "degree": "硕士研究生",
+      "start": "2024.09",
+      "end": "2027.06",
+      "school_tags": ["全日制硕士"]
+    },
+    {
+      "school": "长江大学",
+      "major": "网络工程",
+      "degree": "本科",
+      "start": "2020.09",
+      "end": "2024.06",
+      "school_tags": ["统招本科"]
+    }
+  ],
+  "certifications": ["大学英语六级"]
+}

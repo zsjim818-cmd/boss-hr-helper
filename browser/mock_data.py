@@ -2,6 +2,27 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
+from functools import lru_cache
+from pathlib import Path
+
+
+FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "candidates"
+
+
+@lru_cache(maxsize=1)
+def _ai_fixture_resumes() -> tuple[dict, ...]:
+    """Load the eight realistic AI/embedded joint-debug resumes once."""
+    result = []
+    for path in sorted(FIXTURE_DIR.glob("candidate_0*.json"))[:8]:
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(value, dict) and value.get("name"):
+            result.append(value)
+    return tuple(result)
+
 
 
 def resume_template(kind: str, identity: str, job_id: str) -> dict:
@@ -97,18 +118,25 @@ def _high_match_ai_resume() -> dict:
 def mock_cards(job_id: str, kind: str = "java", count: int = 3,
                prefix: str = "geek") -> list[dict]:
     platform_job_id = f"boss-job-{job_id}"
+    fixtures = _ai_fixture_resumes() if kind == "ai" else ()
+    if fixtures:
+        count = max(count, len(fixtures))
     cards = []
     for index in range(1, count + 1):
-        resume = resume_template(kind, f"{prefix}-{kind}-{index}", job_id)
-        if kind == "ai" and index == 1:
-            resume.update(_high_match_ai_resume())
-            resume["_meta"]["candidate_key"] = f"{job_id}:{prefix}-{kind}-{index}"
-            resume["_meta"]["encrypt_geek_id"] = f"{prefix}-{kind}-{index}"
+        if fixtures and index <= len(fixtures):
+            resume = deepcopy(fixtures[index - 1])
+            resume["_meta"] = {
+                "candidate_key": f"{job_id}:{prefix}-{kind}-{index}",
+                "encrypt_job_id": f"boss-job-{job_id}",
+                "encrypt_geek_id": f"{prefix}-{kind}-{index}",
+            }
+        else:
+            resume = resume_template(kind, f"{prefix}-{kind}-{index}", job_id)
         cards.append({
             "identity": f"{prefix}-{kind}-{index}",
-            "name": (resume["name"] if kind == "ai" and index == 1
-                     else f"Mock {kind} candidate {index}"),
-            "position": "Engineer",
+            "name": resume.get("name") or f"Mock {kind} candidate {index}",
+            "position": (resume.get("expectation") or {}).get("position", "Engineer")
+                        if isinstance(resume.get("expectation"), dict) else "Engineer",
             "job_id": job_id,
             "platform_job_id": platform_job_id,
             "degree": resume.get("degree", "本科"),

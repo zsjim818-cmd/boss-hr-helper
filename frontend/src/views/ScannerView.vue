@@ -412,7 +412,7 @@ const imported = ref<ImportResult | null>(null)
 const selectedCandidate = ref<CandidateListItem | null>(null)
 const candidates = ref<CandidateListItem[]>([])
 const candidateKey = ref('cand-demo-01')
-const templateKey = ref('java')
+const templateKey = ref('xujianing')
 const resumeJson = ref('')
 const task = ref<PipelineTask | null>(null)
 const evaluation = ref<PipelineEvaluation | null>(null)
@@ -446,43 +446,259 @@ const batchResult = ref<{ success: number; skipped: number; failed: number;
   success: 0, skipped: 0, failed: 0, failures: []
 })
 
-const javaResume = {
-  name: '演示候选人（Java）', degree: '本科', work_years: '5年',
-  job_status: '离职-随时到岗', active_status: '今日活跃',
-  expectation: { city: '北京', salary: '12K/月', position: 'Java工程师' },
-  skills: 'Java, SQL, Spring Boot, 接口自动化测试',
-  work_experience: [{ company: '演示支付公司', position: 'Java工程师',
-    responsibility: '负责订单支付后台Java服务开发，设计SQL事务与幂等约束，使用Spring Boot提供接口并编写接口自动化测试。',
-    keywords: [] }],
-  project_experience: [], education: [{ school: '演示大学', degree: '本科' }],
-  certifications: [], advantage: ''
+const xujianingResume = {
+  "name": "许嘉宁",
+  "age": "24岁",
+  "degree": "硕士研究生",
+  "work_years": "0.3年",
+  "job_status": "在校-可实习",
+  "active_status": "刚刚活跃",
+  "expectation": {
+    "position": "AI自动化开发专员",
+    "city": "深圳",
+    "salary": "9-11K"
+  },
+  "advantage": "计算机硕士在读，曾于美团参与Agent工程，负责点位评估、知识检索和多Agent提取，实践GeoHash、Elasticsearch和Milvus。参与Overleaf Copilot开发，设计多文件修改、编译自修复、Tracing及约400题评测集。400题×3 trials回归中，单轮pass@1从84.8%升至97.5%，多轮从73.4%升至94%，总体pass³从60.5%升至84.2%。",
+  "skills": "Agent工程：LLM推理、Tool Calling、多Agent调度、跨项目RAG/知识检索、向量化检索、Tracing、工具调用与工作流控制。后端与数据：Agent相关业务接口开发、RPC依赖关系分析、GeoHash、Elasticsearch空间查询、Milvus、结构化知识、并发任务协调、CompletableFuture。评测与改进：多轮Agent任务、LaTeX编译与日志错误分析、自动修复循环、约400题评测集、400题×3 trials、pass@1及pass³指标、失败案例分析。其他：了解工业安全数据流转、工控蜜罐与高并发日志处理的业务场景。",
+  "work_experience": [
+    {
+      "company": "美团",
+      "position": "后端开发实习生（业务研发平台/外卖技术部）",
+      "job_type": "实习",
+      "start": "2026.05",
+      "end": "2026.08",
+      "responsibility": "深度参与商品运营场景的后端Agent工程建设，负责袋鼠参谋Agent点位评估、跨项目知识检索、多Agent知识提取及业务后端链路开发，覆盖Agent工具调用、知识检索、工作流设计与后端并发优化等方向。针对袋鼠参谋Agent开店选址点位评估场景，扩展POI空间检索能力：在已有Agent意图链路上，将用户的POI、半径等信息转化为结构化查询条件，通过GeoHash编码结合半径构建ES空间查询；针对POI无法解析场景增加Agent缺失检测与澄清兜底，解决原有AOI名称查询无法覆盖具体点位及异常输入的问题。构建面向Agent编码的跨项目知识检索Skill：解析RPC等服务调用关系生成项目依赖拓扑，并为项目沉淀结构化服务知识、向量化写入Milvus；Agent根据当前项目AppKey检索关联服务，通过多路召回获取上下游调用关系与业务上下文，为跨项目代码编写提供相关服务知识。构建多Agent商品知识提取Pipeline，挖掘“什么样的品能卖得好”：基于模型选品与BD实际选品差异，结合商品、商家及城市×蜂窝等多维属性，针对LLM易产生弱规律、过拟合的问题，引入多视角Agent投票+留出集验证+时空约束，将非结构化分析结果转化为可追溯、带置信度与时效的结构化知识。独立完成BD工作台后端从0到1建设：实现混排推荐、反馈落库等核心接口；针对多门店场景下10个上游RPC串行聚合导致接口高耗时的问题，采用自定义线程池+CompletableFuture并行扇出，并统一超时预算与字段级优雅降级，主链路耗时由上游耗时累加降低至最长单上游耗时量级。",
+      "keywords": [
+        "Agent",
+        "GeoHash",
+        "Elasticsearch",
+        "Milvus",
+        "RAG",
+        "多Agent",
+        "CompletableFuture",
+        "后端开发"
+      ]
+    }
+  ],
+  "project_experience": [
+    {
+      "name": "2026年OSPP中科院开源之夏：Overleaf LaTeX协作平台Copilot助手",
+      "role": "Agent开发",
+      "start": "2025.09",
+      "end": "2026.04",
+      "description": "项目描述：面向在线LaTeX平台Overleaf开发Copilot Agent，围绕论文编辑场景构建工具调用、上下文管理、编译验证与错误自修复，并构建评测数据集，结合Tracing和失败案例分析，系统迭代优化Agent。设计面向Overleaf的Coding Agent，实现多文件LaTeX项目的自主修改与验证：基于LLM推理与Tool Calling实现论文文件读取、修改和编译，并设计Agent工作流管理多步任务执行，使Agent能够根据项目上下文完成跨文件修改。针对代码修改后无法直接判断结果是否正确的问题，构建“修改—编译—错误诊断—修复—再编译”的自主修复流程；将LaTeX编译结果与错误日志作为Agent后续决策依据，通过状态管理、重试与终止策略控制多轮执行，使Agent能够根据编译反馈定位并修复错误。构建Agent执行过程的结构化Tracing，统一记录LLM调用、工具调用、文件修改、编译结果及状态转移，将一次Agent任务串联为完整Trace，用于定位失败步骤、分析错误类型并支持后续策略优化。构建约400题Agent评测数据集，围绕编译修复、结构修改、语义修改和无需修改四类任务，覆盖三档难度及多轮交互；根据Agent实际运行中的失败案例持续补充数据，形成用于回归测试和能力评估的固定基准。基于评测数据集与Trace失败案例持续迭代Prompt、工作流、工具设计及错误处理策略，通过400题×3 trials回归评测，单轮对话pass@1从84.8%提升至97.5%，多轮对话pass@1从73.4%提升至94%，总体pass³从60.5%提升至84.2%。"
+    },
+    {
+      "name": "工控蜜罐态势感知平台",
+      "role": "项目开发",
+      "start": "2024.10",
+      "end": "2025.06",
+      "description": "项目描述：国家重点研发计划支撑的分布式工控蜜罐基座。针对高并发攻击与海量日志场景，支持工控协议主动探测、重构高可用数据削峰、准实时溯源检索及离线态势感知体系，保障安全数据秒级流转与全局策略高效下发。"
+    }
+  ],
+  "education": [
+    {
+      "school": "华中科技大学",
+      "major": "计算机科学与技术",
+      "degree": "硕士研究生",
+      "start": "2024.09",
+      "end": "2027.07",
+      "school_tags": [
+        "全日制硕士",
+        "GPA 3.62",
+        "专业前15%"
+      ]
+    },
+    {
+      "school": "武汉科技大学",
+      "major": "计算机科学与技术",
+      "degree": "本科",
+      "start": "2020.09",
+      "end": "2024.06",
+      "school_tags": [
+        "统招本科",
+        "GPA 3.61",
+        "专业前30%"
+      ]
+    }
+  ],
+  "certifications": []
 }
-const salesResume = {
-  name: '演示候选人（销售）', degree: '本科', work_years: '4年',
-  job_status: '离职-随时到岗', active_status: '今日活跃',
-  expectation: { city: '北京', salary: '12K/月', position: '企业销售' },
-  skills: '企业客户销售, CRM, 合同谈判, 销售漏斗',
-  work_experience: [{ company: '演示软件公司', position: '企业销售',
-    responsibility: '负责企业客户需求访谈与方案沟通，独立推进合同谈判与签约，维护销售漏斗并跟进回款。',
-    keywords: [] }],
-  project_experience: [], education: [{ school: '演示大学', degree: '本科' }],
-  certifications: [], advantage: ''
+
+const linhaoranResume = {
+  "name": "林昊然",
+  "age": "21岁",
+  "degree": "本科",
+  "work_years": "0年",
+  "job_status": "在校-可实习",
+  "active_status": "刚刚活跃",
+  "expectation": {
+    "position": "AI自动化开发专员",
+    "city": "深圳",
+    "salary": "9-11K"
+  },
+  "advantage": "华工软件工程本科在读，兼具Java后端与Agent开发经验。基于FastAPI、Redis、Chroma和Ollama构建学生支持Agent，设计Runtime Harness、版本化Memory、Hybrid RAG和MCP受控动作。36条冻结集Recall@4 100%、MRR 0.876；输入减少13.54%。另有优惠券项目经验，熟悉Redis Lua、RocketMQ和Redisson。",
+  "skills": "Java基础：熟悉集合、泛型、异常、IO与JUC；掌握线程池、锁、CAS/AQS，理解JVM内存结构与GC。后端框架：熟悉Spring Boot、MyBatis-Plus；理解IoC、AOP、事务与RESTful分层设计。数据库：熟悉MySQL索引、事务隔离、MVCC与锁；能使用EXPLAIN进行SQL、表结构优化。Redis：熟悉常用数据结构、持久化；具备缓存穿透/击穿/雪崩治理、Lua原子操作、分布式锁与缓存一致性实践。消息队列：具备RocketMQ异步解耦、削峰、延迟消息、消费幂等、失败重试与死信处理实践。工程能力：Git、Maven、Docker、Apifox、JMeter。AI应用：Python、FastAPI、SQLAlchemy、MySQL、Redis、Chroma、Ollama、BM25、Hybrid RAG、MCP、Runtime Harness、Trace。",
+  "work_experience": [],
+  "project_experience": [
+    {
+      "name": "高并发优惠券分发与核销系统",
+      "role": "后端开发",
+      "start": "2026.03",
+      "end": "2026.06",
+      "description": "基于Spring Cloud Alibaba构建优惠券分发与核销系统，以Nacos实现服务注册发现、Gateway统一路由；按商家、模板、用户与结算拆分服务，覆盖建券、兑换、批量发券、核销与退款。技术栈：Spring Boot 3、Spring Cloud Alibaba（Nacos）、Spring Cloud Gateway、MySQL、Redis、Redisson、Lua、RocketMQ、ShardingSphere、EasyExcel、XXL-Job。热点券兑换链路设计：基于Redis Lua原子完成库存校验、单用户领取次数校验与预扣库存；通过RocketMQ异步创建用户券，结合MySQL条件扣减、唯一索引与消费幂等控制，降低高并发下超发与重复写入风险。实现批量发券链路：EasyExcel流式解析名单，待发用户暂存Redis Set并分批投递RocketMQ；消费者批量落券，配合任务状态、Redis幂等、XXL-Job扫描和失败记录，降低重复投递及大文件对同步接口的影响。实现用户券结算与状态流转：通过Redis ZSet与Pipeline批量读取用户券索引和模板缓存，结合CompletableFuture计算优惠金额；以Redisson锁、数据库条件更新保障锁券、核销与退款并发正确性，并用延迟消息处理过期。按建券与查券主访问路径，使用ShardingSphere自定义Hash分片，模板按shop_number、用户券按user_id分库分表；创建后预热缓存，结合BloomFilter、空值缓存和分布式锁双检治理穿透、击穿，并以延迟消息更新模板结算状态。完成JMeter性能压测与全链路验证：结算查询8万次、约7600QPS、错误率0%、P99 2ms；异步领券4万次、约1838QPS、HTTP错误率0%；完成5000用户批量发券，核验MQ消费和用户券最终落库。"
+    },
+    {
+      "name": "SCUT Campus Compass——华工学生支持与个人发展Agent",
+      "role": "Agent应用开发",
+      "start": "2026.05",
+      "end": "至今",
+      "description": "基于FastAPI、MySQL、Redis、Chroma与Ollama构建面向华工学生的支持型Agent，以公开可核验资料覆盖科研、学业、生活与活动场景；提供可追溯、可复现评测的Agent链路。技术栈：Python、FastAPI、SQLAlchemy、MySQL、Redis、Chroma、Ollama、BM25、Hybrid RAG、MCP。Runtime Harness与Blackboard协作：设计单次请求级Runtime Harness，串联会话、Agent Runtime、Trace与后置动作；以追加式Blackboard支持有界、顺序的多Agent任务认领与artifact聚合，拆分领域路由、风险判断、上下文装配和安全审查。版本化上下文Memory：Redis滑动窗口+LLM memory brief管理短期上下文；MySQL MemorySnapshot技术覆盖消息增量压缩、支持事实确认/撤销、作用域与级联删除。冻结回归中输入估算减少13.54%、恢复3/3。华工领域Hybrid RAG：基于BM25关键词检索与Chroma向量召回构建双路检索，经加权融合与启发式重排；为公开资料维护URL、版本hash、复核时间及ACTIVE/STALE状态，使回答可关联来源与资料状态。36条冻结集Recall@4 100%、MRR 0.876、本机检索P95 260ms。本地模型路由与可靠性：接入本地qwen2.5:7b，通过ModelRouter统一意图识别、风险判断、上下文摘要与回复生成等调用；实现三态熔断与SSE流式安全降级，首token输出后发生异常时不跨模型拼接回复，9/9组确定性故障注入通过。MCP与受控异步动作：将“支持交接请求”封装为受控MCP工具，用户显式发起并确认后创建持久化异步任务；通过策略校验、幂等控制、租约超时接管、失败重试与人工恢复保障任务可控。Trace与Engineering Harness：建立ConversationRun级跳转Trace、关联领域/风险决策、MemorySnapshot、RetrievalRun、ModelAttempt与ActionTask；Engineering Harness覆盖Mock回归、故障注入和本地HTTP E2E，并固化Git SHA、依赖/配置/数据集哈希及失败样例。"
+    }
+  ],
+  "education": [
+    {
+      "school": "华南理工大学",
+      "major": "软件工程",
+      "degree": "本科",
+      "start": "2024.09",
+      "end": "2028.06",
+      "school_tags": [
+        "统招本科",
+        "985",
+        "211"
+      ]
+    }
+  ],
+  "certifications": [
+    "大学英语四级",
+    "大学英语六级",
+    "校二等奖学金"
+  ]
 }
-const aiResume = {
-  name: '演示候选人（AI）', degree: '硕士', work_years: '2年',
-  job_status: '离职-随时到岗', active_status: '今日活跃',
-  expectation: { city: '北京', salary: '12K/月', position: 'AI应用工程师' },
-  skills: 'Python, LangGraph, RAG, Playwright',
-  work_experience: [{ company: '演示科技公司', position: 'AI应用工程师',
-    responsibility: '使用LangGraph搭建智能体工作流，构建RAG知识库问答，编写Playwright自动化脚本。',
-    keywords: [] }],
-  project_experience: [], education: [{ school: '演示大学', degree: '硕士' }],
-  certifications: [], advantage: ''
+
+const zhouchengyuResume = {
+  "name": "周承宇",
+  "age": "22岁",
+  "degree": "硕士研究生",
+  "work_years": "0年",
+  "job_status": "应届生-周内到岗",
+  "active_status": "刚刚活跃",
+  "expectation": {
+    "position": "AI自动化开发专员",
+    "city": "深圳",
+    "salary": "9-11K"
+  },
+  "advantage": "长江大学人工智能硕士在读，求职Java后端实习。熟悉Spring Boot、Spring Cloud、MySQL、Redis、RabbitMQ和Elasticsearch。LocalLife项目完成9个控制器、30余个RESTful接口，以Redis Lua、Redisson和RabbitMQ实现秒杀；电商项目中实践Gateway鉴权、Seata事务、Sentinel限流。暂无Agent项目证据。",
+  "skills": "熟悉Java基础语法、面向对象、集合框架、异常处理、泛型及Stream API；了解多线程、线程池、ThreadLocal和常用锁机制。熟悉Spring Boot、Spring MVC等开发框架，理解Spring IoC、AOP、Bean生命周期及事务传播机制；能够使用MyBatis-Plus完成数据持久化，具备Spring Security、JWT鉴权及角色权限控制实践。熟悉Spring Cloud Alibaba微服务体系，具备Nacos服务注册与配置管理、OpenFeign远程调用、Gateway统一路由及用户信息透传实践；了解Sentinel限流降级和Seata XA分布式事务的使用。熟悉MySQL、SQL、索引、事务和常见数据库设计方法；熟悉Redis常用数据结构、持久化与缓存策略，了解Redisson分布式锁及Lua原子操作。具备RabbitMQ实际使用经验，能够通过消息队列实现业务异步解耦和订单延迟处理；能够使用Elasticsearch完成商品数据索引和检索。熟悉RESTful API和常见后端分层架构；熟悉Git、Maven、JUnit、Mockito、Flyway、Docker Compose和常用Linux命令；通过CET-6。",
+  "work_experience": [],
+  "project_experience": [
+    {
+      "name": "LocalLife——本地商户发现与社交点评平台",
+      "role": "后端开发",
+      "start": "2026.03",
+      "end": "2026.05",
+      "description": "技术栈：Spring Boot、MyBatis-Plus、MySQL、Redis、Redisson、RabbitMQ、Lua。项目简介：面向本地生活消费场景设计的商户发现与内容互动平台，为用户提供验证码登录、附近商户查询、探店内容发布、关注与点赞、连续签到及限时优惠券抢购等功能。系统围绕热点数据访问和秒杀流量突增场景，引入Redis缓存、Lua原子校验、分布式锁及消息队列，降低数据库压力并提升请求处理能力。负责用户、商户、探店内容、社交关系及优惠券订单等核心模块的后端设计，完成9个业务控制器和30余个RESTful接口。基于Redis Hash构建无状态登录体系，以随机Token作为身份凭证，通过双层拦截器完成登录校验、用户上下文传递及登录有效期续期，支持服务多实例共享登录状态。封装通用缓存访问组件，采用Cache Aside保证商铺数据更新后的缓存一致性，并通过缓存空值和逻辑过期异步重建分别缓解缓存穿透与热点Key查询问题。设计优惠券异步秒杀链路，利用Lua脚本原子完成库存校验、库存预扣和重复购买判断，将数据库写入操作交由RabbitMQ异步处理，缩短秒杀接口同步执行链路。基于时间戳与Redis自增序列实现分布式订单ID；通过Redisson用户粒度分布式锁、数据库条件更新等机制控制重复下单与库存超卖风险。使用Redis GEO实现指定范围内商户的距离排序与分页查询，避免在关系型数据库中执行复杂的地理距离计算。基于Redis ZSet实现点赞用户排行和推模式Feed流，通过时间戳游标与偏移量完成关注动态的滚动分页。使用Redis Set维护用户关注关系并通过集合交集查询共同关注；使用Bitmap和BitField实现低存储成本的月度签到及连续签到统计。"
+    },
+    {
+      "name": "优选购-分布式电商交易平台",
+      "role": "后端开发",
+      "start": "2026.05",
+      "end": "2026.08",
+      "description": "技术栈：Spring Boot、Spring Cloud Alibaba、Nacos、OpenFeign、Gateway、Sentinel、Seata、RabbitMQ、Elasticsearch、MySQL、MyBatis-Plus、Docker。项目简介：面向在线零售场景开发的微服务电商交易平台，围绕用户、商品、购物车、订单及支付等核心业务进行服务拆分，实现商品检索、购物车管理、订单创建、库存扣减、余额支付和订单超时处理等功能，并针对跨服务事务、异步消息和服务异常等问题进行了专项设计。按用户、商品、购物车、交易和支付等业务领域拆分微服务，使用Nacos实现服务注册与发现，基于OpenFeign完成服务间调用。使用Spring Cloud Gateway作为系统统一入口，结合JWT实现登录认证、用户信息透传和接口权限校验，并增加用户数据归属与内部接口访问控制。基于Seata XA模式保证创建订单、扣减库存和扣减余额等跨服务操作的事务一致性，当任意环节发生异常时统一回滚。使用RabbitMQ解耦核心交易流程，实现商品售出事件异步处理和订单延迟关单，并配置消费重试及异常消息处理策略。使用Elasticsearch建立商品搜索索引，完成约8.8万条商品数据初始化，将复杂商品检索从关系型数据库中拆分出来。基于Sentinel实现网关路由级流量控制，并为Feign调用配置降级策略；对扣库存、扣余额等写操作采用快速失败，防止静默降级产生业务脏数据。使用Docker在Linux虚拟机中部署MySQL、Nacos、Seata、RabbitMQ和Elasticsearch，完成本地微服务运行环境搭建。"
+    }
+  ],
+  "education": [
+    {
+      "school": "长江大学",
+      "major": "人工智能",
+      "degree": "硕士研究生",
+      "start": "2024.09",
+      "end": "2027.06",
+      "school_tags": [
+        "全日制硕士"
+      ]
+    },
+    {
+      "school": "长江大学",
+      "major": "网络工程",
+      "degree": "本科",
+      "start": "2020.09",
+      "end": "2024.06",
+      "school_tags": [
+        "统招本科"
+      ]
+    }
+  ],
+  "certifications": [
+    "大学英语六级"
+  ]
 }
+
+const lichengzeResume = {
+  "name": "李承泽",
+  "age": "23岁",
+  "degree": "本科",
+  "work_years": "0.4年",
+  "job_status": "应届生-随时到岗",
+  "active_status": "刚刚活跃",
+  "expectation": {
+    "position": "AI自动化开发专员",
+    "city": "深圳",
+    "salary": "9-11K"
+  },
+  "advantage": "杭州师范大学电子信息工程本科毕业，熟悉STM32底层驱动、PWM、ADC DMA、SPI及实时系统。曾任硬件研发助理工程师，参与200余件组装维修、RV1106 Linux平台调试、PLC异常排查和PCB改版。独立完成FOC电机控制系统，包含20kHz电流环、双ADC采样与位置环；示波器实测ISR耗时33μs，角度分辨率0.022°。暂无大模型或Agent项目经验。",
+  "skills": "具备从寄存器到应用层的完整嵌入式开发能力；STM32 HAL、PWM、ADC DMA、SPI、编码器、定时器、中断、C/C++、μC/OS实时系统、SBUS通信协议；熟悉示波器波形分析和软硬件联合调试。电机控制：FOC、SVPWM、Clarke/Park变换、PID、CMSIS-DSP。硬件：PCB布局改进、航空插头接口、Linux固件配置、PLC信号排障、驻场测试。熟练使用AI编程工具提效，能够独立完成从方案验证到系统调试的全流程。",
+  "work_experience": [
+    {
+      "company": "杭州云意品质智能科技有限责任公司",
+      "position": "硬件研发部-助理工程师",
+      "job_type": "实习",
+      "start": "2026.01",
+      "end": "2026.05",
+      "responsibility": "负责产品样机焊接与模块调试，完成200+件组装及板卡维修，更换RV1106主控等器件十余块，协助功能验证。负责RV1106 Linux平台固件烧录与配置，手动管理进程并进行测试，排查听筒与主板通信异常。外派至常州甲方现场，排查PLC信号触发异常，定位并解决产品OK/NG信号输出问题。外派至市内合作加工商驻场2周，跟进2款产品试产，监督生产进度与工艺质量。根据硬件工程师及试产反馈改进PCB布局：分立LED灯珠整合为独立小板（排线连接主板），航空插头独立为PCB模块（连接件连接主板），减少工序、提升效率；独立绘制听筒主板STM32烧录测试二合一工装PCB。",
+      "keywords": [
+        "STM32",
+        "RV1106",
+        "Linux",
+        "PLC",
+        "PCB",
+        "硬件调试",
+        "工装设计"
+      ]
+    }
+  ],
+  "project_experience": [
+    {
+      "name": "基于STM32G431的PMSM磁场定向控制（FOC）系统",
+      "role": "独立开发-毕设",
+      "start": "2026.03",
+      "end": "2026.05",
+      "description": "技术栈：STM32 HAL、FOC、SVPWM、PID、DMA、CMSIS-DSP、SPI、ADC。独立完成从底层驱动到应用层的完整FOC电机控制系统，支持5种运行模式（开环/电流/速度/位置闭环/阻尼模式），实现三级串级PID控制架构，运行于170MHz STM32G431CBU6（Cortex-M4F）平台。独立完成TIM1六路互补PWM（20kHz中心对齐）、ADC1/ADC2 DMA循环采样、SPI磁编码器等底层驱动开发，具备HAL库及寄存器级调试能力。设计ADC1（TIM1触发20kHz）+ADC2（TIM6触发1kHz）双ADC并行采样架构，采用DMA循环缓冲实现零CPU开销电流/电压采集，配合IIR低通滤波将采样噪声从±0.2A降至±0.05A。在20kHz PWM（50μs周期）硬实时约束下，电流环单次ISR内完成AS5048A编码器读取→Clarke/Park变换→双PI闭环→SVPWM调制全流程；示波器实测耗时33μs（ADC 6μs + SPI 10μs + 算法16μs），ISR CPU占用66%；完成编码器零点自动校准，角度分辨率0.022°。设计三级串级PID控制架构（电流环20kHz→速度环1kHz→位置环100Hz），速度/位置环以独立定时器ISR运行，计算负载可忽略；实现条件积分抗饱和、微分IIR低通滤波、setpoint加权，独立完成全链路参数整定；配合过流/过压/欠压/编码器异常检测与消抖，500ms自动恢复。采用应用层/控制层/驱动层/HAL层四层模块化架构，接口清晰，所有模块配备Doxygen风格注释及系统时序图文档。"
+    }
+  ],
+  "education": [
+    {
+      "school": "杭州师范大学",
+      "major": "电子信息工程",
+      "degree": "本科",
+      "start": "2021.09",
+      "end": "2026.06",
+      "school_tags": [
+        "统招本科"
+      ]
+    }
+  ],
+  "certifications": [
+    "2023年全国大学生电子设计竞赛省三等奖（电源类）"
+  ]
+}
+
 const templates = [
-  { key: 'java', label: 'Java 后端候选人', value: javaResume },
-  { key: 'sales', label: '企业销售候选人', value: salesResume },
-  { key: 'ai', label: 'AI 自动化候选人', value: aiResume }
+  { key: 'xujianing', label: '05 许嘉宁 · 美团 Agent', value: xujianingResume },
+  { key: 'linhaoran', label: '02 林昊然 · 华工 Agent', value: linhaoranResume },
+  { key: 'zhouchengyu', label: '03 周承宇 · Java 后端', value: zhouchengyuResume },
+  { key: 'lichengze', label: '06 李承泽 · 嵌入式', value: lichengzeResume }
 ]
 
 const sessionTagType = computed(() => {

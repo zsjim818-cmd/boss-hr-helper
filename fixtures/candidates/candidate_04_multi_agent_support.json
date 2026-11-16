@@ -1,0 +1,43 @@
+{
+  "name": "顾明哲",
+  "age": "22岁",
+  "degree": "本科",
+  "work_years": "0年",
+  "job_status": "在校-可实习",
+  "active_status": "刚刚活跃",
+  "expectation": {
+    "position": "AI自动化开发专员",
+    "city": "深圳",
+    "salary": "9-11K"
+  },
+  "advantage": "本科在读，具备Java微服务与多Agent实践。Campus Market基于Java 21、Spring Boot拆分7个服务，以Outbox/Inbox、RabbitMQ和Saga处理交易。Support-Orchestrator使用FastAPI、ChromaDB与MCP，实现意图识别、多Agent路由、RAG检索、Skills及记忆，以Prometheus和LLM-as-Judge评测。",
+  "skills": "Java基础：熟悉Java语法、集合、泛型、异常与IO；了解JUC、多线程、线程池、锁、CAS/AQS以及JVM内存结构与GC。后端框架：熟悉Spring Boot、MyBatis与RESTful API开发；能够使用Spring Cloud Gateway、OpenFeign、Nacos构建微服务，并实现JWT/RBAC鉴权。数据与分布式：熟悉MySQL表设计、索引、事务、MVCC与锁；掌握Redis常用数据结构与缓存；了解RabbitMQ可靠消息、幂等、Outbox/Inbox、Saga、重试与死信处理。Agent应用：熟悉FastAPI、RAG、Multi-Agent编排、Tool/Function Calling、MCP、动态Skills与上下文记忆；具备ChromaDB检索及LLM-as-Judge评测实践。工程能力：熟悉Git、Maven、Docker Compose、Flyway与Testcontainers；能够使用Prometheus、Grafana、Tempo进行指标监控和链路追踪。",
+  "work_experience": [],
+  "project_experience": [
+    {
+      "name": "Campus Market 高一致性校园二手交易平台",
+      "role": "后端开发",
+      "start": "2026.06",
+      "end": "2026.09",
+      "description": "技术栈：Java 21 / Spring Boot 3.5 / Spring Cloud / Spring Cloud Gateway / MyBatis / MySQL / Redis / RabbitMQ / Nacos / Docker Compose / Prometheus / Grafana / Tempo。基于Spring Cloud拆分网关、身份、商品、交易、优惠、支付等7个服务；Gateway统一完成JWT校验、限流与路由，业务服务结合RBAC和数据归属校验控制权限，并通过OpenFeign完成服务间调用。面向单件商品并发争抢与跨卖家结算，设计主订单、卖家子订单和订单项模型；结合商品状态条件更新、预占记录唯一约束、固定锁序及幂等键与请求摘要，保证同一商品仅能成交一次。采用RabbitMQ + Transactional Outbox/Inbox可靠传递事件，以全局事件ID去重并处理重复、乱序消息；通过Saga编排商品预占、优惠券锁定与订单创建，失败时逆序补偿，超限消息进入死信队列。抽象PaymentGateway隔离支付渠道，使用HMAC验证回调，并以支付单号、网关流水号和回调事件ID唯一约束保证幂等；实现超时关单、晚到支付补偿退款及优惠金额逐项分摊。基于Testcontainers/Compose构建真实MySQL、Redis、RabbitMQ集成环境，覆盖并发预占、重复回调、消息乱序、关单与补偿重试；接入Prometheus、Grafana和Tempo观测核心指标及跨服务链路。"
+    },
+    {
+      "name": "Support-Orchestrator 多Agent客服编排系统",
+      "role": "Agent应用开发",
+      "start": "2026.06",
+      "end": "2026.10",
+      "description": "技术栈：Python / FastAPI / Redis / ChromaDB / MCP / Docker Compose / Prometheus。设计LLM、Embedding与Pattern三路融合的细粒度意图识别器，输出意图分组、来源分数、融合置信度、紧急度和结构化实体，并对低置信度请求主动澄清。实现结构化多Agent编排，根据意图、关键词和实体生成主Agent、辅助Agent，路由原因与路由置信度，支持复合问题并行处理和结果合并。构建按意图触发的RAG链路，通过查询改写、多子查询并行召回、去重和LLM重排提升检索质量，并避免问候等请求产生无效检索。实现MCP工具治理与动态Skills，提供参数校验、TTL缓存、超时、熔断、fallback和规则热更新；使用Redis与ChromaDB管理工作记忆、历史摘要和用户画像。建立请求级调用轨迹和Prometheus监控，根据Agent成功率与延迟动态调整路由评分，并以LLM-as-Judge完成回复质量评分、基线对比和回归检测。"
+    }
+  ],
+  "education": [
+    {
+      "school": "南昌航空大学",
+      "major": "软件工程",
+      "degree": "本科",
+      "start": "2024.09",
+      "end": "2028.06",
+      "school_tags": ["统招本科"]
+    }
+  ],
+  "certifications": []
+}

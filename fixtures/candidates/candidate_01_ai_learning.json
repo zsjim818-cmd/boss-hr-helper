@@ -1,0 +1,58 @@
+{
+  "name": "陈知远",
+  "age": "24岁",
+  "degree": "硕士研究生",
+  "work_years": "0年",
+  "job_status": "在校-可实习",
+  "active_status": "刚刚活跃",
+  "expectation": {
+    "position": "AI自动化开发专员",
+    "city": "深圳",
+    "salary": "9-11K"
+  },
+  "advantage": "软件工程硕士在读，本科排名2/211、绩点3.82/4，获国家奖学金、省级优秀毕业生等奖励。研究NLP代码Commit Message生成。具备Java与Python开发能力，参与AI智能学习系统后端开发，使用Ollama部署DeepSeek自动出题、主观题评分与学习建议生成，利用Redis缓存和MinIO管理资源；另有Spring Cloud微服务及RabbitMQ异步处理经验。",
+  "skills": "语言：掌握Java、Python，了解C++、C；熟悉Java核心语法、常用类库和Java集合框架。数据库：熟悉MySQL，如基本数据结构、事务等。中间件：熟悉RabbitMQ、Redis等相关中间件，有相关使用经验。框架：了解Spring Cloud、SpringMVC、SpringBoot、MyBatis等常用框架。其他：了解Linux常用命令和Git的使用。AI应用：Ollama、DeepSeek、RAG。证书：CET-4 530分、CET-6 527分。",
+  "work_experience": [],
+  "project_experience": [
+    {
+      "name": "基于AI大模型的智能学习系统",
+      "role": "后端开发",
+      "start": "2025.07",
+      "end": "2025.11",
+      "description": "以AI驱动为核心的现代化智能学习平台，采用前后端分离架构，融合了智能生成题目、智能刷题和智能考试三大核心学习场景，为学习者提供个性化、智能化的学习体验。基于知识点和难度要求，利用ollama部署DeepSeek自动生成高质量题目，并利用AI进行主观题自动评分和提供学习建议。引入Redis对热门题目、题库分类等高频查询数据进行缓存，显著提升系统响应性能。使用MinIO对象存储统一管理视频、图片等学习资源，提高资源访问效率与存储扩展性。"
+    },
+    {
+      "name": "基于SpringCloud的在线商城项目",
+      "role": "后端开发",
+      "start": "2024.08",
+      "end": "2025.03",
+      "description": "项目描述：一个基于微服务架构构建的在线购物平台，涵盖用户注册登录、商品浏览、购物车管理、订单生成、交易支付等完整购物流程，致力于提供高并发、可扩展的服务能力。使用SpringBoot+Spring Cloud Alibaba+MyBatis+Redis+Rabbit MQ+MySQL等完成项目整体开发。配置文件由Nacos注册中心统一管理，微服务通过Open Feign进行远程调用。由Spring Cloud Gateway作为API网关，完成路由转发，并结合Spring Security和JWT实现登录认证授权。使用Seata AT模式解决订单服务与库存、余额等多服务间的数据一致性问题，实现分布式事务。引入RabbitMQ作为消息中间件，在订单创建后异步发送消息清理购物车、通知支付等，增强服务间解耦能力。使用Redis缓存热点数据，提高系统访问性能，并用于Token、短信验证码、购物车等数据的缓存处理。"
+    },
+    {
+      "name": "基于RAG的Git提交信息智能生成插件",
+      "role": "后端开发",
+      "start": "2024.04",
+      "end": "2024.12",
+      "description": "一个集成于JetBrains和VS Code的插件工具，集成RAG检索技术调用大语言模型，为开发者智能生成Git提交信息，提升版本管理效率。"
+    }
+  ],
+  "education": [
+    {
+      "school": "南昌航空大学",
+      "major": "软件工程",
+      "degree": "硕士研究生",
+      "start": "2024.09",
+      "end": "2027.06",
+      "school_tags": ["全日制硕士"]
+    },
+    {
+      "school": "江西理工大学",
+      "major": "计算机科学与技术",
+      "degree": "本科",
+      "start": "2020.09",
+      "end": "2024.06",
+      "school_tags": ["统招本科", "成绩排名2/211", "绩点3.82/4"]
+    }
+  ],
+  "certifications": ["大学英语四级（530分）", "大学英语六级（527分）", "国家奖学金（2024）", "省级优秀毕业生（2024）", "国家励志奖学金（2022-2023）", "一等奖学金（2020-2024）", "研究生推免奖学金", "研究生一等奖学金", "算法设计与编程挑战赛铜奖"]
+}

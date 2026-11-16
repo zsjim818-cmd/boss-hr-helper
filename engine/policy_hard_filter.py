@@ -253,7 +253,8 @@ def _read_fact(resume, condition, profile, facts):
     if condition.field == "expected_salary":
         value = resume.expectation.salary or "" if isinstance(resume.expectation, ExpectationInfo) else str(resume.expectation or "")
         path = "expectation.salary" if isinstance(resume.expectation, ExpectationInfo) else "expectation"
-        interval, reason = parse_salary_interval(value, profile.salary_implicit_period)
+        interval, reason = parse_salary_interval(
+            value, profile.salary_implicit_period or condition.unit)
         evidence = [_evidence(path, value, requirement_id)] if value else []
         return _Fact(known=interval is not None, low=interval[0] if interval else None, high=interval[1] if interval else None,
                      period=interval[2] if interval else None, reason=reason, evidence=evidence)

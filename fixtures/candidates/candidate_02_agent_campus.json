@@ -1,0 +1,43 @@
+{
+  "name": "林昊然",
+  "age": "21岁",
+  "degree": "本科",
+  "work_years": "0年",
+  "job_status": "在校-可实习",
+  "active_status": "刚刚活跃",
+  "expectation": {
+    "position": "AI自动化开发专员",
+    "city": "深圳",
+    "salary": "9-11K"
+  },
+  "advantage": "华工软件工程本科在读，兼具Java后端与Agent开发经验。基于FastAPI、Redis、Chroma和Ollama构建学生支持Agent，设计Runtime Harness、版本化Memory、Hybrid RAG和MCP受控动作。36条冻结集Recall@4 100%、MRR 0.876；输入减少13.54%。另有优惠券项目经验，熟悉Redis Lua、RocketMQ和Redisson。",
+  "skills": "Java基础：熟悉集合、泛型、异常、IO与JUC；掌握线程池、锁、CAS/AQS，理解JVM内存结构与GC。后端框架：熟悉Spring Boot、MyBatis-Plus；理解IoC、AOP、事务与RESTful分层设计。数据库：熟悉MySQL索引、事务隔离、MVCC与锁；能使用EXPLAIN进行SQL、表结构优化。Redis：熟悉常用数据结构、持久化；具备缓存穿透/击穿/雪崩治理、Lua原子操作、分布式锁与缓存一致性实践。消息队列：具备RocketMQ异步解耦、削峰、延迟消息、消费幂等、失败重试与死信处理实践。工程能力：Git、Maven、Docker、Apifox、JMeter。AI应用：Python、FastAPI、SQLAlchemy、MySQL、Redis、Chroma、Ollama、BM25、Hybrid RAG、MCP、Runtime Harness、Trace。",
+  "work_experience": [],
+  "project_experience": [
+    {
+      "name": "高并发优惠券分发与核销系统",
+      "role": "后端开发",
+      "start": "2026.03",
+      "end": "2026.06",
+      "description": "基于Spring Cloud Alibaba构建优惠券分发与核销系统，以Nacos实现服务注册发现、Gateway统一路由；按商家、模板、用户与结算拆分服务，覆盖建券、兑换、批量发券、核销与退款。技术栈：Spring Boot 3、Spring Cloud Alibaba（Nacos）、Spring Cloud Gateway、MySQL、Redis、Redisson、Lua、RocketMQ、ShardingSphere、EasyExcel、XXL-Job。热点券兑换链路设计：基于Redis Lua原子完成库存校验、单用户领取次数校验与预扣库存；通过RocketMQ异步创建用户券，结合MySQL条件扣减、唯一索引与消费幂等控制，降低高并发下超发与重复写入风险。实现批量发券链路：EasyExcel流式解析名单，待发用户暂存Redis Set并分批投递RocketMQ；消费者批量落券，配合任务状态、Redis幂等、XXL-Job扫描和失败记录，降低重复投递及大文件对同步接口的影响。实现用户券结算与状态流转：通过Redis ZSet与Pipeline批量读取用户券索引和模板缓存，结合CompletableFuture计算优惠金额；以Redisson锁、数据库条件更新保障锁券、核销与退款并发正确性，并用延迟消息处理过期。按建券与查券主访问路径，使用ShardingSphere自定义Hash分片，模板按shop_number、用户券按user_id分库分表；创建后预热缓存，结合BloomFilter、空值缓存和分布式锁双检治理穿透、击穿，并以延迟消息更新模板结算状态。完成JMeter性能压测与全链路验证：结算查询8万次、约7600QPS、错误率0%、P99 2ms；异步领券4万次、约1838QPS、HTTP错误率0%；完成5000用户批量发券，核验MQ消费和用户券最终落库。"
+    },
+    {
+      "name": "SCUT Campus Compass——华工学生支持与个人发展Agent",
+      "role": "Agent应用开发",
+      "start": "2026.05",
+      "end": "至今",
+      "description": "基于FastAPI、MySQL、Redis、Chroma与Ollama构建面向华工学生的支持型Agent，以公开可核验资料覆盖科研、学业、生活与活动场景；提供可追溯、可复现评测的Agent链路。技术栈：Python、FastAPI、SQLAlchemy、MySQL、Redis、Chroma、Ollama、BM25、Hybrid RAG、MCP。Runtime Harness与Blackboard协作：设计单次请求级Runtime Harness，串联会话、Agent Runtime、Trace与后置动作；以追加式Blackboard支持有界、顺序的多Agent任务认领与artifact聚合，拆分领域路由、风险判断、上下文装配和安全审查。版本化上下文Memory：Redis滑动窗口+LLM memory brief管理短期上下文；MySQL MemorySnapshot技术覆盖消息增量压缩、支持事实确认/撤销、作用域与级联删除。冻结回归中输入估算减少13.54%、恢复3/3。华工领域Hybrid RAG：基于BM25关键词检索与Chroma向量召回构建双路检索，经加权融合与启发式重排；为公开资料维护URL、版本hash、复核时间及ACTIVE/STALE状态，使回答可关联来源与资料状态。36条冻结集Recall@4 100%、MRR 0.876、本机检索P95 260ms。本地模型路由与可靠性：接入本地qwen2.5:7b，通过ModelRouter统一意图识别、风险判断、上下文摘要与回复生成等调用；实现三态熔断与SSE流式安全降级，首token输出后发生异常时不跨模型拼接回复，9/9组确定性故障注入通过。MCP与受控异步动作：将“支持交接请求”封装为受控MCP工具，用户显式发起并确认后创建持久化异步任务；通过策略校验、幂等控制、租约超时接管、失败重试与人工恢复保障任务可控。Trace与Engineering Harness：建立ConversationRun级跳转Trace、关联领域/风险决策、MemorySnapshot、RetrievalRun、ModelAttempt与ActionTask；Engineering Harness覆盖Mock回归、故障注入和本地HTTP E2E，并固化Git SHA、依赖/配置/数据集哈希及失败样例。"
+    }
+  ],
+  "education": [
+    {
+      "school": "华南理工大学",
+      "major": "软件工程",
+      "degree": "本科",
+      "start": "2024.09",
+      "end": "2028.06",
+      "school_tags": ["统招本科", "985", "211"]
+    }
+  ],
+  "certifications": ["大学英语四级", "大学英语六级", "校二等奖学金"]
+}
