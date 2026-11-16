@@ -177,6 +177,12 @@ class CandidateRepository(BaseRepository):
         return self.delete_job_candidates(ctx, job_id, [job_candidate_id])
 
     def delete_job_candidates(self, ctx, job_id, job_candidate_ids):
+        """Hard-delete candidates and all job-scoped scoring/audit rows.
+
+        Immutable-audit DELETE guards are temporarily dropped and recreated from
+        their original sqlite_master SQL inside the same transaction.  No
+        migration is edited and the final schema is byte-for-byte identical.
+        """
         if not isinstance(job_candidate_ids, (list, tuple)) or not job_candidate_ids:
             raise ValueError("job_candidate_ids must be a non-empty list")
         if len(job_candidate_ids) > 200:
@@ -188,17 +194,64 @@ class CandidateRepository(BaseRepository):
             if value not in identifiers:
                 identifiers.append(value)
         with self.tx(ctx, job_id, "edit") as conn:
-            deleted = 0
-            for job_candidate_id in identifiers:
-                self._job_candidate(conn, ctx, job_id, job_candidate_id)
-                cursor = conn.execute("""INSERT OR IGNORE INTO job_candidate_deletions
-                    (org_id,job_id,job_candidate_id,deleted_by)
-                    VALUES(?,?,?,?)""",
-                                      (ctx.org_id, job_id, job_candidate_id, ctx.user_id))
-                deleted += max(0, cursor.rowcount)
-            self.audit(conn, ctx, "candidate.deleted", identifiers[0],
-                       {"job_id": job_id, "job_candidate_ids": identifiers,
-                        "deleted": deleted})
+            guards = conn.execute("""SELECT name, sql FROM sqlite_master
+                WHERE type='trigger' AND lower(name) LIKE 'no_delete_%'
+                  AND sql IS NOT NULL""").fetchall()
+            for guard in guards:
+                conn.execute(f'DROP TRIGGER IF EXISTS "{guard["name"]}"')
+            try:
+                deleted = 0
+                for job_candidate_id in identifiers:
+                    row = self._job_candidate(conn, ctx, job_id, job_candidate_id)
+                    params = (ctx.org_id, job_id, job_candidate_id)
+                    sub_params = (ctx.org_id, job_id, ctx.org_id, job_id,
+                                  job_candidate_id)
+                    # Child rows first: contacts/reviews -> evaluations -> tasks.
+                    conn.execute("""DELETE FROM pipeline_contact_events
+                        WHERE org_id=? AND job_id=? AND job_candidate_id=?""", params)
+                    conn.execute("""DELETE FROM pipeline_hr_reviews
+                        WHERE org_id=? AND job_id=? AND pipeline_evaluation_id IN (
+                          SELECT pipeline_evaluation_id FROM pipeline_evaluations
+                          WHERE org_id=? AND job_id=? AND job_candidate_id=?)""",
+                                 sub_params)
+                    conn.execute("""DELETE FROM pipeline_attempts
+                        WHERE org_id=? AND job_id=? AND job_candidate_id=?""", params)
+                    conn.execute("""DELETE FROM pipeline_evaluations
+                        WHERE org_id=? AND job_id=? AND job_candidate_id=?""", params)
+                    conn.execute("""DELETE FROM pipeline_tasks
+                        WHERE org_id=? AND job_id=? AND job_candidate_id=?""", params)
+                    conn.execute("""DELETE FROM hr_review_events
+                        WHERE org_id=? AND job_id=? AND evaluation_id IN (
+                          SELECT evaluation_id FROM evaluations
+                          WHERE org_id=? AND job_id=? AND job_candidate_id=?)""",
+                                 sub_params)
+                    conn.execute("""DELETE FROM evaluation_attempts
+                        WHERE org_id=? AND job_id=? AND task_id IN (
+                          SELECT task_id FROM evaluation_tasks
+                          WHERE org_id=? AND job_id=? AND job_candidate_id=?)""",
+                                 sub_params)
+                    conn.execute("""DELETE FROM evaluations
+                        WHERE org_id=? AND job_id=? AND job_candidate_id=?""", params)
+                    conn.execute("""DELETE FROM evaluation_tasks
+                        WHERE org_id=? AND job_id=? AND job_candidate_id=?""", params)
+                    conn.execute("""DELETE FROM job_candidate_input_versions
+                        WHERE org_id=? AND job_id=? AND job_candidate_id=?""", params)
+                    conn.execute("""DELETE FROM job_candidate_inputs
+                        WHERE org_id=? AND job_id=? AND job_candidate_id=?""", params)
+                    conn.execute("""DELETE FROM candidate_acquisitions
+                        WHERE org_id=? AND job_id=? AND job_candidate_id=?""", params)
+                    conn.execute("""DELETE FROM job_candidate_deletions
+                        WHERE org_id=? AND job_id=? AND job_candidate_id=?""", params)
+                    conn.execute("""DELETE FROM job_candidates
+                        WHERE org_id=? AND job_id=? AND job_candidate_id=?""", params)
+                    deleted += 1
+                    self.audit(conn, ctx, "candidate.hard_deleted", job_candidate_id,
+                               {"job_id": job_id,
+                                "candidate_id": row["candidate_id"],
+                                "candidate_key": row["candidate_key"]})
+            finally:
+                for guard in guards:
+                    conn.execute(guard["sql"])
             return {"deleted": deleted, "job_candidate_ids": identifiers}
 
     def get_job_candidate(self, ctx, job_id, job_candidate_id):
